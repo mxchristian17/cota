@@ -21,7 +21,7 @@ no install, no account, no license fee.
 ![Version](https://img.shields.io/badge/version-1.0.0-green)
 ![Commands](https://img.shields.io/badge/commands-240%2B-orange)
 
-![A 3D part modeled in Cota](docs/images/model-3d.png)
+![Cota in action: a part is modeled with typed commands, then its drawing views are generated and dimensioned automatically](docs/images/cota-demo.gif)
 
 </div>
 
