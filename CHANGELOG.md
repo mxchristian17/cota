@@ -2,6 +2,18 @@
 
 All notable changes to Cota are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- Development toolchain updated: Vite 8, Vitest 5, ESLint 10, Playwright 1.64, @vitejs/plugin-react 6. No known
+  vulnerabilities in the development dependencies either (`npm audit`: 0).
+- Dependabot opens one grouped pull request per ecosystem and month; three.js and its CSG libraries are upgraded
+  by hand, with tests.
+
+### Fixed
+- Two end-to-end tests that could fail on busy CI machines now wait for the command to finish and the canvas to
+  settle before clicking.
+
 ## [1.0.0] — 2026-10-21
 
 First public release.
