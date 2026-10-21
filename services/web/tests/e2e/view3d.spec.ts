@@ -8,6 +8,19 @@ async function typeCmd(page: Page, ...steps: string[]) {
   }
 }
 
+/** Medidas del canvas cuando dejó de cambiar (la interfaz termina de acomodarse después del primer render). */
+async function stableCanvasBox(page: Page) {
+  const canvas = page.locator('canvas').first()
+  let prev = await canvas.boundingBox()
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(100)
+    const next = await canvas.boundingBox()
+    if (prev && next && prev.x === next.x && prev.y === next.y && prev.width === next.width && prev.height === next.height) return next
+    prev = next
+  }
+  return prev
+}
+
 test.describe('Cota 3D: view cube + EXTRUDE', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/')
@@ -54,8 +67,9 @@ test.describe('Cota 3D: view cube + EXTRUDE', () => {
 
   test('EXTRUDE a rectangle into a solid', async ({ page }) => {
     await typeCmd(page, 'RECTANGLE', '-20,-20', '#20,20')
-    // seleccionar el rectángulo por su borde superior
-    const box = await page.locator('canvas').boundingBox()
+    await expect(page.locator('.cmd-prompt')).toHaveText('Command:')
+    // seleccionar el rectángulo por su borde superior, con el canvas ya quieto
+    const box = await stableCanvasBox(page)
     if (!box) throw new Error('no canvas')
     const s = box.height / 200
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 - 20 * s)

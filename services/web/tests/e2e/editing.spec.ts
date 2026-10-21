@@ -9,9 +9,24 @@ async function typeCmd(page: Page, ...steps: string[]) {
 }
 
 // Dibuja un rectángulo world (-30,-30)-(30,30) y hace click en el borde superior (world y=30).
+/** Medidas del canvas cuando dejó de cambiar (la interfaz termina de acomodarse después del primer render). */
+async function stableCanvasBox(page: Page) {
+  const canvas = page.locator('canvas').first()
+  let prev = await canvas.boundingBox()
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(100)
+    const next = await canvas.boundingBox()
+    if (prev && next && prev.x === next.x && prev.y === next.y && prev.width === next.width && prev.height === next.height) return next
+    prev = next
+  }
+  return prev
+}
+
 async function drawAndClickRectEdge(page: Page) {
   await typeCmd(page, 'RECTANGLE', '-30,-30', '#30,30')
-  const box = await page.locator('canvas').boundingBox()
+  // El clic va recién cuando el comando terminó y el canvas no se mueve más.
+  await expect(page.locator('.cmd-prompt')).toHaveText('Command:')
+  const box = await stableCanvasBox(page)
   if (!box) throw new Error('no canvas')
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2
