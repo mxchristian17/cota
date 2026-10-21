@@ -1,0 +1,56 @@
+name: Deploy to GitHub Pages
+
+# Publishes the server-less web app at https://<user>.github.io/<repo>/.
+# Enable it in Settings ▸ Pages ▸ Source: GitHub Actions.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: services/web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: services/web/package-lock.json
+      - run: npm ci
+      - run: npm run build
+        env:
+          VITE_CLOUD: "off"
+          COTA_BASE: /${{ github.event.repository.name }}/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: services/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # Sólo este job publica: el build (que corre npm ci) no recibe permisos de escritura.
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

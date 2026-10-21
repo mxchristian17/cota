@@ -1,0 +1,44 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: Commands to reproduce
+      description: The exact sequence you typed or clicked, one per line.
+      placeholder: |
+        RECTANGLE 0,0 @100,60
+        EXTRUDE (click the rectangle) Enter 20
+        ROTATE ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Screenshots and the command line output help a lot.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Cota version
+      description: Type ABOUT in Cota.
+      placeholder: "1.0.0"
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and operating system
+      placeholder: Chrome 130 on Windows 11
+  - type: textarea
+    id: file
+    attributes:
+      label: Drawing file
+      description: Attach the .cota file (zip it if needed) if the problem depends on a drawing.

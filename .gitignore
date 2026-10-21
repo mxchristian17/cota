@@ -1,0 +1,39 @@
+# === Secrets and local settings ===
+.env
+.env.*
+environments/
+secrets/
+
+# === Runtime data (documents, exports, local database) ===
+data/
+!data/.gitkeep
+
+# === Python (services/api) ===
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# === Node / Frontend (services/web) ===
+node_modules/
+dist/
+build/
+.vite/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# === Tools / IDE / OS ===
+.idea/
+.vscode/
+*.log
+.DS_Store
+Thumbs.db

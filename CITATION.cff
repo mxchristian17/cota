@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use Cota in your work, please cite it as below."
+title: "Cota: free and open-source 2D and 3D CAD in the browser"
+type: software
+authors:
+  - family-names: Orengia
+    given-names: Christian
+    alias: mxchristian17
+version: 1.0.0
+license: Apache-2.0
+repository-code: "https://github.com/mxchristian17/cota"
+url: "https://mxchristian17.github.io/cota/"
+keywords:
+  - CAD
+  - 2D drafting
+  - 3D modeling
+  - DXF
+  - technical drawing
+  - browser

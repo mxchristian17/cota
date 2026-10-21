@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cota-api"
+version = "1.0.0"
+description = "Cota optional server: accounts, document storage, DWG conversion and natural-language modeling"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Christian Orengia" }]
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "sqlmodel>=0.0.22",
+  "pydantic-settings>=2.6",
+  "python-jose[cryptography]>=3.3",
+  "bcrypt>=4.2",
+  "cryptography>=43",
+  "email-validator>=2.2",
+  "alembic>=1.14",
+  "psycopg[binary]>=3.2",
+  "pydantic-ai-slim[openai]>=0.0.14",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3",
+  "httpx>=0.27",
+  "ruff>=0.8",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI resuelve las dependencias por la firma: `Depends(...)` como default es el patrón previsto.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.File", "fastapi.Header"]

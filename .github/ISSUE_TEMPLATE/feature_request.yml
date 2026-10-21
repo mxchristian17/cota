@@ -1,0 +1,20 @@
+name: Feature request
+description: Suggest a command, an option or an improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What do you want to do?
+      description: The drawing or modeling task, in your words.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: How should it work?
+      description: Command name, prompts and options. If it is a well-known CAD command, describe the behavior you expect.
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
