@@ -40,7 +40,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "react": "^18.3.1",
+    "react": "^19.3.1",
     "react-dom": "^18.3.1",
     "three": "^0.169.0",
     "three-bvh-csg": "^0.0.16",
@@ -51,7 +51,7 @@
     "@eslint/js": "^9.17.0",
     "@playwright/test": "^1.49.1",
     "@types/node": "^22.10.2",
-    "@types/react": "^18.3.17",
+    "@types/react": "^19.3.0",
     "@types/react-dom": "^18.3.5",
     "@types/three": "^0.169.0",
     "@vitejs/plugin-react": "^4.3.4",
