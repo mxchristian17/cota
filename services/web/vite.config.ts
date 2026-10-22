@@ -26,8 +26,6 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    // Los tests de CSG son pesados: en paralelo (y en las máquinas del CI) pueden pasar de los 5 s por defecto.
-    testTimeout: 15_000,
     include: ['src/**/*.test.ts', 'tools/**/*.test.ts'],
   },
 })
