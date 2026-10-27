@@ -213,6 +213,8 @@ export function transformEntity(e: Entity, ins: InsertProps): Entity {
   switch (e.type) {
     case 'SHADE':
       return { ...e, props: mapShade(e.props, P) }
+    case 'POINT':
+      return { ...e, props: { position: P(e.props.position) } }
     case 'LINE':
       return { ...e, props: { start: P(e.props.start), end: P(e.props.end) } }
     case 'CIRCLE':

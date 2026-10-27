@@ -218,6 +218,8 @@ function mirrorArc3d(a: ArcProps, ax: MirrorAxis): ArcProps {
 export function mirrorEntityInput(e: Entity, ax: MirrorAxis): EntityInput | null {
   const props = structuredClone(e.props)
   switch (e.type) {
+    case 'POINT':
+      return { type: 'POINT', layer: e.layer, props: { position: mirrorPoint(e.props.position, ax) } }
     case 'LINE': {
       const p = props as { start: Vec3; end: Vec3 }
       p.start = mirrorPoint(e.props.start, ax)

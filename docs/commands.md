@@ -132,6 +132,9 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | `CIRCLE` | `C` | Draw a circle: center + radius/Diameter, 3P (points or tangents), 2P or Ttr (tan tan radius) |
 | `SPLINE` | `SPL` | Draw a spline through control points |
 | `ELLIPSE` | `EL` | Draw an ellipse (axis endpoints + other axis distance, or Center) |
+| `POINT` | `PO` | Place a point object (its look is set by PDMODE and PDSIZE; it snaps as NODE) |
+| `DIVIDE` | `DIV` | Place points that divide an object into equal-length segments |
+| `MEASURE` | `ME` | Place points at measured intervals along an object, from the end nearest the pick |
 | `BLOCK` | `B` | Create a block definition from selected objects (and insert a reference) |
 | `ATTDEF` | `ATT`, `-ATTDEF` | Define a block attribute (tag, prompt, default value, Invisible/Constant/Preset) |
 | `HATCH` | `H`, `BH`, `BHATCH` | Fill an enclosed area with a hatch pattern, solid fill or user lines |
@@ -248,6 +251,8 @@ Type the name to see or change the value.
 | `ZOOMFACTOR` | Mouse wheel zoom step (3–100) |
 | `RENDERMINPX` | Draw solids smaller than this many pixels as a point (0 = off) |
 | `ZOOMWHEEL` | Mouse wheel direction: 0 = forward zooms in, 1 = forward zooms out |
+| `PDMODE` | Point style: 0 dot, 1 none, 2 plus, 3 cross, 4 tick; add 32 for a circle and 64 for a square |
+| `PDSIZE` | Point size: 0 = 5% of the view, negative = % of the view, positive = drawing units |
 | `DIMTEXTSIZE` | Set the dimension text height for new dimensions (DIMTXT override) |
 | `DIMASSOC` | Associativity of new dimensions: 2 = associative, 1 = non-associative |
 | `CANNOSCALE` | Annotation scale of model space (annotative dimensions keep their paper size): 1:1, 1:50, 1:100… |

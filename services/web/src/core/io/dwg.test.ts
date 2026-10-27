@@ -72,3 +72,11 @@ describe('guardar DWG en el navegador', () => {
     expect((r.entities.find((e) => e.type === 'CIRCLE')!.props as unknown as { radius: number }).radius).toBe(15)
   })
 })
+
+describe('mensajes de error de DWG', () => {
+  it('un módulo que no carga dice cómo resolverlo; otro error se muestra tal cual', async () => {
+    const { dwgErrorMessage } = await import('./dwg')
+    expect(dwgErrorMessage(new TypeError('Failed to fetch dynamically imported module: https://x/assets/dist-1.js'))).toContain('reload the page')
+    expect(dwgErrorMessage(new Error('Entry not found'))).toBe('Entry not found')
+  })
+})

@@ -52,7 +52,7 @@ import { plotLayouts } from '../core/io/layoutPlot'
 import { fieldContextFor, resolveFieldTexts } from '../core/fields/context'
 import { exportObj, importObj, type ObjMesh } from '../core/io/obj'
 import { exportDxf, importDxf } from '../core/io/dxf'
-import { dwgToDxfText, dwgVersion, dxfTextToDwg } from '../core/io/dwg'
+import { dwgErrorMessage, dwgToDxfText, dwgVersion, dxfTextToDwg } from '../core/io/dwg'
 import {
   ensurePermission,
   fsaSupported,
@@ -496,7 +496,7 @@ export const useStore = create<AppState>((set, get) => {
         return await api.dwgToDxf(data)
       } catch {
         // Sin servidor (o sin conversor): el motivo útil es el del lector local.
-        throw new Error(`this DWG (${version}) could not be read: ${local instanceof Error ? local.message : String(local)}`)
+        throw new Error(`this DWG (${version}) could not be read: ${dwgErrorMessage(local)}`)
       }
     }
   }
@@ -2360,10 +2360,18 @@ export const useStore = create<AppState>((set, get) => {
       }
       // DWG: el DXF se convierte en el navegador (acad-ts); si falla y hay servidor con conversor, lo hace él.
       print('Writing DWG…')
+      // Si el navegador no puede y tampoco hay servidor, el mensaje es el del navegador (el del servidor, "Request
+      // failed", no explica nada).
       dxfTextToDwg(dxf)
-        .catch(() => api.dxfToDwg(dxf))
+        .catch(async (local) => {
+          try {
+            return await api.dxfToDwg(dxf)
+          } catch {
+            throw local
+          }
+        })
         .then((bytes) => download(bytes, 'dwg', 'image/vnd.dwg'))
-        .catch((err) => print(`DWG export failed: ${err instanceof Error ? err.message : String(err)}`))
+        .catch((err) => print(`DWG export failed: ${dwgErrorMessage(err)}`))
     },
     computePreview: (cursor) => engine.computePreview(cursor),
     listCommands: () => engine.getCommands(),

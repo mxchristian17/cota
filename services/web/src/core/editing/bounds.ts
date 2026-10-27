@@ -140,6 +140,8 @@ const CIRCLE_STEPS = 48
  */
 export function entityOutline(e: Entity): Pt[][] {
   switch (e.type) {
+    case 'POINT':
+      return [[fromVec3(e.props.position)]]
     case 'LINE':
       return [[fromVec3(e.props.start), fromVec3(e.props.end)]]
     case 'CIRCLE':

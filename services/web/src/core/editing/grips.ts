@@ -64,6 +64,8 @@ function centroidOf(polys: Vec3[][]): Vec3 | null {
 /** Conjunto de grips (puntos de anclaje) de una entidad, según su tipo (como el CAD clásico). */
 export function entityGrips(e: Entity): Grip[] {
   switch (e.type) {
+    case 'POINT':
+      return [{ point: e.props.position, role: { t: 'move' } }]
     case 'LINE': {
       const s = e.props.start
       const en = e.props.end

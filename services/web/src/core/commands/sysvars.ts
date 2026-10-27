@@ -64,6 +64,10 @@ export interface Sysvars {
   ZOOMWHEEL: 0 | 1
   /** UCSVIEW: 1 = las vistas guardadas guardan también la UCS. */
   UCSVIEW: 0 | 1
+  /** Estilo de los POINT (CAD clásico): 0 punto, 1 nada, 2 +, 3 ×, 4 trazo; +32 círculo, +64 cuadrado. */
+  PDMODE: number
+  /** Tamaño de los POINT: 0 = 5 % del alto de la vista, < 0 = % de la vista, > 0 = unidades de dibujo. */
+  PDSIZE: number
 }
 
 const DEFAULTS: Sysvars = {
@@ -100,6 +104,8 @@ const DEFAULTS: Sysvars = {
   RENDERMINPX: 3,
   ZOOMWHEEL: 0,
   UCSVIEW: 1,
+  PDMODE: 0,
+  PDSIZE: 0,
 }
 
 export const sysvars: Sysvars = { ...DEFAULTS }
@@ -116,7 +122,7 @@ export function resetSysvars(): void {
 export const PERSISTED_SYSVARS = [
   'FILLETRAD', 'CHAMFERA', 'CHAMFERB', 'CHAMFERC', 'CHAMFERD', 'CHAMMODE', 'TRIMMODE',
   'UCSICON', 'ZOOMFACTOR', 'ZOOMWHEEL', 'RENDERMINPX', 'UCSORTHO', 'UCSFOLLOW', 'UCSDETECT', 'UCSVIEW',
-  'ATTDIA', 'ATTREQ', 'PEDITACCEPT', 'OFFSETGAPTYPE', 'EDGEMODE', 'PROJMODE',
+  'ATTDIA', 'ATTREQ', 'PEDITACCEPT', 'OFFSETGAPTYPE', 'EDGEMODE', 'PROJMODE', 'PDMODE', 'PDSIZE',
 ] as const
 
 export type PersistedSysvars = Pick<Sysvars, (typeof PERSISTED_SYSVARS)[number]>

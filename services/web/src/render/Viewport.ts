@@ -22,6 +22,7 @@ import { rayFaces, solidTopology } from '../core/editing/topology'
 import { DEFAULT_VISUAL_STYLE, type CameraMode, type ViewName, type VisualStyle } from '../core/view'
 import { CameraController } from './CameraController'
 import { previewSolidGeometry, solidEdgePositions, solidGeometry } from './csg'
+import { pointMarkTexture } from './pointMarks'
 import { ellipsePoints } from '../core/geom/ellipse'
 import { arcBasis, tessellateArc } from '../core/geom/arc'
 import { polylinePoints } from '../core/geom/polyline'
@@ -1508,6 +1509,8 @@ export class Viewport {
 
   private entityLinePoints(e: Entity): THREE.Vector3[] | null {
     switch (e.type) {
+      case 'POINT':
+        return null // se dibuja con su marca (pointsLayer), no como línea
       case 'LINE':
         return [new THREE.Vector3(...e.props.start), new THREE.Vector3(...e.props.end)]
       case 'CIRCLE':
@@ -1806,6 +1809,7 @@ export class Viewport {
     const pickB = new Map<string, LineBatch>()
     /** Piezas chicas dibujadas como un punto: posiciones, color e id de cada una (para el pick). */
     const lodB = new Map<string, { pos: number[]; ids: string[] }>()
+    const markB = new Map<string, { pos: number[]; ids: string[] }>()
     /** Rellenos de sombreados (sólidos visibles; los de patrón, invisibles para el pick). */
     const fillB = new Map<string, MeshBatch>()
     const ltCtx = this.data?.linetypes
@@ -1840,6 +1844,14 @@ export class Viewport {
           continue
         }
         const ro = orderOf(e)
+        if (e.type === 'POINT') {
+          const k = `${ro}|${colorHex}`
+          let b = markB.get(k)
+          if (!b) markB.set(k, (b = { pos: [], ids: [] }))
+          b.pos.push(...e.props.position)
+          b.ids.push(e.id)
+          continue
+        }
         if ((e.type === 'SOLID3D' || e.type === 'MESH3D') && this.lodSmall.get(e.id)) {
           // Más chica que RENDERMINPX: un punto en su centro, sin evaluar su CSG.
           const sig = sizeSignature(e)!
@@ -1948,6 +1960,28 @@ export class Viewport {
     for (const [k, b] of pickB) this.addLineBatch(b, k, true)
     for (const [k, b] of fillB) this.addFillBatch(b, k)
     for (const [k, b] of lodB) this.addLodPoints(b, k)
+    for (const [k, b] of markB) this.addPointMarks(b, k)
+  }
+
+  /** POINT: su marca según PDMODE, del tamaño de PDSIZE (se ajusta al zoom en `updateLineweights`). */
+  private addPointMarks(b: { pos: number[]; ids: string[] }, key: string): void {
+    const [ro, colorHex] = key.split('|')
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3))
+    const mat = new THREE.PointsMaterial({ color: new THREE.Color(colorHex), size: this.pointMarkPx(), sizeAttenuation: false, map: pointMarkTexture(sysvars.PDMODE), transparent: true, alphaTest: 0.35 })
+    const pts = new THREE.Points(g, mat)
+    pts.renderOrder = Number(ro)
+    pts.userData.pointIds = b.ids
+    pts.userData.pointMark = true
+    this.entityGroup.add(pts)
+  }
+
+  /** Lado en píxeles de la marca de los POINT (PDSIZE del CAD clásico). */
+  private pointMarkPx(): number {
+    const h = this.renderer.domElement.clientHeight || 600
+    const s = sysvars.PDSIZE
+    const px = s > 0 ? s / (this.controller.worldPerPx() || 1) : s < 0 ? (h * -s) / 100 : h * 0.05
+    return Math.max(4, Math.min(256, px))
   }
 
   /** Piezas chicas: 2 px, seleccionables (el pick resuelve el id por el índice del punto). */
@@ -2053,6 +2087,11 @@ export class Viewport {
    * línea fina (como el CAD clásico, que no baja de un píxel).
    */
   private updateLineweights(): void {
+    // Los POINT con PDSIZE en unidades de dibujo cambian de tamaño en pantalla con el zoom.
+    if (sysvars.PDSIZE > 0) {
+      const px = this.pointMarkPx()
+      for (const o of this.entityGroup.children) if (o.userData.pointMark) ((o as THREE.Points).material as THREE.PointsMaterial).size = px
+    }
     const units = this.data?.lwUnitsPerMm
     if (!this.wideLines.length || !units) return
     const wpp = this.controller.worldPerPx() || 1

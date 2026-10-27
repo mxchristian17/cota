@@ -89,6 +89,8 @@ export function stretchEntity(e: Entity, box: StretchBox, d: Vec3): StretchOutco
   }
 
   switch (e.type) {
+    case 'POINT':
+      return stretchPoints([e.props.position], box, d).hits ? { kind: 'move' } : { kind: 'none' }
     case 'LINE': {
       const { out, hits } = stretchPoints([e.props.start, e.props.end], box, d)
       if (hits === 0) return { kind: 'none' }

@@ -45,6 +45,7 @@ export type EntityType =
   | 'ATTDEF'
   | 'HATCH'
   | 'SHADE'
+  | 'POINT'
 
 /** Nombre de un tipo de línea de la tabla del dibujo, p. ej. `CONTINUOUS`, `HIDDEN`, `CENTER`. */
 export type LineType = string
@@ -52,6 +53,11 @@ export type LineType = string
 export interface LineProps {
   start: Vec3
   end: Vec3
+}
+
+/** Punto (POINT): una marca en el dibujo con el estilo de PDMODE/PDSIZE; da snap NODE. */
+export interface PointProps {
+  position: Vec3
 }
 
 export interface CircleProps {
@@ -537,6 +543,7 @@ export interface ViewportProps {
 }
 
 export type EntityProps =
+  | PointProps
   | LineProps
   | CircleProps
   | ArcProps
@@ -563,6 +570,13 @@ export interface EntityCommon {
   ltScale?: number
   /** Firma de tamaño de sólidos y mallas: esfera envolvente y clave del contenido. */
   size?: import('../render/lod').SizeSig
+}
+
+export interface PointEntity extends EntityCommon {
+  id: string
+  type: 'POINT'
+  layer: string
+  props: PointProps
 }
 
 export interface LineEntity extends EntityCommon {
@@ -689,6 +703,7 @@ export interface ShadeEntity extends EntityCommon {
 }
 
 export type Entity =
+  | PointEntity
   | LineEntity
   | CircleEntity
   | ArcEntity

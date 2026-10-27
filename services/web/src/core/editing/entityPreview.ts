@@ -19,6 +19,11 @@ import { viewportRing } from '../layout/viewport'
 export function entityPreviewShapes(e: Entity, dx: number, dy: number, dz = 0): PreviewShape[] {
   const shift = (v: readonly [number, number, number]): Pt => pt(v[0] + dx, v[1] + dy, v[2] + dz)
   switch (e.type) {
+    case 'POINT': {
+      // Una cruz chica en la posición nueva (el arrastre de MOVE/COPY la muestra).
+      const c = shift(e.props.position)
+      return [{ kind: 'circle', center: c, radius: 0.0001 }, { kind: 'line', a: c, b: c }]
+    }
     case 'LINE':
       return [{ kind: 'line', a: shift(e.props.start), b: shift(e.props.end) }]
     case 'CIRCLE':

@@ -15,6 +15,8 @@ import { viewportRing } from '../layout/viewport'
  */
 export function endpointsOfEntity(e: Entity): Pt[] {
   switch (e.type) {
+    case 'POINT':
+      return [] // el punto da snap NODE, no extremo
     case 'LINE':
       return [fromVec3(e.props.start), fromVec3(e.props.end)]
     case 'RECTANGLE': {

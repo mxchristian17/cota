@@ -437,6 +437,10 @@ export function computeSnap(cursor: Pt, entities: Entity[], s: SnapSettings): Sn
     const nearCurves: Array<{ curve: Curve; z: number; self: boolean }> = []
     entities.forEach((e, idx) => {
       owner = e.id
+      if (e.type === 'POINT') {
+        add(fromVec3(e.props.position), 'node') // NODE del CAD clásico
+        return
+      }
       // En sólidos/mallas facetadas, los bordes curvos se muestrean: NO generar midpoint/perp
       // (serían ruido de facetado que confunde quadrant/tangent). Sí endpoint (esquinas) y nearest.
       const faceted = e.type === 'SOLID3D' || e.type === 'MESH3D'

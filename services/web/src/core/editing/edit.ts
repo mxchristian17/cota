@@ -10,6 +10,9 @@ import { translateMesh } from './mesh'
 export function translateEntity(e: Entity, dx: number, dy: number, dz = 0): void {
   const t = (v: Vec3): Vec3 => [v[0] + dx, v[1] + dy, v[2] + dz]
   switch (e.type) {
+    case 'POINT':
+      e.props.position = t(e.props.position)
+      break
     case 'LINE':
       e.props.start = t(e.props.start)
       e.props.end = t(e.props.end)
@@ -66,6 +69,9 @@ export function translateEntity(e: Entity, dx: number, dy: number, dz = 0): void
 export function scaleEntity(e: Entity, c: Vec3, f: number): void {
   const s = (v: Vec3): Vec3 => [c[0] + (v[0] - c[0]) * f, c[1] + (v[1] - c[1]) * f, c[2] + (v[2] - c[2]) * f]
   switch (e.type) {
+    case 'POINT':
+      e.props.position = s(e.props.position)
+      break
     case 'LINE':
       e.props.start = s(e.props.start)
       e.props.end = s(e.props.end)

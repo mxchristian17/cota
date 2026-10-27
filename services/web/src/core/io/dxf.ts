@@ -43,6 +43,10 @@ const p = (code: number, val: string | number): string => `${code}\n${val}\n`
 function entityDxf(e: Entity, layerName: string): string | null {
   const h = p(8, layerName) + commonCodes(e)
   switch (e.type) {
+    case 'POINT': {
+      const [x, y, z] = e.props.position
+      return p(0, 'POINT') + h + p(10, x) + p(20, y) + p(30, z)
+    }
     case 'LINE': {
       const { start, end } = e.props
       return (
@@ -562,6 +566,8 @@ function extrusionOf(c: Rec['codes']): Vec3 {
 function parseEntity(rec: Rec): { type: EntityType; props: EntityProps } | null {
   const c = rec.codes
   switch (rec.type) {
+    case 'POINT':
+      return { type: 'POINT', props: { position: [num(c, 10), num(c, 20), num(c, 30)] } }
     case 'LINE':
       return {
         type: 'LINE',

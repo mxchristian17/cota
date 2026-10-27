@@ -4,6 +4,18 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [1.11.0] — 2026-10-27
+
+### Added
+- **POINT**, **DIVIDE** and **MEASURE**: point objects drawn with the classic point styles (`PDMODE`: dot, plus,
+  cross, tick, with a circle and/or a square; `PDSIZE`: a share of the view or drawing units), selectable, with
+  grips, NODE object snap and DXF/DWG import and export. DIVIDE places points that split an object into equal
+  lengths; MEASURE places them at a given length from the end nearest the pick. Under Draw ▸ Point.
+
+### Fixed
+- When DWG export or import fails in the browser, the message gives the real reason (and how to fix it when the
+  converter could not be loaded) instead of "Request failed" from the optional server.
+
 ## [1.10.0] — 2026-10-27
 
 ### Added

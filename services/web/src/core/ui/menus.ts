@@ -36,7 +36,7 @@ export const CATEGORIES: { label: string; names: string[] }[] = [
   {
     label: 'Draw',
     names: [
-      'LINE', 'PLINE', 'POLYGON', 'RECTANGLE', 'ARC', 'CIRCLE', 'SPLINE', 'ELLIPSE', '§Block', 'BLOCK', 'ATTDEF',
+      'LINE', 'PLINE', 'POLYGON', 'RECTANGLE', 'ARC', 'CIRCLE', 'SPLINE', 'ELLIPSE', '§Point', 'POINT', 'DIVIDE', 'MEASURE', '§Block', 'BLOCK', 'ATTDEF',
       '§Hatch', 'HATCH', '§Text', 'TEXT', 'MTEXT',
       '§Modeling', 'BOX', 'CYLINDER', 'CONE', 'SPHERE', 'TORUS', 'EXTRUDE', 'REVOLVE', 'FLATSHOT', 'SOLPROF',
     ],

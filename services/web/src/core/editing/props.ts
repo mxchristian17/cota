@@ -96,6 +96,8 @@ function solidFields(e: Extract<Entity, { type: 'SOLID3D' }>): PropField[] {
 /** Lista de campos editables (y algunos derivados de solo lectura) de una entidad, según su tipo. */
 export function entityFields(e: Entity): PropField[] {
   switch (e.type) {
+    case 'POINT':
+      return vecFields('position', 'Position', e.props.position)
     case 'LINE': {
       const s = e.props.start
       const en = e.props.end
@@ -261,6 +263,9 @@ export function applyField(e: Entity, key: string, value: number | string | bool
     return true
   }
   switch (e.type) {
+    case 'POINT':
+      setComp(e.props.position, 'position')
+      break
     case 'LINE':
       if (!setComp(e.props.start, 'start')) setComp(e.props.end, 'end')
       break

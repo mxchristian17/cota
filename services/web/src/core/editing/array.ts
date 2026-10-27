@@ -58,6 +58,8 @@ export function entityCentroid(e: Entity): Vec3 {
 
 function entityPoints(e: Entity): Vec3[] {
   switch (e.type) {
+    case 'POINT':
+      return [e.props.position]
     case 'LINE':
       return [e.props.start, e.props.end]
     case 'CIRCLE':
@@ -172,6 +174,8 @@ export function rotateEntityInput(e: Entity, center: Vec3, ang: number): EntityI
   const [cx, cy] = center
   const props = structuredClone(e.props)
   switch (e.type) {
+    case 'POINT':
+      return { type: 'POINT', layer: e.layer, props: { position: rot(e.props.position, cx, cy, cos, sin) } }
     case 'LINE': {
       const p = props as Entity['props'] & { start: Vec3; end: Vec3 }
       p.start = rot(e.props.start, cx, cy, cos, sin)

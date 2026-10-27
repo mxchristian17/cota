@@ -190,6 +190,8 @@ export function transformEntity(e: Entity, r: Rigid): EntityInput | null {
 function transformEntityProps(e: Entity, r: Rigid): EntityInput | null {
   const layer = e.layer
   switch (e.type) {
+    case 'POINT':
+      return { type: 'POINT', layer, props: { position: tp(r, e.props.position) } }
     case 'LINE':
       return { type: 'LINE', layer, props: { ...e.props, start: tp(r, e.props.start), end: tp(r, e.props.end) } }
     case 'CIRCLE':

@@ -40,3 +40,15 @@ export async function dxfTextToDwg(dxf: string): Promise<ArrayBuffer> {
   const bytes = DwgWriter.writeToBuffer(doc)
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
 }
+
+/**
+ * Mensaje útil cuando falla el DWG en el navegador: si el módulo no se pudo cargar (sin conexión, una versión vieja
+ * en caché), se dice cómo resolverlo; si no, el motivo del lector o escritor.
+ */
+export function dwgErrorMessage(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err)
+  if (/dynamically imported module|Importing a module script failed|Failed to fetch|error loading/i.test(msg)) {
+    return 'the DWG converter could not be loaded. Check the connection and reload the page (Ctrl+F5), then try again.'
+  }
+  return msg
+}
