@@ -1903,3 +1903,44 @@ div.lt-row {
   margin: 3px 6px;
   background: var(--border);
 }
+
+/* VIEWGEN: esquema de las vistas de Monge. */
+.viewgen-hint {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.viewgen-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 64px);
+  grid-template-rows: repeat(3, 44px);
+  gap: 4px;
+  justify-content: center;
+}
+.viewgen-cell {
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.viewgen-cell.on {
+  border-style: solid;
+  border-color: var(--accent-hover);
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--text);
+}
+.viewgen-cell.iso {
+  font-style: italic;
+}
+.viewgen-cell:disabled {
+  cursor: default;
+}
+.viewgen-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 10px 0 4px;
+  font-size: 12px;
+}

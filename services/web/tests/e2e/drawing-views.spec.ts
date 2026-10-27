@@ -301,3 +301,35 @@ test.describe('Cota orbit commands', () => {
     }
   })
 })
+
+test.describe('Cota VIEWGEN', () => {
+  test('the diagram picks the views; in a layout they are created aligned, ISO-E by default', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    await typeCmd(page, 'BOX', '#0,0', '#40,30', '20')
+    await page.getByText('Layout1').click()
+    await typeCmd(page, 'VIEWGEN', '')
+    await expect(page.getByTestId('viewgen-dialog')).toBeVisible()
+    // Por defecto: alzado, planta, izquierda e isométrica SE; se agrega la derecha y se saca la isométrica.
+    await page.getByTestId('viewgen-RIGHT').click()
+    await page.getByTestId('viewgen-ISO').click()
+    await page.getByTestId('viewgen-ok').click()
+    await typeCmd(page, '#200,150')
+    await expect(page.locator('.cmd-output')).toContainText('4 view(s) created (ISO-E, first-angle')
+    const v = await store(
+      page,
+      `return s.doc.activeLayout.entities.filter((e) => e.props.view).map((e) => ({ out: e.props.view.basis.out, x: e.props.position[0], y: e.props.position[1] }))`,
+    )
+    const find = (o: number[]) => v.find((w: { out: number[] }) => w.out.every((c: number, i: number) => Math.abs(c - o[i]) < 1e-9))!
+    const front = find([0, -1, 0])
+    const top = find([0, 0, 1])
+    const left = find([-1, 0, 0])
+    const right = find([1, 0, 0])
+    // ISO-E: planta debajo del alzado, vista izquierda a la derecha, derecha a la izquierda.
+    expect(top.x).toBeCloseTo(front.x, 6)
+    expect(top.y).toBeLessThan(front.y)
+    expect(left.y).toBeCloseTo(front.y, 6)
+    expect(left.x).toBeGreaterThan(front.x)
+    expect(right.x).toBeLessThan(front.x)
+  })
+})

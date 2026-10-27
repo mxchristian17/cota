@@ -76,6 +76,7 @@ import { alignDrawingViews, isDrawingView, isShaded, showsHidden, viewBlockEntit
 import { shadeViewTriangles } from '../core/projection/shade'
 import { solidMesh, solidMeshWithSurfaces } from '../render/csg'
 import { parseStl } from '../core/io/stl'
+import { requestViewGen } from '../ui/ViewGenDialog'
 import { ApiError, api, type DocumentSummary } from '../core/io/apiClient'
 import { moveLayerTo } from '../core/layers/order'
 
@@ -857,6 +858,7 @@ export const useStore = create<AppState>((set, get) => {
     openLinetypes: () => get().openLinetypeDialog(),
     preselection: () => [...get().selection],
     screen: (patch) => get().setScreen(patch),
+    viewGenDialog: (initial) => requestViewGen(initial),
     flatshotDialog: () =>
       new Promise<FlatshotOptions | null>((resolve) => {
         flatshotResolve?.(null)

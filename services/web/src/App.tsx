@@ -1,5 +1,6 @@
 import { DimContextMenu } from './ui/DimContextMenu'
 import { ContextMenu } from './ui/ContextMenu'
+import { ViewGenDialog } from './ui/ViewGenDialog'
 import { useEffect, useRef, useState } from 'react'
 import { ViewportView } from './ui/ViewportView'
 import { FloatingToolbars, ToolbarDialog, ToolbarDock } from './ui/Toolbar'
@@ -359,6 +360,7 @@ export default function App() {
       <RealtimeMenu />
       <AiDialog />
       <FlatshotDialog />
+      <ViewGenDialog />
     </div>
   )
 }

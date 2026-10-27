@@ -4,6 +4,14 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-10-27
+
+### Added
+- VIEWGEN: generate the projection views of a part at once. A diagram of the views around the front view lets you
+  pick which ones (top, bottom, left, right, back and the four isometrics), the arrangement (ISO-E first angle by
+  default, or ISO-A third angle) and hidden lines. In a layout they become associated drawing views aligned with
+  the front view, at a scale that fits the sheet; in the model, 2D blocks of the projection.
+
 ## [1.2.0] — 2026-10-27
 
 ### Added

@@ -9,6 +9,7 @@ import { paperSizeMm } from '../../layout/paper'
 import { MODEL_TAB } from '../../document/DocumentModel'
 import {
   autoViewScale,
+  VIEW_SCALES,
   isDrawingView,
   parseScale,
   projectedBasis,
@@ -21,6 +22,7 @@ import {
   showsHidden,
 } from '../../drawing/views'
 import { askKeyword } from '../ask'
+import { DEFAULT_VIEWGEN, ISO_VIEWS, layoutExtent, mongeLayout, type GenView, type Placed } from '../../drawing/viewgen'
 
 /**
  * Vistas de dibujo del CAD clásico (*Model Documentation*): VIEWBASE crea la vista base del modelo en un
@@ -367,4 +369,89 @@ export const viewstdCommand: Command = {
   },
 }
 
-export const drawingViewCommands: Command[] = [viewbaseCommand, viewprojCommand, vieweditCommand, viewupdateCommand, viewstdCommand]
+/**
+ * VIEWGEN: todas las vistas de Monge de una pieza de una vez. Un diálogo muestra el esquema de las vistas para
+ * elegir cuáles (y ISO-E o ISO-A); en un layout se crean vistas de dibujo asociadas (la base es el alzado y las
+ * demás quedan alineadas con ella), en el modelo, bloques 2D con la proyección.
+ */
+export const viewgenCommand: Command = {
+  name: 'VIEWGEN',
+  aliases: [],
+  description: 'Generate the Monge views of a part at once (choose them on a diagram, ISO-E or ISO-A)',
+  async run(ctx) {
+    const sel = await ctx.getSelectionOrKeyword('Select objects or [Entire model] <Entire model>: ', ['Entire'])
+    if (sel === null) return
+    const source = sel.kind === 'selection' && sel.ids.length ? sel.ids : null
+    const choice = await ctx.app.viewGenDialog?.({ ...DEFAULT_VIEWGEN, std: ctx.doc.vars.VIEWPROJECTION === 'third' ? 'A' : 'E' })
+    if (!choice) return
+    const paper = ctx.doc.inPaperSpace && ctx.doc.activeTab !== MODEL_TAB
+    const views = [...new Set<GenView>(['FRONT', ...choice.views])]
+    const hiddenOf = (v: GenView): HiddenMode => (ISO_VIEWS.includes(v) ? 'shadedVisible' : choice.hidden ? 'visibleHidden' : 'visible')
+    // Cada vista, a escala 1, en su bloque (origen común: el centro de la pieza).
+    const blocks = new Map<GenView, { block: string; w: number; h: number }>()
+    for (const v of views) {
+      const block = nextViewBlock(ctx)
+      const size = buildView(ctx, block, source, viewBasis(v as ViewName), hiddenOf(v))
+      if (!size) {
+        if (v === 'FRONT') {
+          ctx.print('No 3D solids to document.')
+          return
+        }
+        continue
+      }
+      blocks.set(v, { block, w: size.width, h: size.height })
+    }
+    const size = (v: GenView) => blocks.get(v) ?? { w: 0, h: 0 }
+    const front = size('FRONT')
+    const gap = Math.max(front.w, front.h) * 0.25
+    const placed = mongeLayout({ ...choice, views: [...blocks.keys()] }, size, gap)
+    const ext = layoutExtent(placed, size)
+    let scale = 1
+    if (paper) {
+      const layout = ctx.doc.activeLayout!
+      const pp = paperSizeMm(layout.pageSetup)
+      const land = layout.pageSetup.orientation === 'landscape'
+      const [pw, ph] = land ? [Math.max(pp.width, pp.height), Math.min(pp.width, pp.height)] : [Math.min(pp.width, pp.height), Math.max(pp.width, pp.height)]
+      scale = VIEW_SCALES.find((s) => ext.w * s <= pw * 0.85 && ext.h * s <= ph * 0.75) ?? VIEW_SCALES[VIEW_SCALES.length - 1]
+      ctx.print(`Scale = ${scaleLabel(scale)}`)
+    }
+    const r = await ctx.getPoint('Specify center of the views: ', {
+      base: null,
+      preview: (c) => placed.flatMap((p) => frame({ x: c.x + (p.x - ext.cx) * scale, y: c.y + (p.y - ext.cy) * scale, z: 0 }, size(p.view).w * scale, size(p.view).h * scale)),
+    })
+    if (r.kind !== 'point') {
+      for (const b of blocks.values()) ctx.doc.removeBlock(b.block)
+      return
+    }
+    const at = (p: Placed): Pt => ({ x: r.point.x + (p.x - ext.cx) * scale, y: r.point.y + (p.y - ext.cy) * scale, z: 0 })
+    const F = at(placed[0])
+    let base: Entity | null = null
+    for (const p of placed) {
+      const b = blocks.get(p.view)!
+      const pos = at(p)
+      if (!paper) {
+        // En el modelo: bloques 2D sin asociación (como FLATSHOT).
+        ctx.doc.addEntity({ type: 'INSERT', layer: ctx.currentLayerId(), props: { name: b.block, position: [pos.x, pos.y, 0], scale: [1, 1, 1], rotation: 0 } })
+        continue
+      }
+      const basis = viewBasis(p.view as ViewName)
+      if (!base) base = addView(ctx, b.block, pos, scale, { orientation: 'FRONT', basis, hidden: hiddenOf(p.view), source })
+      else
+        addView(ctx, b.block, pos, scale, {
+          orientation: 'projected',
+          basis,
+          hidden: hiddenOf(p.view),
+          source,
+          parent: base.id,
+          align: p.align,
+          offset: [pos.x - F.x, pos.y - F.y],
+          lastParent: [F.x, F.y],
+          inheritScale: true,
+        })
+    }
+    ctx.doc.touch()
+    ctx.print(`${placed.length} view(s) created (${choice.std === 'E' ? 'ISO-E, first-angle' : 'ISO-A, third-angle'}${paper ? `, ${scaleLabel(scale)}` : ''}).`)
+  },
+}
+
+export const drawingViewCommands: Command[] = [viewbaseCommand, viewprojCommand, vieweditCommand, viewupdateCommand, viewstdCommand, viewgenCommand]

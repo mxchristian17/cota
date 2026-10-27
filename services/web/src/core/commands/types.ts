@@ -1,5 +1,6 @@
 import type { Entity, ShadeProps } from '../document/types'
 import type { FlatshotOptions } from '../projection/flatshot'
+import type { ViewGenChoice } from '../drawing/viewgen'
 import type { ProjBasis, ProjItem, ProjSegment } from '../projection/orthographic'
 import type { Pt, Vec3 } from '../math'
 import type { Deferred } from '../geom/tangency'
@@ -188,6 +189,8 @@ export interface AppHooks {
   updateDrawingViews?(ids: string[] | null, force?: boolean): number
   /** FLATSHOT: diálogo de opciones (null = Cancel). */
   flatshotDialog?(): Promise<FlatshotOptions | null>
+  /** Diálogo de VIEWGEN: esquema de vistas de Monge para elegir cuáles generar. */
+  viewGenDialog?(initial: ViewGenChoice): Promise<ViewGenChoice | null>
   /** FLATSHOT: lo 3D visible proyectado según la vista actual (líneas, arcos y círculos 2D). */
   flatshotProject?(opts: { showObscured: boolean; tangential: boolean }): ProjItem[]
   /** Descarga entidades como DXF; devuelve el nombre del archivo. */

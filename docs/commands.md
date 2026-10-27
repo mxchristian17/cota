@@ -78,6 +78,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | `INSERT` | `I`, `DDINSERT` | Insert a block reference |
 | `LAYOUT` | `LO` | Manage layouts [Copy/Delete/New/Template/Rename/SAveas/Set/?] |
 | `VIEWBASE` | — | Create a base view of the model in a layout, then its projected views |
+| `VIEWGEN` | — | Generate the Monge views of a part at once (choose them on a diagram, ISO-E or ISO-A) |
 | `VIEWPROJ` | — | Create projected views from an existing drawing view |
 | `VIEWEDIT` | — | Edit a drawing view: hidden lines and scale |
 | `VIEWUPDATE` | — | Update drawing views that are out of date with the model |
