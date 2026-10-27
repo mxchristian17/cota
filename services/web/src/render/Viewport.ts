@@ -262,6 +262,7 @@ export class Viewport {
   private rightDown: [number, number] | null = null
   /** Entidades que dan snaps (visibles + extras del papel); se recalcula con los datos. */
   private snapList: Entity[] | null = null
+  private snapListKey = ''
   /** Escala de anotación con la que se dibujaron las cotas anotativas (cambia con la escala del viewport). */
   private lastAnnoScale: number | undefined = undefined
   private readonly lastPx: [number, number] = [0, 0]
@@ -1206,12 +1207,19 @@ export class Viewport {
   }
 
   private snapAt(raw: Pt): SnapResult {
-    const d = this.data
+    // Datos al día: entre un comando que cambia capas y el próximo frame el cursor ya puede pedir snaps.
+    const d = (this.data = this.provider?.() ?? this.data)
     if (!d) return { point: raw, type: null }
     const override = d.osnapOverride
-    // Las capas apagadas o congeladas no dan snaps.
+    // Las capas apagadas o congeladas no dan snaps: la lista se rehace si cambian los datos o la visibilidad.
+    const hidden = hiddenLayerIds(d.layers)
+    const listKey = `${d.revision}|${[...hidden].join(',')}|${d.snapExtras?.length ?? 0}`
+    if (this.snapListKey !== listKey) {
+      this.snapListKey = listKey
+      this.snapList = null
+      this.snapSpheres = null
+    }
     if (!this.snapList) {
-      const hidden = hiddenLayerIds(d.layers)
       const own = hidden.size ? this.entities().filter((e) => !hidden.has(e.layer)) : this.entities()
       this.snapList = d.snapExtras?.length ? own.concat(d.snapExtras) : own
     }
@@ -2267,10 +2275,18 @@ export class Viewport {
       const data = this.data
       // Adquisición de puntos para el tracking: el cursor "en reposo" no genera eventos de puntero,
       // así que el conteo del hover se evalúa en el loop (barato: sólo compara una clave).
+      const prompting = !!data?.pointPrompt
+      // Al empezar o terminar un prompt de punto se descarta el último snap: uno viejo (de otro comando o de una
+      // capa que ya se apagó) no debe adquirirse para el tracking aunque el cursor no se mueva.
+      if (prompting !== this.lastPointPrompt) {
+        const w = this.lastWorldRaw
+        this.snapResult = { point: { x: w.x, y: w.y, z: w.z }, type: null }
+        this.hoverKey = ''
+        this.hoverConsumed = false
+      }
       this.updateTrackingAcquisition()
       // Al terminar el comando (se cierra el prompt de punto) se sueltan los puntos adquiridos,
       // como hace el CAD clásico: el tracking vive dentro de una operación.
-      const prompting = !!data?.pointPrompt
       if (this.lastPointPrompt && !prompting) this.clearTracking()
       this.lastPointPrompt = prompting
       // El rubber-band depende del prompt: al cancelar (ESC), terminar o avanzar a otro punto (aunque el
