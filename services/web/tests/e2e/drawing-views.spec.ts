@@ -137,3 +137,40 @@ test.describe('Cota CHAMFER on a solid', () => {
     expect(await store(page, 'const l = s.doc.entities; return l[l.length - 1].props.op')).toBe('CHAMFEREDGE')
   })
 })
+
+test.describe('Cota context menu and clipboard', () => {
+  test('right-click menus: idle, during a command and with a selection; Ctrl+C / Ctrl+V', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    const canvas = page.locator('canvas').first()
+    const box = (await canvas.boundingBox())!
+    const at = { x: box.width / 2 + 40, y: box.height / 2 + 40 }
+    // Sin selección ni comando: Undo, Pan, Zoom…
+    await canvas.click({ button: 'right', position: at })
+    await expect(page.getByTestId('context-menu')).toContainText('Undo')
+    await page.keyboard.press('Escape')
+    // Durante LINE: Enter termina el comando y las opciones del prompt aparecen.
+    await typeCmd(page, 'LINE', '#0,0', '#10,0')
+    await canvas.click({ button: 'right', position: at })
+    await expect(page.getByTestId('ctx-kw-undo')).toBeVisible()
+    await page.getByTestId('ctx-enter').click()
+    await expect.poll(() => store(page, 'return s.engine.busy')).toBe(false)
+    // Repeat LINE.
+    await canvas.click({ button: 'right', position: at })
+    await expect(page.getByTestId('ctx-repeat')).toHaveText('Repeat LINE')
+    await page.keyboard.press('Escape')
+    // Con selección: Copy al portapapeles y Paste to Original Coordinates.
+    await store(page, 's.selectAll()')
+    await canvas.click({ button: 'right', position: at })
+    await expect(page.getByTestId('ctx-erase')).toBeVisible()
+    await page.getByTestId('ctx-clipboard').hover()
+    await page.getByTestId('ctx-copyclip').click()
+    await expect(page.locator('.cmd-output')).toContainText('1 object(s) copied to the clipboard.')
+    await typeCmd(page, 'PASTEORIG')
+    expect(await store(page, 'return s.doc.entities.length')).toBe(2)
+    // Ctrl+V pega en un punto.
+    await page.keyboard.press('Control+v')
+    await typeCmd(page, '#0,20')
+    expect(await store(page, 'const l = s.doc.entities; return l[l.length - 1].props.start')).toEqual([0, 20, 0])
+  })
+})

@@ -94,7 +94,8 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
       // Clic derecho durante un prompt = Enter (CAD clásico). En TRIM confirma "todas las aristas cortan".
       onRightClickCommand: () => {
         const s = useStore.getState()
-        if (!s.engine.hasPending) return false
+        // Como el CAD clásico: en "Select objects" el clic derecho es Enter; en los demás prompts, el menú.
+        if (!s.engine.isSelecting) return false
         setActiveViewport(vp)
         s.submitCommand('')
         focusCommandLine()

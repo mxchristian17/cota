@@ -64,7 +64,8 @@ function baseData(
 /** Clic derecho con un prompt activo = Enter (CAD clásico). */
 const rightClickEnter = (): boolean => {
   const s = st()
-  if (!s.engine.hasPending) return false
+  // Como el CAD clásico: en "Select objects" el clic derecho es Enter; en los demás prompts, el menú.
+  if (!s.engine.isSelecting) return false
   s.submitCommand('')
   focusCommandLine()
   return true

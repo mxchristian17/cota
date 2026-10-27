@@ -25,8 +25,14 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | --- | --- | --- |
 | `UNDO` | `U` | Undo the last command |
 | `REDO` | — | Redo the last undone command |
+| `CUTCLIP` | — | Copy objects to the clipboard and erase them (Ctrl+X) |
+| `COPYCLIP` | — | Copy objects to the clipboard (Ctrl+C) |
+| `COPYBASE` | — | Copy objects to the clipboard with a base point (Ctrl+Shift+C) |
+| `PASTECLIP` | — | Paste the clipboard at an insertion point (Ctrl+V) |
+| `PASTEORIG` | — | Paste the clipboard at its original coordinates |
 | `SELECTALL` | — | Select all objects (Ctrl+A) |
 | `SELECT` | `SE` | Select objects |
+| `SELECTSIMILAR` | — | Select every object of the same type and layer as the selected ones |
 | `ERASE` | `E` | Erase selected objects |
 
 ## View menu

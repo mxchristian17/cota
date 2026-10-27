@@ -15,6 +15,12 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 - After a fillet or chamfer, object snaps use the vertices of the resulting solid: the removed corner no longer
   snaps, the tangent points of a fillet are endpoints and its centers are available with a typed CEN. Their
   coordinates are exact (the tessellation error is removed).
+- Context menu on right-click, the Menu key or Shift+F10, as in classic CAD: Enter, Cancel, the prompt options and
+  snap overrides during a command; Repeat, Recent Input, clipboard, Erase/Move/Copy/Scale/Rotate/Mirror, Select
+  Similar, Deselect All and Properties with a selection; Undo/Redo, Pan, Zoom and Options otherwise. Right-click is
+  still Enter at "Select objects".
+- Clipboard: COPYCLIP (Ctrl+C), CUTCLIP (Ctrl+X), COPYBASE (Ctrl+Shift+C), PASTECLIP (Ctrl+V) and PASTEORIG; and
+  SELECTSIMILAR.
 - Default lighting follows the camera (two distant lights), so faces with different orientations never share
   the same shade.
 

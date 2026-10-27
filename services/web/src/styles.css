@@ -1898,3 +1898,8 @@ div.lt-row {
   background: var(--bg);
   color: var(--text);
 }
+.context-sep {
+  height: 1px;
+  margin: 3px 6px;
+  background: var(--border);
+}

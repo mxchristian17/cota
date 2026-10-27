@@ -869,6 +869,7 @@ export const useStore = create<AppState>((set, get) => {
       set({ selection: ids })
       return ids.length
     },
+    selectIds: (ids) => set({ selection: ids }),
     toolbar: (name, patch) => {
       const def = findToolbar(name)
       if (!def) return false

@@ -71,6 +71,7 @@ import { shademodeCommand, vscurrentCommand } from './impl/vstyle'
 import { redrawCommand } from './impl/redraw'
 import { dashToolbarCommand, fullscreenCommand, gridCommand, layerCommand, propertiesCommand, toolbarCommand, screenCommands, navvcubeCommand } from './impl/ui'
 import { promptCommand } from './impl/ai'
+import { clipboardCommands } from './impl/clipboard'
 import {
   dimAlignedCommand,
   dimAngularCommand,
@@ -119,6 +120,7 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   engine.register(eraseCommand)
   engine.register(moveCommand)
   engine.register(copyCommand)
+  for (const c of clipboardCommands) engine.register(c)
   engine.register(scaleCommand)
   engine.register(rotateCommand)
   engine.register(mirrorCommand)

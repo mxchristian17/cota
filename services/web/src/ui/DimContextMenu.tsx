@@ -4,6 +4,7 @@ import type { DimensionEntity, DimensionProps } from '../core/document/types'
 import { entityGrips } from '../core/editing/grips'
 import { flipArrowNear } from '../core/dimension/dimGeometry'
 import { focusCommandLine } from './focus'
+import { openGeneralMenu } from './ContextMenu'
 import type { Pt } from '../core/math'
 
 const CHAINABLE = new Set(['LINEAR', 'ALIGNED', 'ANGULAR', 'ORDINATE'])
@@ -11,7 +12,7 @@ const PRECISIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 const isAngular = (p: DimensionProps) => p.dimType === 'ANGULAR'
 
 /** Ítem con submenú desplegable al pasar el mouse (como los menús contextuales del CAD clásico). */
-function Sub({ label, testId, children }: { label: string; testId: string; children: ReactNode }) {
+export function Sub({ label, testId, children }: { label: string; testId: string; children: ReactNode }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="context-sub" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
@@ -28,8 +29,11 @@ function Sub({ label, testId, children }: { label: string; testId: string; child
 /** Clic derecho sin arrastre en un viewport: con cotas seleccionadas y sin comando en curso, su menú. */
 export function openContextMenu(x: number, y: number, world: Pt): void {
   const s = useStore.getState()
-  if (s.engine.hasPending || s.engine.busy) return
-  if (!s.selection.some((id) => s.doc.getEntity(id)?.type === 'DIMENSION')) return
+  // Fuera de las cotas seleccionadas (o con un comando en curso), el menú general.
+  if (s.engine.hasPending || s.engine.busy || !s.selection.some((id) => s.doc.getEntity(id)?.type === 'DIMENSION')) {
+    openGeneralMenu(x, y)
+    return
+  }
   s.openDimMenu(x, y, [world.x, world.y, world.z])
 }
 

@@ -186,6 +186,13 @@ export class CommandEngine {
     return this.activeCommand !== null
   }
 
+  /** Para el menú contextual: el último comando (Repeat), los recientes y las opciones del prompt actual. */
+  menuInfo(): { last: string | null; recent: string[]; keywords: string[] } {
+    const p = this.pending
+    const keywords = p && 'keywords' in p && Array.isArray(p.keywords) ? [...p.keywords] : []
+    return { last: this.lastCmdName, recent: [...this.history].reverse().slice(0, 8), keywords }
+  }
+
   get hasPending(): boolean {
     return this.pending !== null
   }
@@ -431,7 +438,7 @@ export class CommandEngine {
       this.pending = null
       // Como el CAD clásico: terminado un comando que pidió objetos, la selección se vacía (sigue disponible
       // como `Previous`); SELECT la deja armada para el comando siguiente.
-      if (this.selectionUsed && cmd.name !== 'SELECT') this.deps.onSelectionChange([])
+      if (this.selectionUsed && cmd.name !== 'SELECT' && cmd.name !== 'SELECTSIMILAR') this.deps.onSelectionChange([])
       // Sin ruido de punto flotante en lo que quedó guardado (1 y no 0.9999999999995453).
       this.ctx.doc.cleanNumbers()
       this.deps.onAfterCommand(cmd.name)

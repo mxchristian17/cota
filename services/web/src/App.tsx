@@ -1,4 +1,5 @@
 import { DimContextMenu } from './ui/DimContextMenu'
+import { ContextMenu } from './ui/ContextMenu'
 import { useEffect, useRef, useState } from 'react'
 import { ViewportView } from './ui/ViewportView'
 import { FloatingToolbars, ToolbarDialog, ToolbarDock } from './ui/Toolbar'
@@ -138,6 +139,22 @@ export default function App() {
         if (e.key === '0') s.setScreen({ cleanScreen: !s.cleanScreen })
         else s.setScreen({ commandLineCompact: !s.commandLineCompact })
         return
+      }
+      // Portapapeles del dibujo (CAD clásico): Ctrl+C, Ctrl+X, Ctrl+Shift+C y Ctrl+V. Si hay texto marcado (en la
+      // línea de comandos o en la página), el atajo queda para el texto.
+      const k = e.key.toLowerCase()
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === 'c' || k === 'x' || k === 'v') && !editingText() && !inOtherField()) {
+        const el = document.activeElement as HTMLInputElement | null
+        const textMarked = !!window.getSelection()?.toString() || (!!el && typeof el.selectionStart === 'number' && el.selectionStart !== el.selectionEnd)
+        const s = useStore.getState()
+        if (!textMarked && !s.engine.busy) {
+          const cmd = k === 'v' ? 'PASTECLIP' : k === 'x' ? 'CUTCLIP' : e.shiftKey ? 'COPYBASE' : 'COPYCLIP'
+          if (k === 'v' || s.selection.length || cmd === 'COPYBASE') {
+            e.preventDefault()
+            s.submitCommand(cmd)
+            return
+          }
+        }
       }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A') && !e.shiftKey && !e.altKey) {
         // Ctrl+A = seleccionar todo (CAD clásico), salvo que se esté escribiendo en un campo.
@@ -331,6 +348,7 @@ export default function App() {
       <OsnapDialog />
       <DimStyleDialog />
       <DimContextMenu />
+      <ContextMenu />
       <DwgPropsDialog />
       <AttEditDialog />
       <PageSetupDialog />

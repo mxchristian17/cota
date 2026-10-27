@@ -192,6 +192,8 @@ export interface AppHooks {
   downloadDxf?(entities: Entity[], baseName: string): string
   /** Pantalla limpia, línea de comandos compacta y cubo de vistas (CLEANSCREENON…, NAVVCUBE). */
   screen?(patch: { cleanScreen?: boolean; commandLineCompact?: boolean; viewCubeOn?: boolean }): void
+  /** Deja seleccionados estos objetos (SELECTSIMILAR). */
+  selectIds?(ids: string[]): void
   /** Selecciona todos los objetos seleccionables del espacio actual (Ctrl+A, SELECTALL). */
   selectAll?(): number
   /** Objetos seleccionados antes del comando (PEDIT por doble clic o noun-verb). */
