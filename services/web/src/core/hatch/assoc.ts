@@ -46,7 +46,7 @@ export function rebuildHatchLoops(h: HatchProps, sources: Entity[]): HatchLoop[]
     const w = transformEntity(e, toLocal)
     return w ? [{ ...w, id: e.id } as Entity] : []
   })
-  let res: BoundaryResult | null = null
+  let res: BoundaryResult | null
   const seeds = h.assoc?.seeds
   const objects = h.assoc?.objects
   const loops: HatchLoop[] = []

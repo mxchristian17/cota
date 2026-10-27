@@ -50,7 +50,6 @@ export function pickPreviewColor(layerColor: string | number, background: string
     const score = Math.min(colorDistance(rgb, layer), colorDistance(rgb, bg))
     if (score >= 0.25) {
       best = candidate
-      bestScore = score
       break
     }
     if (score > bestScore) {

@@ -40,24 +40,24 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "three": "^0.169.0",
     "three-bvh-csg": "^0.0.16",
     "three-mesh-bvh": "^0.7.8",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
-    "@eslint/js": "^9.17.0",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.64.1",
     "@types/node": "^26.6.5",
-    "@types/react": "^18.3.17",
-    "@types/react-dom": "^18.3.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@types/three": "^0.169.0",
     "@vitejs/plugin-react": "^6.1.2",
     "eslint": "^10.13.0",
     "typescript": "^5.7.2",
-    "typescript-eslint": "^8.18.1",
+    "typescript-eslint": "^8.72.1",
     "vite": "^8.3.5",
     "vitest": "^5.0.5"
   }

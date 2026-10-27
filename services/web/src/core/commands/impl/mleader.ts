@@ -45,7 +45,7 @@ export const mleaderCommand: Command = {
   async run(ctx) {
     const base = { normal: dimNormal(ctx), ...ctx.doc.newDimStyleProps(), dimType: 'MLEADER' as const }
     let order: 'arrow' | 'landing' | 'content' = 'arrow'
-    let first: Vec3 | null = null
+    let first: Vec3 | null
     for (;;) {
       const r = await ctx.getPoint('Specify leader arrowhead location or [leader Landing first/Content first/Options] <Options>: ', {
         keywords: ['Landing', 'Content', 'Options'],

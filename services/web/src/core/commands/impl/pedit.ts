@@ -323,7 +323,7 @@ export const peditCommand: Command = {
     const s = new PeditSession(ctx)
     // Preselección (doble clic o noun-verb): una polilínea va directo; varias, como Multiple.
     const pre = ctx.app.preselection?.() ?? []
-    let ids: string[] = []
+    let ids: string[]
     let multiple = pre.length > 1
     if (pre.length) ids = [...pre]
     else {

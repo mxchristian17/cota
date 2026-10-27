@@ -1129,7 +1129,7 @@ export class Viewport {
     const found: { id: string; h: THREE.Intersection }[] = []
     for (const h of hits) {
       // Geometría fusionada (batch): resolver el id por el rango del triángulo/segmento impactado.
-      let id: string | null = null
+      let id: string | null
       if (h.object.userData.pointIds) id = (h.object.userData.pointIds as string[])[h.index ?? -1] ?? null
       else if (h.object.userData.ranges) id = this.resolveRange(h.object, h)
       else {

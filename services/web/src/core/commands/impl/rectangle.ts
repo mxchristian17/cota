@@ -32,7 +32,7 @@ export const rectangleCommand: Command = {
     const preview = (du: number, dv: number): PreviewShape[] => [{ kind: 'polyline', points: [...corners(du, dv), o] }]
 
     let size: [number, number] | null = null
-    let c2: Pt | null = null
+    let c2: Pt | null
     for (;;) {
       const r = await ctx.getPoint(size ? 'Specify other corner point (side of the rectangle): ' : 'Specify other corner point or [Dimensions]: ', {
         base: o,

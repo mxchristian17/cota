@@ -1,3 +1,4 @@
+import type { JSX } from 'react'
 import { ARROW_LABELS, ARROW_TYPES, type DimVarInfo, type DimVars } from '../core/dimension/style'
 
 /**

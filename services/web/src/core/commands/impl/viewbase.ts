@@ -236,7 +236,7 @@ export const viewbaseCommand: Command = {
       return
     }
     let scale = st.scale ?? autoViewScale(size.width, size.height, pw, ph)
-    let base: Entity | null = null
+    let base: Entity | null
     for (;;) {
       ctx.print(`Type = ${st.projected ? 'Base and Projected' : 'Base only'}  Hidden Lines = ${HIDDEN_LABEL[st.hidden]}  Scale = ${scaleLabel(scale)}`)
       const sz = size
