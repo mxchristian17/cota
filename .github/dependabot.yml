@@ -1,16 +1,33 @@
 version: 2
+# One grouped pull request per ecosystem and month; security fixes still arrive as soon as they are published.
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
   - package-ecosystem: npm
     directory: /services/web
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      web-minor-and-patch:
+        update-types: ["minor", "patch"]
+    # three.js and three-bvh-csg change how solids are evaluated: they are upgraded by hand, with tests.
+    ignore:
+      - dependency-name: "three"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "three-bvh-csg"
+      - dependency-name: "three-mesh-bvh"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
   - package-ecosystem: pip
     directory: /services/api
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      api-minor-and-patch:
+        update-types: ["minor", "patch"]
