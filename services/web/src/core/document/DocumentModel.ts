@@ -1,4 +1,5 @@
 import type { NamedView } from '../view'
+import { cleanNumbersDeep } from '../geom/clean'
 import { modelToPaperEntity, parseProxyId } from '../layout/transspatial'
 import { setModelAnnoScale } from '../dimension/dimGeometry'
 import { annoScaleOf, paperPerModel } from '../layout/scale'
@@ -865,6 +866,15 @@ export class DocumentModel {
     this.entities.push(entity)
     this._rev++
     return entity
+  }
+
+  /** Quita el ruido de punto flotante de todas las entidades (modelo, layouts y bloques); ver `cleanNumber`. */
+  cleanNumbers(): number {
+    const lists: Entity[][] = [this.data.entities, ...(this.data.layouts ?? []).map((l) => l.entities), ...(this.data.blocks ?? []).map((b) => b.entities)]
+    let n = 0
+    for (const list of lists) for (const e of list) n += cleanNumbersDeep(e.props)
+    if (n) this._rev++
+    return n
   }
 
   /** Vuelve a insertar una entidad conservando su id (deshacer dentro de un comando). */

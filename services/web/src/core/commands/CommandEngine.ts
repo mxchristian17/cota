@@ -10,6 +10,7 @@ import { parseCoordinate, parseNumber } from './coords'
 import { matchOsnapOverride } from '../snap/osnap'
 import type { OsnapKind } from '../snap/osnap'
 import { matchKeyword } from './keywords'
+import { reportError } from '../errors'
 import type {
   AngleResult,
   AppHooks,
@@ -399,6 +400,7 @@ export class CommandEngine {
     if (!opts.silent) this.deps.onPrint(`Command: ${cmd.name}`)
     this.deps.onBeforeCommand(cmd.name)
     this.selectionUsed = false
+    this.preselectionTaken = false
     this.runInputs = []
     this.runPoints = 0
     this.runSelected = false
@@ -409,12 +411,15 @@ export class CommandEngine {
       if (ctx !== this.ctx) flushFrame(ctx)
     } catch (err) {
       this.deps.onPrint(`Error: ${err instanceof Error ? err.message : String(err)}`)
+      reportError(`${cmd.name} failed`, err)
     } finally {
       this.activeCommand = null
       this.pending = null
       // Como el CAD clásico: terminado un comando que pidió objetos, la selección se vacía (sigue disponible
       // como `Previous`); SELECT la deja armada para el comando siguiente.
       if (this.selectionUsed && cmd.name !== 'SELECT') this.deps.onSelectionChange([])
+      // Sin ruido de punto flotante en lo que quedó guardado (1 y no 0.9999999999995453).
+      this.ctx.doc.cleanNumbers()
       this.deps.onAfterCommand(cmd.name)
       this.setPrompt('')
       this.deps.onChange()
@@ -504,7 +509,10 @@ export class CommandEngine {
   /** Restringe `p` a los ejes del UCS respecto de `base` (modo ORTHO). */
   private orthoConstrain(base: Pt, p: Pt): Pt {
     const u = this.deps.currentUcs()
-    return ucsToWorld(constrainOrtho(worldToUcs(base, u), worldToUcs(p, u)), u)
+    const r = ucsToWorld(constrainOrtho(worldToUcs(base, u), worldToUcs(p, u)), u)
+    // La coordenada que ortho deja fija se copia exacta del punto base (el ida y vuelta por la UCS deja ruido).
+    const fix = (a: number, b: number) => (Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b)) ? b : a)
+    return { x: fix(r.x, base.x), y: fix(r.y, base.y), z: fix(r.z, base.z) }
   }
 
   /** Punto a `dist` desde `base` en la dirección del cursor (ortho si aplica). */
@@ -529,8 +537,12 @@ export class CommandEngine {
     // el comando los toma directamente sin volver a pedir la selección.
     this.selectionUsed = true
     this.runSelected = true
-    const pre = this.deps.currentSelection()
+    // La pre-selección se usa una sola vez por comando: si el comando vuelve a pedir objetos (p. ej. porque los
+    // elegidos no sirven) se espera una selección nueva; si no, quedaba en un bucle sin fin y la app se colgaba.
+    const pre = this.preselectionTaken ? [] : this.deps.currentSelection()
+    if (this.preselectionTaken && this.deps.currentSelection().length) this.deps.onSelectionChange([])
     if (pre.length > 0) {
+      this.preselectionTaken = true
       this.previousSet = [...pre]
       return Promise.resolve([...pre])
     }
@@ -553,6 +565,7 @@ export class CommandEngine {
   private previousSet: string[] = []
   /** ¿El comando en curso pidió una selección? (para vaciarla al terminar). */
   private selectionUsed = false
+  private preselectionTaken = false
 
   /** Agrega (o quita) ids a la selección en curso, como un paso deshacible; informa "N found". */
   private applySel(sel: Extract<Pending, { type: 'selection' }>, ids: string[], remove: boolean, report = true, prefix = ''): void {

@@ -382,7 +382,11 @@ function edgeKind(pts: Vec3[], closed: boolean, tol: number): TopoEdge['kind'] {
 // ---------------------------------------------------------------------------------------------
 
 /** Reconstruye caras y aristas a partir de una sopa de triángulos (9 números por triángulo). */
-export function buildTopology(positions: ArrayLike<number>): Topology {
+/**
+ * `surf` (opcional): superficie de origen de cada triángulo. Dos facetas vecinas casi paralelas sólo forman la
+ * misma cara si vienen de la misma superficie: la arista entre una cara plana y un empalme tangente se conserva.
+ */
+export function buildTopology(positions: ArrayLike<number>, surf?: ArrayLike<number> | null): Topology {
   let lo: Vec3 = [Infinity, Infinity, Infinity]
   let hi: Vec3 = [-Infinity, -Infinity, -Infinity]
   for (let i = 0; i + 2 < positions.length; i += 3) {
@@ -396,6 +400,7 @@ export function buildTopology(positions: ArrayLike<number>): Topology {
   const tris: [number, number, number][] = []
   const triN: Vec3[] = []
   const area: number[] = []
+  const triSurf: number[] = []
   for (let i = 0; i + 2 < idx.length; i += 3) {
     const [a, b, c] = [idx[i], idx[i + 1], idx[i + 2]]
     if (a === b || b === c || a === c) continue
@@ -405,6 +410,7 @@ export function buildTopology(positions: ArrayLike<number>): Topology {
     const longest = Math.max(vdist(verts[a], verts[b]), vdist(verts[b], verts[c]), vdist(verts[c], verts[a]))
     if (l <= 0 || l / longest < tol * 10) continue
     tris.push([a, b, c])
+    triSurf.push(surf ? surf[i / 3] : 0)
     triN.push(vscale(cr, 1 / l))
     area.push(l / 2)
   }
@@ -425,10 +431,14 @@ export function buildTopology(positions: ArrayLike<number>): Topology {
   }
   const { group, groupN } = planarGroups(tris, triN, area, adj, verts, Math.max(diag * 1e-4, 1e-9))
 
+  const groupSurf: number[] = []
+  tris.forEach((_, t) => {
+    if (groupSurf[group[t]] === undefined) groupSurf[group[t]] = triSurf[t]
+  })
   const uf = makeUnion(groupN.length)
   for (const [h, g] of pairs) {
     const [ga, gb] = [group[h.t], group[g.t]]
-    if (ga !== gb && vdot(groupN[ga], groupN[gb]) > SMOOTH_COS) uf.join(ga, gb)
+    if (ga !== gb && groupSurf[ga] === groupSurf[gb] && vdot(groupN[ga], groupN[gb]) > SMOOTH_COS) uf.join(ga, gb)
   }
   const faceOfRoot = new Map<number, number>()
   const groupFace = groupN.map((_, g) => {
@@ -741,7 +751,7 @@ function pointTriangleDistance(p: Vec3, a: Vec3, b: Vec3, c: Vec3): number {
 // Mallador inyectado (render/csg) + caché
 // ---------------------------------------------------------------------------------------------
 
-type Mesher = (p: SolidProps) => ArrayLike<number>
+type Mesher = (p: SolidProps) => ArrayLike<number> | { positions: ArrayLike<number>; surf?: ArrayLike<number> | null }
 let mesher: Mesher | null = null
 const cache = new Map<string, Topology>()
 
@@ -757,7 +767,8 @@ export function solidTopology(p: SolidProps): Topology | null {
   const key = JSON.stringify(p)
   const hit = cache.get(key)
   if (hit) return hit
-  const topo = buildTopology(mesher(p))
+  const m = mesher(p)
+  const topo = 'positions' in m ? buildTopology(m.positions, m.surf) : buildTopology(m)
   if (cache.size > 50) cache.clear()
   cache.set(key, topo)
   return topo

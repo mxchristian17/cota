@@ -82,9 +82,10 @@ describe('FILLETEDGE / CHAMFEREDGE evaluados con CSG', () => {
     // Aristas: 12 × área × 6; esquinas: 8 × (cubo r³ − octante de esfera), con facetado.
     const exact = 1000 - 12 * (4 - Math.PI) * 6 - 8 * (8 - (4 / 3) * Math.PI)
     expect(Math.abs(volume(round) - exact)).toBeLessThan(2)
+    // Sin aristas vivas: sólo quedan las tangentes (cara plana ↔ empalme, empalme ↔ esquina), como el CAD clásico.
     const after = solidTopology(round)
-    expect(after?.faceCount).toBe(1)
-    expect(after?.edges).toHaveLength(0)
+    expect(after?.edges.length).toBeGreaterThan(0)
+    for (const e of after?.edges ?? []) e.n1.forEach((n, i) => expect(n[0] * e.n2[i][0] + n[1] * e.n2[i][1] + n[2] * e.n2[i][2]).toBeGreaterThan(0.9))
   })
 })
 
@@ -124,11 +125,10 @@ describe('comandos FILLETEDGE y CHAMFEREDGE', () => {
 
   it('Chain sobre el borde superior de una arista redondeada recorre la curva y frena en las esquinas', async () => {
     await h.run('FILLETEDGE', 'R', '2', '0,0,5', '', '')
+    h.prints.length = 0
     await h.run('FILLETEDGE', 'C', '5,0,10', '', '')
-    expect(h.prints).toContain('1 edge(s) selected for fillet.')
-    const topo = solidTopology((props() as FilletEdgeProps).solid)
-    const e = topo?.edges.find((x) => x.pts.some((q) => q[0] === 10 && q[1] === 0 && q[2] === 10) && x.pts.some((q) => q[0] === 0 && q[1] === 10))
-    expect(e?.kind).toBe('curve')
+    // El borde superior ya no es una sola curva: recta, arco tangente y recta, y la cadena toma las tres.
+    expect(h.prints).toContain('3 edge(s) selected for fillet.')
   })
 
   it('CHAMFEREDGE ▸ Distance 2/1: Distance1 sobre la cara que mira al observador', async () => {

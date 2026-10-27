@@ -67,7 +67,7 @@ function nextViewBlock(ctx: CommandContext): string {
 
 /** Calcula la geometría 2D de una vista y la deja en su bloque; devuelve su tamaño (unidades de modelo). */
 function buildView(ctx: CommandContext, block: string, source: string[] | null, basis: ProjBasis, hidden: HiddenMode): { width: number; height: number } | null {
-  const items = ctx.app.projectModel?.(source, basis, { showObscured: showsHidden(hidden), tangential: false }) ?? []
+  const items = ctx.app.projectModel?.(source, basis, { showObscured: showsHidden(hidden), tangential: true }) ?? []
   if (items.length === 0) return null
   const layers = { visible: ctx.app.ensureLayer?.('MD_Visible', undefined, '#ffffff') ?? '0', hidden: ctx.app.ensureLayer?.('MD_Hidden', 'HIDDEN', '#ffffff') ?? '0' }
   const shade = isShaded(hidden) ? (ctx.app.shadeModel?.(source, basis) ?? null) : null
@@ -303,6 +303,10 @@ export const viewprojCommand: Command = {
   aliases: [],
   description: 'Create projected views from an existing drawing view',
   async run(ctx) {
+    if (!ctx.doc.inPaperSpace) {
+      ctx.print('VIEWPROJ works on drawing views in a layout. Use VIEWBASE to create one.')
+      return
+    }
     const parent = await pickView(ctx, 'Select parent view: ')
     if (!parent) return
     const n = await placeProjected(ctx, parent)

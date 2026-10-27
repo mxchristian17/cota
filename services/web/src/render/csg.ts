@@ -14,12 +14,35 @@ const seg = (n: number): number =>
   n === undefined ? n : Number.isFinite(n) ? Math.min(MAX_SEGMENTS, Math.max(3, Math.round(n))) : 32
 
 const evaluator = new Evaluator()
+evaluator.attributes = ['position', 'uv', 'normal', 'surf']
+
+/**
+ * Superficie de origen de cada vértice (`surf`): cada cara de una primitiva y cada empalme/chaflán tiene su id y la
+ * CSG lo conserva. La topología separa por él las caras suaves, así aparecen las aristas tangentes (cara plana ↔
+ * empalme) como en el CAD clásico, sin mostrar el facetado de las paredes curvas.
+ */
+let nextSurf = 1
+function tagSurfaces(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  if (g.getAttribute('surf')) return g
+  const count = g.getAttribute('position')?.count ?? 0
+  const index = g.getIndex()
+  const arr = new Float32Array(count)
+  const groups = g.groups.length ? g.groups : [{ start: 0, count: index ? index.count : count }]
+  const base = nextSurf
+  groups.forEach((gr, k) => {
+    for (let i = gr.start; i < Math.min(gr.start + gr.count, index ? index.count : count); i++) arr[index ? index.getX(i) : i] = base + k
+  })
+  nextSurf = base + groups.length
+  g.setAttribute('surf', new THREE.Float32BufferAttribute(arr, 1))
+  return g
+}
 const cache = new Map<string, THREE.BufferGeometry>()
 
 /** three-bvh-csg exige que TODOS los operandos tengan el MISMO set de atributos (position/normal/uv).
  *  Las primitivas de Three traen los tres; las geometrías custom (LOFT) no traen `uv`. Normalizamos
  *  cada geometría antes de la CSG: garantizamos `normal` y agregamos `uv` (relleno) si falta. */
 function prepareForCsg(geom: THREE.BufferGeometry): THREE.BufferGeometry {
+  tagSurfaces(geom)
   if (!geom.getAttribute('normal')) geom.computeVertexNormals()
   if (!geom.getAttribute('uv')) {
     const count = geom.getAttribute('position')?.count ?? 0
@@ -283,6 +306,7 @@ function blendGeometry(props: EdgeBlendProps): THREE.BufferGeometry {
   const soupBrush = (soup: number[]): Brush => {
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.Float32BufferAttribute(soup, 3))
+    g.setAttribute('surf', new THREE.Float32BufferAttribute(new Float32Array(soup.length / 3).fill(nextSurf++), 1))
     g.computeVertexNormals()
     return csgBrush(g)
   }
@@ -299,7 +323,7 @@ function blendGeometry(props: EdgeBlendProps): THREE.BufferGeometry {
 
 function evalTree(props: SolidProps): THREE.BufferGeometry {
   const leaf = leafGeometry(props)
-  if (leaf) return leaf
+  if (leaf) return tagSurfaces(leaf)
   if (props.op === 'FILLETEDGE' || props.op === 'CHAMFEREDGE') return blendGeometry(props)
   if (props.op === 'SHELL') {
     const outer = evalTree(props.solid)
@@ -420,8 +444,15 @@ export function solidEdgePositions(props: SolidProps): Float32Array {
 
 /** Evalúa un sólido a malla de triángulos (vértices + caras) para exportar a OBJ. */
 export function solidMesh(props: SolidProps): MeshProps {
+  const { vertices, faces } = solidMeshWithSurfaces(props)
+  return { vertices, faces }
+}
+
+/** Como `solidMesh`, más la superficie de origen de cada cara (para separar las aristas tangentes). */
+export function solidMeshWithSurfaces(props: SolidProps): MeshProps & { surf?: Float32Array | null } {
   const g = solidGeometry(props)
   const pos = g.getAttribute('position')
+  if (!pos) return { vertices: [], faces: [], surf: null }
   const vertices: Vec3[] = []
   for (let i = 0; i < pos.count; i++) vertices.push([pos.getX(i), pos.getY(i), pos.getZ(i)])
   const faces: number[][] = []
@@ -431,7 +462,7 @@ export function solidMesh(props: SolidProps): MeshProps {
   } else {
     for (let i = 0; i + 2 < pos.count; i += 3) faces.push([i, i + 1, i + 2])
   }
-  return { vertices, faces }
+  return { vertices, faces, surf: triangleSurfaces(g) }
 }
 
 /** Sopa de triángulos (9 números por triángulo) de una geometría, indexada o no. */
@@ -451,4 +482,18 @@ export function triangleSoup(g: THREE.BufferGeometry): Float32Array {
 }
 
 // La topología de aristas (core) se deriva de la malla evaluada acá.
-registerSolidMesher((p) => triangleSoup(solidGeometry(p)))
+/** Superficie de origen de cada triángulo (ver `tagSurfaces`), o null si la geometría no la trae. */
+function triangleSurfaces(g: THREE.BufferGeometry): Float32Array | null {
+  const surf = g.getAttribute('surf')
+  if (!surf) return null
+  const index = g.getIndex()
+  const n = Math.floor((index ? index.count : surf.count) / 3)
+  const out = new Float32Array(n)
+  for (let t = 0; t < n; t++) out[t] = surf.getX(index ? index.getX(t * 3) : t * 3)
+  return out
+}
+
+registerSolidMesher((p) => {
+  const g = solidGeometry(p)
+  return { positions: triangleSoup(g), surf: triangleSurfaces(g) }
+})

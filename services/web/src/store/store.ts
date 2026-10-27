@@ -74,7 +74,7 @@ import { selectableEntities } from '../core/commands/selectionSets'
 import { DEFAULT_FLATSHOT, flatshotItems, type FlatshotOptions } from '../core/projection/flatshot'
 import { alignDrawingViews, isDrawingView, isShaded, showsHidden, viewBlockEntities } from '../core/drawing/views'
 import { shadeViewTriangles } from '../core/projection/shade'
-import { solidMesh } from '../render/csg'
+import { solidMesh, solidMeshWithSurfaces } from '../render/csg'
 import { ApiError, api, type DocumentSummary } from '../core/io/apiClient'
 import { moveLayerTo } from '../core/layers/order'
 
@@ -574,7 +574,7 @@ export const useStore = create<AppState>((set, get) => {
     for (const e of expandEntities(src, doc.blocks, { skipLayers: frozenLayerIds(doc.layers) })) {
       if (shown.get(e.layer) === false) continue
       if (e.type === 'SOLID3D') {
-        const m = solidMesh(e.props)
+        const m = solidMeshWithSurfaces(e.props)
         if (m.vertices.length) {
           meshes.push(m)
           colors.push(colorOf.get(e.layer) ?? '#c0c0c0')
@@ -609,7 +609,7 @@ export const useStore = create<AppState>((set, get) => {
         if (!isDrawingView(e) || (ids && !ids.includes(e.id))) continue
         const v = e.props.view
         if (!force && v.sig === sig) continue
-        const items = projectModel(v.source, v.basis, { showObscured: showsHidden(v.hidden), tangential: false })
+        const items = projectModel(v.source, v.basis, { showObscured: showsHidden(v.hidden), tangential: true })
         const shade = isShaded(v.hidden) ? (() => {
           const { meshes, colors } = modelMeshes(v.source)
           return shadeViewTriangles(meshes, colors, v.basis)

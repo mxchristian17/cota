@@ -4,13 +4,32 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+### Added
+- Unexpected errors show a closable message and the app keeps working; if the interface itself fails it is
+  remounted instead of leaving a blank screen.
+- Solids show their tangent edges (where a flat face meets a fillet), in the model and in drawing views, as in
+  classic CAD. Drawing views also include the outline of fully rounded parts.
+- Default lighting follows the camera (two distant lights), so faces with different orientations never share
+  the same shade.
+
 ### Changed
+- React 19; @eslint/js 10 and current typescript-eslint; GitHub Actions on their current major versions.
 - Development toolchain updated: Vite 8, Vitest 5, ESLint 10, Playwright 1.64, @vitejs/plugin-react 6. No known
   vulnerabilities in the development dependencies either (`npm audit`: 0).
 - Dependabot opens one grouped pull request per ecosystem and month; three.js and its CSG libraries are upgraded
   by hand, with tests.
 
 ### Fixed
+- VIEWPROJ with solids selected in the model hung the app; any command asking for objects again no longer loops
+  on the preselection.
+- Coordinates no longer carry floating-point noise (a line drawn to x = 1 stored 0.9999999999995453); ortho keeps
+  the locked coordinate exact.
+- Object snaps and tracking no longer pick points from layers that are off or frozen.
+- The browser's hand cursor no longer appears over the crosshair when hovering a grip.
+- VIEWBASE on a part with every edge rounded reported "No 3D solids to document".
+- Clicking empty space starts a selection window and a second click closes it (no need to drag); clicking a
+  solid selects it reliably.
+- Browser auto-translation is disabled: it rewrote the command prompt ("Domain:") and crashed the interface.
 - Two end-to-end tests that could fail on busy CI machines now wait for the command to finish and the canvas to
   settle before clicking.
 

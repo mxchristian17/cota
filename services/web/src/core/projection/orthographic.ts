@@ -15,6 +15,8 @@ import type { SolidProps } from '../document/types'
 export type ViewDir = 'front' | 'top' | 'right'
 
 export interface Mesh {
+  /** Superficie de origen de cada cara (opcional, ver `render/csg`): separa una cara plana del empalme tangente. */
+  surf?: ArrayLike<number> | null
   vertices: Vec3[]
   faces: number[][]
 }
@@ -103,15 +105,24 @@ function buildTriangles(groups: Mesh[][]): { verts: Vec3[]; tris: Tri[]; size: n
  * Aristas a dibujar de un grupo, como pares de puntos 3D: las aristas vivas de la topología (* tolerante a las uniones en T que deja la CSG: sin ella la vista mostraba la triangulación) y las
  * **siluetas** vistas desde `out` (generatrices de cilindros, contornos de esferas).
  */
+/** Dos facetas vecinas con menos de 25° entre normales continúan la misma superficie suave (como la topología). */
+const SMOOTH_DOT = Math.cos((25 * Math.PI) / 180)
+
 function viewEdges(meshes: Mesh[], out: Vec3, tangential = false): Array<[Vec3, Vec3]> {
   const pos: number[] = []
+  const surf: number[] = []
+  const hasSurf = meshes.every((m) => m.surf)
   for (const m of meshes) {
-    for (const f of m.faces) {
-      for (let k = 1; k + 1 < f.length; k++) for (const i of [f[0], f[k], f[k + 1]]) pos.push(...m.vertices[i])
-    }
+    m.faces.forEach((f, fi) => {
+      for (let k = 1; k + 1 < f.length; k++) {
+        for (const i of [f[0], f[k], f[k + 1]]) pos.push(...m.vertices[i])
+        if (hasSurf) surf.push(m.surf![fi])
+      }
+    })
   }
   if (!pos.length) return []
-  const topo = buildTopology(pos)
+  const topo = buildTopology(pos, hasSurf ? surf : null)
+  const smooth = (a: Vec3, b: Vec3) => dot(a, b) > SMOOTH_DOT
   const res: Array<[Vec3, Vec3]> = []
   for (const e of topo.edges) {
     const n = e.pts.length
@@ -119,17 +130,22 @@ function viewEdges(meshes: Mesh[], out: Vec3, tangential = false): Array<[Vec3, 
       // Entre dos caras vistas de canto: cae sobre el contorno (o es una astilla de la CSG en la pared
       // de un agujero visto a lo largo de su eje). No se dibuja.
       if (Math.abs(dot(e.n1[i], out)) < 0.05 && Math.abs(dot(e.n2[i], out)) < 0.05) continue
+      // Arista tangente (cara plana ↔ empalme): sólo si se piden (la silueta, si cae ahí, sale abajo).
+      if (!tangential && smooth(e.n1[i], e.n2[i])) continue
       res.push([e.pts[i], e.pts[(i + 1) % n]])
     }
   }
   for (const [ta, tb, a, b] of topo.links) {
-    if (topo.triFace[ta] !== topo.triFace[tb]) continue // entre caras distintas ya es una arista viva
-    // Una cara de frente y la otra de espaldas; las de canto (p. ej. la pared de un agujero visto a lo
-    // largo de su eje) no cuentan: sus diagonales saldrían como cuerdas del círculo.
+    if (!smooth(topo.normals[ta], topo.normals[tb])) continue // arista viva: ya está dibujada
+    // Silueta: el borde de la zona que mira al observador (una faceta de frente y la otra de espaldas o de canto).
+    // Así también sale el contorno de un empalme que termina en una cara vista de canto (un cubo con todas las
+    // aristas redondeadas). Dos facetas de canto (la pared de un agujero visto a lo largo de su eje) no cuentan:
+    // sus diagonales saldrían como cuerdas del círculo.
     const [da, db] = [dot(topo.normals[ta], out), dot(topo.normals[tb], out)]
-    if (Math.abs(da) > 1e-6 && Math.abs(db) > 1e-6 && da * db < 0) res.push([topo.verts[a], topo.verts[b]])
+    if (da > 1e-6 !== db > 1e-6) res.push([topo.verts[a], topo.verts[b]])
   }
-  if (tangential) res.push(...tangentEdges(topo))
+  // Sin el origen de cada cara, las tangentes se estiman por la forma de las facetas.
+  if (tangential && !hasSurf) res.push(...tangentEdges(topo))
   return res
 }
 

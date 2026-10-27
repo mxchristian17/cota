@@ -262,6 +262,8 @@ export class Viewport {
   private rightDown: [number, number] | null = null
   /** Entidades que dan snaps (visibles + extras del papel); se recalcula con los datos. */
   private snapList: Entity[] | null = null
+  private readonly keyLight = new THREE.DirectionalLight(0xffffff, 2.2)
+  private readonly fillLight = new THREE.DirectionalLight(0xffffff, 0.35)
   private snapListKey = ''
   /** Escala de anotación con la que se dibujaron las cotas anotativas (cambia con la escala del viewport). */
   private lastAnnoScale: number | undefined = undefined
@@ -324,10 +326,10 @@ export class Viewport {
     this.grid.visible = kind === 'model'
     this.orientGrid()
     this.scene.add(this.grid)
-    this.scene.add(new THREE.AmbientLight(0x999999))
-    const dir = new THREE.DirectionalLight(0xffffff, 0.8)
-    dir.position.set(1, 1, 2)
-    this.scene.add(dir)
+    // Iluminación por defecto como el CAD clásico: dos luces distantes que siguen a la cámara (ver `aimLights`), así
+    // las caras con distinta orientación nunca quedan del mismo tono, se mire desde donde se mire.
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.45))
+    this.scene.add(this.keyLight, this.keyLight.target, this.fillLight, this.fillLight.target)
     this.scene.add(this.entityGroup, this.previewGroup, this.snapGroup, this.gripGroup, this.ducsGroup)
     this.ducsGroup.renderOrder = 11
     // Overlays por encima de la geometría: preview < glifos de snap < grips.
@@ -785,13 +787,11 @@ export class Viewport {
       const d = Math.hypot(px[0] - this.boxStartPx[0], px[1] - this.boxStartPx[1])
       if (d > 4) this.boxActive = true
     }
-    // Hover de grips: resalta el grip bajo el cursor (verde) y cambia el cursor.
+    // Hover de grips: resalta el grip bajo el cursor (verde). El cursor sigue siendo la cruz, como el CAD clásico
+    // (antes aparecía la mano del navegador encima de la cruz).
     const prev = this.hoverGrip
     this.hoverGrip = this.grips.length ? this.gripAt(px) : -1
-    if (this.hoverGrip !== prev) {
-      this.renderer.domElement.style.cursor = this.hoverGrip >= 0 ? 'pointer' : ''
-      this.invalidate()
-    }
+    if (this.hoverGrip !== prev) this.invalidate()
     // Re-dibuja solo si algo sigue al cursor: snap, rubber-band de comando, arrastre o caja de selección.
     if (this.dragging || this.draggingBox || this.data?.pointPrompt || this.needSnap()) this.invalidate()
     this.cb.onPointerMove?.(snapped.point)
@@ -1306,6 +1306,19 @@ export class Viewport {
       if (this.tracked.length > 3) this.tracked.shift()
     }
     this.invalidate()
+  }
+
+  /** Orienta las luces respecto de la cámara: la principal desde arriba a la izquierda del observador, la de relleno
+   *  desde abajo a la derecha. */
+  private aimLights(): void {
+    const cam = this.controller.camera
+    const place = (l: THREE.DirectionalLight, x: number, y: number, z: number) => {
+      l.position.set(x, y, z).applyQuaternion(cam.quaternion).add(cam.position)
+      l.target.position.copy(cam.position)
+      l.target.updateMatrixWorld()
+    }
+    place(this.keyLight, -0.45, 0.6, 1)
+    place(this.fillLight, 0.6, -0.5, 0.4)
   }
 
   /** Limpia los puntos adquiridos (al terminar el comando o con ESC). */
@@ -2357,6 +2370,7 @@ export class Viewport {
         this.updateGrips()
         this.updateDimLabels()
         this.updateTextLabels()
+        this.aimLights()
         this.renderer.render(this.scene, this.controller.camera)
         this.dirty = false
       }

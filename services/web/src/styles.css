@@ -1850,3 +1850,51 @@ div.lt-row {
     scrollbar-color: rgba(160, 160, 160, 0.3) transparent;
   }
 }
+
+/* Avisos de errores inesperados: cerrables, la app sigue funcionando. */
+.error-banners {
+  position: fixed;
+  top: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: min(640px, calc(100vw - 32px));
+}
+.error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #5a1d1d;
+  border: 1px solid #be4b4b;
+  border-radius: 4px;
+  color: #f4dede;
+  font-size: 13px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+.error-banner span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.error-banner button {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+}
+.error-fallback {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--bg);
+  color: var(--text);
+}
