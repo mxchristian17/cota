@@ -154,6 +154,8 @@ export const circleCommand: Command = {
       base: center,
       keywords: ['Diameter'],
       valid: (v) => v > 0,
+      // El radio se mide en el plano del círculo, igual que la vista previa (el centro puede venir de un snap 3D).
+      measure: (p) => planeDist(center, p),
       preview: (cursor) => circlePreview(center, planeDist(center, cursor)),
     })
     if (radius.kind === 'cancel') return
@@ -165,6 +167,7 @@ export const circleCommand: Command = {
         initial: last !== undefined ? 2 * last : undefined,
         store: { get: () => (recall('CIRCLERAD') !== undefined ? 2 * (recall('CIRCLERAD') as number) : undefined), set: () => {} },
         valid: (v) => v > 0,
+        measure: (p) => planeDist(center, p),
         preview: (cursor) => circlePreview(center, planeDist(center, cursor) / 2),
       })
       if (d.kind !== 'distance') return

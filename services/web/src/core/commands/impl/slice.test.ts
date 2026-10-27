@@ -36,3 +36,11 @@ describe('SLICE', () => {
     expect(v[1]).toBeCloseTo(600, 3)
   })
 })
+
+describe('CIRCLE: el radio indicado con un punto se mide en el plano del círculo', () => {
+  it('con el centro elevado (snap 3D), el punto en el plano de trabajo da el radio que muestra la vista previa', async () => {
+    const h = makeEngine()
+    await h.run('CIRCLE', '#0,0,10', '#5,0,0')
+    expect((h.ofType('CIRCLE')[0].props as { radius: number }).radius).toBeCloseTo(5, 9)
+  })
+})

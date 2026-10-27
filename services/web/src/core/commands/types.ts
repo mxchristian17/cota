@@ -56,6 +56,8 @@ export interface GetPointOptions {
 
 export interface GetDistanceOptions {
   base: Pt
+  /** Cómo se mide un punto indicado (p. ej. en el plano del círculo); por defecto, la distancia 3D a `base`. */
+  measure?: (p: Pt) => number
   keywords?: string[]
   /** Valor que devuelve un **Enter vacío** (el `<valor>` del prompt); sin él, Enter cancela. */
   default?: number

@@ -1149,7 +1149,7 @@ export class Viewport {
     this.entityGroup.traverse((o) => {
       const m = o as THREE.Mesh
       if (!m.isMesh) return
-      m.geometry.computeBoundingSphere()
+      if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere() // sólo las nuevas (antes: todas en cada clic)
       for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
         if (!sides.has(mat)) sides.set(mat, mat.side)
         mat.side = THREE.DoubleSide
@@ -2123,7 +2123,7 @@ export class Viewport {
     const dir = new THREE.Vector3()
     cam.getWorldDirection(dir)
     const q = (v: number) => Math.round(v * 2000)
-    const key = d && style !== 'shaded' ? `${this.lastRevision}|${this.lastSelectionKey}|${q(dir.x)},${q(dir.y)},${q(dir.z)}${persp ? `|${q(cam.position.x)},${q(cam.position.y)},${q(cam.position.z)}` : ''}` : ''
+    const key = d && style !== 'shaded' ? `${style}|${this.lastRevision}|${this.lastSelectionKey}|${q(dir.x)},${q(dir.y)},${q(dir.z)}${persp ? `|${q(cam.position.x)},${q(cam.position.y)},${q(cam.position.z)}` : ''}` : ''
     if (key === this.silhouetteKey) return
     if (key && this.dragging && this.silhouetteMs > 30) return // pesado: se actualiza al terminar de orbitar
     this.silhouetteKey = key

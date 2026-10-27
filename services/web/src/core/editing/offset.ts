@@ -157,16 +157,21 @@ function rawOffset(c: Curve, d: number, gap: GapType): Curve | null {
 function chain(pieces: Curve[], kind: Curve['kind'], closed: boolean, tol: number): Curve[] {
   const chains: Prim[][] = []
   const endOf = (ps: Prim[]): Vec3 => primPoint(ps[ps.length - 1], 1)
+  const startOf = (ps: Prim[]): Vec3 => primPoint(ps[0], 0)
   for (const p of pieces) {
-    const last = chains[chains.length - 1]
-    if (last && dist2(endOf(last), p.start) < tol) last.push(...p.prims)
+    // Se engancha a la cadena que termina donde empieza este trozo (aunque entre medio quede un lazo).
+    const into = [...chains].reverse().find((ch) => dist2(endOf(ch), p.start) < tol && dist2(startOf(ch), endOf(ch)) >= tol)
+    if (into) into.push(...p.prims)
     else chains.push([...p.prims])
   }
   if (closed && chains.length > 1 && dist2(endOf(chains[chains.length - 1]), primPoint(chains[0][0], 0)) < tol) {
     const last = chains.pop() as Prim[]
     chains[0] = [...last, ...chains[0]]
   }
-  return chains.map((ps) => new Curve(kind, ps, closed && dist2(endOf(ps), primPoint(ps[0], 0)) < tol))
+  // En una curva abierta, un lazo cerrado es el rulo que se forma donde la paralela se cruza consigo misma
+  // (el offset es mayor que un radio): se descarta, como el CAD clásico, si queda otra parte.
+  const open = closed ? chains : chains.filter((ps) => dist2(endOf(ps), startOf(ps)) >= tol)
+  return (open.length ? open : chains).map((ps) => new Curve(kind, ps, closed && dist2(endOf(ps), primPoint(ps[0], 0)) < tol))
 }
 
 /**

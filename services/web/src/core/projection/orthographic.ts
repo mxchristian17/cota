@@ -17,6 +17,8 @@ export type ViewDir = 'front' | 'top' | 'right'
 export interface Mesh {
   /** Superficie de origen de cada cara (opcional, ver `render/csg`): separa una cara plana del empalme tangente. */
   surf?: ArrayLike<number> | null
+  /** Topología ya calculada de esta malla (la del sólido, cacheada): evita rearmarla en cada vista. */
+  topo?: ReturnType<typeof buildTopology> | null
   vertices: Vec3[]
   faces: number[][]
 }
@@ -109,6 +111,8 @@ function buildTriangles(groups: Mesh[][]): { verts: Vec3[]; tris: Tri[]; size: n
 const SMOOTH_DOT = Math.cos((25 * Math.PI) / 180)
 
 function viewEdges(meshes: Mesh[], out: Vec3, tangential = false): Array<[Vec3, Vec3]> {
+  // Cada sólido tiene sus propias aristas: se resuelven por separado (y con su topología cacheada, si la trae).
+  if (meshes.length > 1) return meshes.flatMap((m) => viewEdges([m], out, tangential))
   const pos: number[] = []
   const surf: number[] = []
   const hasSurf = meshes.every((m) => m.surf)
@@ -121,7 +125,7 @@ function viewEdges(meshes: Mesh[], out: Vec3, tangential = false): Array<[Vec3, 
     })
   }
   if (!pos.length) return []
-  const topo = buildTopology(pos, hasSurf ? surf : null)
+  const topo = meshes[0].topo ?? buildTopology(pos, hasSurf ? surf : null)
   const smooth = (a: Vec3, b: Vec3) => dot(a, b) > SMOOTH_DOT
   const res: Array<[Vec3, Vec3]> = []
   for (const e of topo.edges) {
@@ -241,8 +245,33 @@ export function projectHiddenGroups(groups: Mesh[][], basis: ProjBasis, opts: { 
    * ¿El punto 3D (por u,v,depth) está tapado por algún triángulo? Las caras que contienen la arista
    * muestreada quedan a su misma profundidad y el sesgo `bias` evita que se tapen a sí mismas.
    */
+  // Grilla en el plano de la vista: cada muestra sólo se prueba contra los triángulos de su celda (antes, contra
+  // todos: VIEWGEN y VIEWBASE tardaban segundos en piezas con empalmes).
+  let [u0, v0, u1, v1] = [Infinity, Infinity, -Infinity, -Infinity]
+  for (let k = 0; k < U.length; k++) {
+    u0 = Math.min(u0, U[k])
+    u1 = Math.max(u1, U[k])
+    v0 = Math.min(v0, V[k])
+    v1 = Math.max(v1, V[k])
+  }
+  const G = Math.max(8, Math.min(256, Math.ceil(Math.sqrt(tris.length))))
+  const cw = (u1 - u0) / G || 1
+  const ch = (v1 - v0) / G || 1
+  const cellOf = (u: number, v: number): [number, number] => [Math.min(G - 1, Math.max(0, Math.floor((u - u0) / cw))), Math.min(G - 1, Math.max(0, Math.floor((v - v0) / ch)))]
+  const grid: number[][] = Array.from({ length: G * G }, () => [])
+  const maxD: number[] = []
+  tris.forEach((t, k) => {
+    const [ia, ib, ic] = t.i
+    maxD.push(Math.max(D[ia], D[ib], D[ic]))
+    const [a0, b0] = cellOf(Math.min(U[ia], U[ib], U[ic]), Math.min(V[ia], V[ib], V[ic]))
+    const [a1, b1] = cellOf(Math.max(U[ia], U[ib], U[ic]), Math.max(V[ia], V[ib], V[ic]))
+    for (let x = a0; x <= a1; x++) for (let y = b0; y <= b1; y++) grid[y * G + x].push(k)
+  })
   const occluded = (pu: number, pv: number, pd: number): boolean => {
-    for (const t of tris) {
+    const [gx, gy] = cellOf(pu, pv)
+    for (const k of grid[gy * G + gx]) {
+      if (maxD[k] <= pd + bias) continue // ningún punto del triángulo está delante
+      const t = tris[k]
       const [ia, ib, ic] = t.i
       const bc = bary(pu, pv, U[ia], V[ia], U[ib], V[ib], U[ic], V[ic])
       if (!bc) continue

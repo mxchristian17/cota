@@ -66,7 +66,8 @@ export function frameContext(ctx: CommandContext, ucs: Ucs): CommandContext {
     app,
     doc,
     getPoint: async (prompt, opts) => pointResult(await ctx.getPoint(prompt, pointOpts(opts))),
-    getDistance: (prompt, opts: GetDistanceOptions) => ctx.getDistance(prompt, { ...opts, base: W(opts.base), preview: preview(opts) }),
+    getDistance: (prompt, opts: GetDistanceOptions) =>
+      ctx.getDistance(prompt, { ...opts, base: W(opts.base), preview: preview(opts), measure: opts.measure ? (p) => opts.measure!(L(p)) : undefined }),
     getAngle: (prompt, opts: GetAngleOptions) =>
       ctx.getAngle(prompt, { ...opts, base: W(opts.base), ...(opts.relativeTo ? { relativeTo: W(opts.relativeTo) } : {}), preview: preview(opts) }),
   }

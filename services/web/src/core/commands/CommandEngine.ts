@@ -76,6 +76,7 @@ type Pending =
   | {
       type: 'distance'
       base: Pt
+      measure?: (p: Pt) => number
       keywords: string[]
       def?: number
       preview?: PreviewFn
@@ -306,7 +307,7 @@ export class CommandEngine {
     } else if (pending.type === 'distance') {
       this.pending = null
       // Distancia real en 3D (como el CAD clásico): en FRONT/LEFT el cursor se mueve en un plano vertical.
-      pending.resolve({ kind: 'distance', value: Math.hypot(p.x - pending.base.x, p.y - pending.base.y, p.z - pending.base.z) })
+      pending.resolve({ kind: 'distance', value: pending.measure ? pending.measure(p) : Math.hypot(p.x - pending.base.x, p.y - pending.base.y, p.z - pending.base.z) })
     } else if (pending.type === 'angle') {
       const deg = this.directedAngle(pending.base, p, pending.relativeTo)
       this.pending = null
@@ -530,6 +531,7 @@ export class CommandEngine {
       this.pending = {
         type: 'distance',
         base: opts.base,
+        measure: opts.measure,
         keywords: opts.keywords ?? [],
         def: opts.default,
         preview: opts.preview,
@@ -828,7 +830,7 @@ export class CommandEngine {
     if (p) {
       const base = pending.base
       this.pending = null
-      pending.resolve({ kind: 'distance', value: Math.hypot(p.x - base.x, p.y - base.y, p.z - base.z) })
+      pending.resolve({ kind: 'distance', value: pending.measure ? pending.measure(p) : Math.hypot(p.x - base.x, p.y - base.y, p.z - base.z) })
       return
     }
     this.deps.onPrint(`Invalid value: ${text}`)

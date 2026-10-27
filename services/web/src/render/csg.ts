@@ -218,7 +218,11 @@ function sweepGeometry(props: {
   for (const f of caps) capTri(last, f, dirs[dirs.length - 1])
   const capEnd = pos.length / 3
   const m = profile.length
+  // Cada tramo entre quiebres vivos es una cara aparte (así se marca la arista del inglete); los tramos de un arco
+  // muestreado siguen siendo una sola superficie suave.
+  const sideStarts: number[] = [pos.length / 3]
   for (let i = 0; i + 1 < rings.length; i++) {
+    if (i > 0 && dirs[i - 1].dot(dirs[i]) < Math.cos((20 * Math.PI) / 180)) sideStarts.push(pos.length / 3)
     for (let j = 0; j < m; j++) {
       const a = rings[i][j]
       const b = rings[i][(j + 1) % m]
@@ -242,7 +246,7 @@ function sweepGeometry(props: {
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
   g.addGroup(0, capStart, 0)
   g.addGroup(capStart, capEnd - capStart, 1)
-  g.addGroup(capEnd, pos.length / 3 - capEnd, 2)
+  sideStarts.forEach((st, k) => g.addGroup(st, (sideStarts[k + 1] ?? pos.length / 3) - st, 2 + k))
   g.computeVertexNormals()
   return g
 }
@@ -531,7 +535,7 @@ export function solidMesh(props: SolidProps): MeshProps {
 }
 
 /** Como `solidMesh`, más la superficie de origen de cada cara (para separar las aristas tangentes). */
-export function solidMeshWithSurfaces(props: SolidProps): MeshProps & { surf?: Float32Array | null } {
+export function solidMeshWithSurfaces(props: SolidProps): MeshProps & { surf?: Float32Array | null; topo?: ReturnType<typeof solidTopology> } {
   const g = solidGeometry(props)
   const pos = g.getAttribute('position')
   if (!pos) return { vertices: [], faces: [], surf: null }
@@ -544,7 +548,7 @@ export function solidMeshWithSurfaces(props: SolidProps): MeshProps & { surf?: F
   } else {
     for (let i = 0; i + 2 < pos.count; i += 3) faces.push([i, i + 1, i + 2])
   }
-  return { vertices, faces, surf: triangleSurfaces(g) }
+  return { vertices, faces, surf: triangleSurfaces(g), topo: solidTopology(props) }
 }
 
 /** Sopa de triángulos (9 números por triángulo) de una geometría, indexada o no. */

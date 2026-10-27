@@ -4,6 +4,22 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [1.4.1] — 2026-10-27
+
+### Fixed
+- CIRCLE: a radius or diameter picked with the cursor is measured in the circle's plane, as the preview shows (with
+  the center taken from a 3D snap, the circle came out with another radius).
+- OFFSET of an open polyline with arcs at a distance larger than one of its radii returned several pieces and a
+  stray loop; it now returns one clean polyline.
+- EXTRUDE ▸ Path: each straight run between sharp corners is its own face, so the miter edge shows and the
+  shading at the corner is clean.
+- Silhouettes are recomputed when the visual style changes (they kept the color of the previous style).
+
+### Performance
+- Drawing views (VIEWGEN, VIEWBASE, VIEWUPDATE) are about 13 times faster on parts with fillets: hidden lines are
+  resolved with a spatial grid and each solid's topology is reused instead of rebuilt for every view.
+- Clicking to select no longer recomputes the bounds of every object in the drawing.
+
 ## [1.4.0] — 2026-10-27
 
 ### Added
