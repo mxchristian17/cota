@@ -1,3 +1,4 @@
+import { arcBasis } from './arc'
 import type { Vec3 } from '../math'
 import type { Entity } from '../document/types'
 import { bulgeArc, bulgeAt, polylineSpans } from './polyline'
@@ -8,7 +9,8 @@ import { bulgeArc, bulgeAt, polylineSpans } from './polyline'
  * Las rectas se toman infinitas (como el CAD clásico al buscar tangencias) y los arcos como su círculo.
  */
 
-export type TanObject = { kind: 'line'; a: Vec3; b: Vec3 } | { kind: 'circle'; c: Vec3; r: number } | { kind: 'point'; p: Vec3 }
+/** Objeto de una tangencia; un círculo puede traer su normal `n` (un círculo fuera del plano XY). */
+export type TanObject = { kind: 'line'; a: Vec3; b: Vec3 } | { kind: 'circle'; c: Vec3; r: number; n?: Vec3 } | { kind: 'point'; p: Vec3 }
 
 const d2 = (a: Vec3, b: Vec3): number => Math.hypot(a[0] - b[0], a[1] - b[1])
 
@@ -28,7 +30,7 @@ export function tanObjectOf(e: Entity, at: Vec3): TanObject | null {
       return { kind: 'line', a: e.props.start, b: e.props.end }
     case 'CIRCLE':
     case 'ARC':
-      return { kind: 'circle', c: e.props.center, r: e.props.radius }
+      return { kind: 'circle', c: e.props.center, r: e.props.radius, ...(e.props.normal ? { n: e.props.normal } : {}) }
     case 'RECTANGLE': {
       const [x, y, z] = e.props.corner
       const { width: w, height: h } = e.props
@@ -139,6 +141,33 @@ export interface Deferred {
  * solución más cercana a los puntos marcados; null si no hay.
  */
 export function resolveDeferredLine(first: Deferred, second: Vec3 | Deferred): [Vec3, Vec3] | null {
+  // Un círculo fuera del plano XY (dibujado en una UCS girada): se resuelve en su plano y se vuelve al mundo.
+  const circle = [first, ...(Array.isArray(second) ? [] : [second])].map((d) => d.obj).find((o) => o.kind === 'circle' && o.n && Math.abs(o.n[2]) < 1 - 1e-9)
+  if (circle && circle.kind === 'circle' && circle.n) {
+    const { u, v } = arcBasis(circle.n)
+    const n = circle.n
+    const o = circle.c
+    const toL = (p: Vec3): Vec3 => {
+      const w: Vec3 = [p[0] - o[0], p[1] - o[1], p[2] - o[2]]
+      return [dot(w, u), dot(w, v), dot(w, n)]
+    }
+    const toW = (p: Vec3): Vec3 => [0, 1, 2].map((k) => o[k] + p[0] * u[k] + p[1] * v[k] + p[2] * n[k]) as Vec3
+    const local = (d: Deferred): Deferred => ({ ...d, hint: toL(d.hint), obj: localObj(d.obj, toL) })
+    const r = resolveInXY(local(first), Array.isArray(second) ? toL(second) : local(second))
+    return r && [toW(r[0]), Array.isArray(second) ? second : toW(r[1])]
+  }
+  return resolveInXY(first, second)
+}
+
+const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+function localObj(o: TanObject, toL: (p: Vec3) => Vec3): TanObject {
+  if (o.kind === 'line') return { kind: 'line', a: toL(o.a), b: toL(o.b) }
+  if (o.kind === 'point') return { kind: 'point', p: toL(o.p) }
+  return { kind: 'circle', c: toL(o.c), r: o.r }
+}
+
+function resolveInXY(first: Deferred, second: Vec3 | Deferred): [Vec3, Vec3] | null {
   if (!Array.isArray(second)) {
     if (first.kind === 'tangent' && second.kind === 'tangent' && first.obj.kind === 'circle' && second.obj.kind === 'circle') {
       const sols = commonTangents(first.obj.c, first.obj.r, second.obj.c, second.obj.r)
@@ -153,7 +182,7 @@ export function resolveDeferredLine(first: Deferred, second: Vec3 | Deferred): [
       }
       return best
     }
-    return resolveDeferredLine(first, second.hint)
+    return resolveInXY(first, second.hint)
   }
   const p = second
   if (first.kind === 'perpendicular') return [perpendicularFoot(first.obj, p), p]

@@ -3,6 +3,9 @@ import type { PreviewShape } from '../../preview'
 import { pt, type Pt } from '../../math'
 import { askDistance } from '../ask'
 import { remember } from '../memory'
+import { heightPreview, signedHeight } from '../height'
+import type { SolidProps } from '../../document/types'
+import type { Vec3 } from '../../math'
 
 /**
  * Eje Z de la vista activa **hacia el observador** (la Z de la UCS de la vista en el CAD clásico): una altura
@@ -21,7 +24,42 @@ const RADIUS = 'SOLID.radius'
 const HEIGHT = 'SOLID.height'
 const askRadius = (ctx: CommandContext, label: string, c: Pt) =>
   askDistance(ctx, RADIUS, label, { base: c, preview: circlePreview(c), valid: (v) => v > 0 })
-const askHeight = (ctx: CommandContext, base: Pt) => askDistance(ctx, HEIGHT, 'Specify height', { base, valid: (v) => v !== 0 })
+const v3 = (p: Pt): Vec3 => [p.x, p.y, p.z]
+/**
+ * Altura con el sólido a la vista: con el cursor se toma sobre `axis` y con signo (crece hacia el lado del
+ * cursor); un número tecleado positivo crece hacia `axis`.
+ */
+const askHeight = (ctx: CommandContext, base: Pt, axis: Vec3, solidAt: (h: number) => SolidProps, keywords?: string[], label = 'Specify height') =>
+  askDistance(ctx, HEIGHT, label, {
+    base,
+    valid: (v) => v !== 0,
+    ...(keywords ? { keywords } : {}),
+    measure: (p) => signedHeight(ctx, v3(base), axis, p),
+    preview: heightPreview(ctx, v3(base), () => axis, (h) => [solidAt(h)]),
+  })
+
+/**
+ * Opción `Axis endpoint` de CYLINDER/CONE (CAD clásico): el eje va de la base al punto indicado, en cualquier
+ * dirección (un eje horizontal sin cambiar la UCS); la altura es su longitud.
+ */
+async function axisEndpoint(ctx: CommandContext, base: Pt, solidAt: (axis: Vec3, h: number) => SolidProps): Promise<{ axis: Vec3; height: number } | null> {
+  const along = (q: Pt) => {
+    const d: Vec3 = [q.x - base.x, q.y - base.y, q.z - base.z]
+    const h = Math.hypot(...d)
+    return h < 1e-9 ? null : { axis: [d[0] / h, d[1] / h, d[2] / h] as Vec3, height: h }
+  }
+  const r = await ctx.getPoint('Specify axis endpoint: ', {
+    base,
+    preview: (q) => {
+      const a = along(q)
+      return a ? [{ kind: 'solid', props: solidAt(a.axis, a.height) }] : []
+    },
+  })
+  if (r.kind !== 'point') return null
+  const a = along(r.point)
+  if (!a) ctx.print('The axis cannot have zero length.')
+  return a
+}
 
 function circlePreview(center: Pt): (cursor: Pt) => PreviewShape[] {
   return (cursor) => [{ kind: 'circle', center, radius: Math.hypot(cursor.x - center.x, cursor.y - center.y) }]
@@ -30,7 +68,7 @@ function circlePreview(center: Pt): (cursor: Pt) => PreviewShape[] {
 async function radiusHeight(
   ctx: CommandContext,
   centerPrompt: string,
-): Promise<{ center: Pt; radius: number; height: number } | null> {
+): Promise<{ center: Pt; radius: number; height: number; axis: Vec3 } | null> {
   const c = await ctx.getPoint(centerPrompt)
   if (c.kind !== 'point') return null
   const r = await askRadius(ctx, 'Specify base radius', c.point)
@@ -38,12 +76,19 @@ async function radiusHeight(
     ctx.print('Invalid radius.')
     return null
   }
-  const h = await askHeight(ctx, c.point)
+  const radius = r.value
+  const cyl = (axis: Vec3, height: number): SolidProps => ({ op: 'CYLINDER', base: v3(c.point), radius, height, segments: DEFAULT_SEGMENTS, axis })
+  const axis = viewZ(ctx)
+  const h = await askHeight(ctx, c.point, axis, (height) => cyl(axis, height), ['Axis'], 'Specify height or [Axis endpoint]')
+  if (h.kind === 'keyword') {
+    const a = await axisEndpoint(ctx, c.point, cyl)
+    return a && { center: c.point, radius, ...a }
+  }
   if (h.kind !== 'distance' || h.value === 0) {
     ctx.print('Invalid height.')
     return null
   }
-  return { center: c.point, radius: r.value, height: h.value }
+  return { center: c.point, radius, height: h.value, axis }
 }
 
 export const boxCommand: Command = {
@@ -76,22 +121,19 @@ export const boxCommand: Command = {
       ctx.print('Degenerate base.')
       return
     }
-    const h = await askHeight(ctx, p1.point)
+    const box = (height: number): SolidProps => ({
+      op: 'BOX',
+      origin: [Math.min(p1.point.x, p2.point.x), Math.min(p1.point.y, p2.point.y), p1.point.z],
+      width: w,
+      depth: d,
+      height,
+    })
+    const h = await askHeight(ctx, p1.point, [0, 0, 1], box)
     if (h.kind !== 'distance' || h.value === 0) {
       ctx.print('Invalid height.')
       return
     }
-    ctx.doc.addEntity({
-      type: 'SOLID3D',
-      layer: ctx.currentLayerId(),
-      props: {
-        op: 'BOX',
-        origin: [Math.min(p1.point.x, p2.point.x), Math.min(p1.point.y, p2.point.y), p1.point.z],
-        width: w,
-        depth: d,
-        height: h.value,
-      },
-    })
+    ctx.doc.addEntity({ type: 'SOLID3D', layer: ctx.currentLayerId(), props: box(h.value) })
     ctx.print('Box created.')
   },
 }
@@ -109,7 +151,7 @@ export const cylinderCommand: Command = {
     ctx.doc.addEntity({
       type: 'SOLID3D',
       layer: ctx.currentLayerId(),
-      props: { op: 'CYLINDER', base: [r.center.x, r.center.y, r.center.z], radius: r.radius, height: r.height, segments: DEFAULT_SEGMENTS, axis: viewZ(ctx) },
+      props: { op: 'CYLINDER', base: [r.center.x, r.center.y, r.center.z], radius: r.radius, height: r.height, segments: DEFAULT_SEGMENTS, axis: r.axis },
     })
     ctx.print('Cylinder created.')
   },
@@ -132,24 +174,27 @@ export const coneCommand: Command = {
     const rt = await askDistance(ctx, 'CONE.topRadius', 'Specify top radius', { base: c.point, initial: 0, valid: (v) => v >= 0 })
     if (rt.kind !== 'distance') return
     const radiusTop = rt.value > 0 ? rt.value : 0
-    const h = await askHeight(ctx, c.point)
-    if (h.kind !== 'distance' || h.value === 0) {
+    const cone = (axis: Vec3, height: number): SolidProps => ({
+      op: 'CONE',
+      base: v3(c.point),
+      radius: rr.value,
+      height,
+      segments: DEFAULT_SEGMENTS,
+      axis,
+      ...(radiusTop > 0 ? { radiusTop } : {}),
+    })
+    let axis = viewZ(ctx)
+    let height: number
+    const h = await askHeight(ctx, c.point, axis, (v) => cone(axis, v), ['Axis'], 'Specify height or [Axis endpoint]')
+    if (h.kind === 'keyword') {
+      const a = await axisEndpoint(ctx, c.point, cone)
+      if (!a) return
+      ;({ axis, height } = a)
+    } else if (h.kind !== 'distance' || h.value === 0) {
       ctx.print('Invalid height.')
       return
-    }
-    ctx.doc.addEntity({
-      type: 'SOLID3D',
-      layer: ctx.currentLayerId(),
-      props: {
-        op: 'CONE',
-        base: [c.point.x, c.point.y, c.point.z],
-        radius: rr.value,
-        height: h.value,
-        segments: DEFAULT_SEGMENTS,
-        axis: viewZ(ctx),
-        ...(radiusTop > 0 ? { radiusTop } : {}),
-      },
-    })
+    } else height = h.value
+    ctx.doc.addEntity({ type: 'SOLID3D', layer: ctx.currentLayerId(), props: cone(axis, height) })
     ctx.print(radiusTop > 0 ? 'Truncated cone created.' : 'Cone created.')
   },
 }

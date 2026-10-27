@@ -391,6 +391,11 @@ export class Curve {
     const b = w(t1)
     if (b - a > PEPS) return new Curve(this.kind, this.span(a, b).prims, false, [], this.degree)
     const prims = [...(a < n - PEPS ? this.span(a, n).prims : []), ...(b > PEPS ? this.span(0, b).prims : [])]
+    // Un círculo recortado en un tramo que pasa por su ángulo 0 sigue siendo un solo arco (no una polilínea).
+    const [p, q] = prims
+    if (prims.length === 2 && p.k === 'A' && q.k === 'A' && p.r === q.r && p.c.every((v, i) => v === q.c[i]) && Math.sign(p.sw) === Math.sign(q.sw)) {
+      return new Curve(this.kind, [{ ...p, sw: p.sw + q.sw }], false, [], this.degree)
+    }
     return prims.length ? new Curve(this.kind, prims, false, [], this.degree) : null
   }
 

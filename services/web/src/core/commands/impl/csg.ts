@@ -1,5 +1,6 @@
 import type { SolidEntity, SolidProps } from '../../document/types'
 import type { Command, CommandContext } from '../types'
+import { keepCommon } from '../../document/common'
 
 function solidEntities(ctx: CommandContext, ids: string[]): SolidEntity[] {
   const out: SolidEntity[] = []
@@ -11,6 +12,9 @@ function solidEntities(ctx: CommandContext, ids: string[]): SolidEntity[] {
 }
 
 const clone = (p: SolidProps): SolidProps => structuredClone(p)
+
+/** El resultado de una booleana conserva la capa y el tipo de línea del primer objeto elegido (CAD clásico). */
+const resultOf = (first: SolidEntity, props: SolidProps) => keepCommon({ type: 'SOLID3D' as const, layer: first.layer, props }, first)
 
 export const unionCommand: Command = {
   name: 'UNION',
@@ -24,11 +28,7 @@ export const unionCommand: Command = {
       ctx.print('Select at least two solids.')
       return
     }
-    ctx.doc.addEntity({
-      type: 'SOLID3D',
-      layer: ctx.currentLayerId(),
-      props: { op: 'UNION', operands: solids.map((s) => clone(s.props)) },
-    })
+    ctx.doc.addEntity(resultOf(solids[0], { op: 'UNION', operands: solids.map((s) => clone(s.props)) }))
     for (const s of solids) ctx.doc.removeEntity(s.id)
     ctx.app.clearSelection()
     ctx.print(`Union of ${solids.length} solids.`)
@@ -47,11 +47,7 @@ export const intersectCommand: Command = {
       ctx.print('Select at least two solids.')
       return
     }
-    ctx.doc.addEntity({
-      type: 'SOLID3D',
-      layer: ctx.currentLayerId(),
-      props: { op: 'INTERSECT', operands: solids.map((s) => clone(s.props)) },
-    })
+    ctx.doc.addEntity(resultOf(solids[0], { op: 'INTERSECT', operands: solids.map((s) => clone(s.props)) }))
     for (const s of solids) ctx.doc.removeEntity(s.id)
     ctx.app.clearSelection()
     ctx.print(`Intersection of ${solids.length} solids.`)
@@ -72,7 +68,11 @@ export const subtractCommand: Command = {
     if (toolIds === null || toolIds.length === 0) return
 
     const bases = solidEntities(ctx, baseIds)
-    const tools = solidEntities(ctx, toolIds)
+    // Un objeto de la base no puede ser también herramienta (restarlo de sí mismo lo borraría).
+    const inBase = new Set(bases.map((b) => b.id))
+    const tools = solidEntities(ctx, toolIds).filter((t) => !inBase.has(t.id))
+    const repeated = toolIds.filter((id) => inBase.has(id)).length
+    if (repeated) ctx.print(`${repeated} object(s) already chosen to subtract from were ignored.`)
     if (bases.length === 0 || tools.length === 0) {
       ctx.print('Need at least one base and one tool solid.')
       return
@@ -81,11 +81,7 @@ export const subtractCommand: Command = {
       bases.length > 1
         ? { op: 'UNION', operands: bases.map((b) => clone(b.props)) }
         : clone(bases[0].props)
-    ctx.doc.addEntity({
-      type: 'SOLID3D',
-      layer: ctx.currentLayerId(),
-      props: { op: 'SUBTRACT', operands: [baseProps, ...tools.map((t) => clone(t.props))] },
-    })
+    ctx.doc.addEntity(resultOf(bases[0], { op: 'SUBTRACT', operands: [baseProps, ...tools.map((t) => clone(t.props))] }))
     for (const s of [...bases, ...tools]) ctx.doc.removeEntity(s.id)
     ctx.app.clearSelection()
     ctx.print(`Subtracted ${tools.length} from ${bases.length}.`)

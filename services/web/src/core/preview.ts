@@ -1,10 +1,13 @@
 import type { Pt, Vec3 } from './math'
+import type { SolidProps } from './document/types'
 
 /** Formas temporales de previsualización (rubber-band) mientras se ejecuta un comando. */
 export type PreviewShape =
   | { kind: 'line'; a: Pt; b: Pt }
   | { kind: 'circle'; center: Pt; radius: number; normal?: Vec3 }
   | { kind: 'polyline'; points: Pt[] }
+  /** Sólido que resultaría (EXTRUDE…): se muestra sombreado y translúcido, con sus aristas. */
+  | { kind: 'solid'; props: SolidProps }
 
 /**
  * Candidatos para el color del rubber-band, en orden de preferencia: amarillo (el del CAD clásico) y

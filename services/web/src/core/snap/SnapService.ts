@@ -357,7 +357,7 @@ export function computeSnap(cursor: Pt, entities: Entity[], s: SnapSettings): Sn
       if (!s.base) {
         // Sin punto anterior: TAN/PER diferidos sobre la curva.
         if (onCurve && e.d <= thr) {
-          const obj: TanObject = { kind: 'circle', c: a.center, r: a.radius }
+          const obj: TanObject = { kind: 'circle', c: a.center, r: a.radius, ...(a.normal ? { n: a.normal } : {}) }
           addObj(onCurve, 'tangent', e.d, { kind: 'tangent', obj })
           // En una curva la tangente diferida es la habitual; la perpendicular sólo si TAN está apagado.
           if (!s.osnap.tangent) addObj(onCurve, 'perpendicular', e.d, { kind: 'perpendicular', obj })

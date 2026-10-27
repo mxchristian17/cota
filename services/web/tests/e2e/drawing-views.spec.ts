@@ -227,6 +227,67 @@ test.describe('Cota picking solids', () => {
   })
 })
 
+test.describe('Cota EXTRUDE preview', () => {
+  test('the extruded solid follows the cursor: above the profile it grows up, below it grows down', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    await typeCmd(page, 'RECTANGLE', '#-20,-20', '#20,20')
+    await typeCmd(page, '-VIEW', 'SEISO')
+    await typeCmd(page, 'ZOOM', 'C', '#0,0', '200')
+    const box = (await page.locator('canvas').first().boundingBox())!
+    const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2]
+    const previewMeshes = () => store(page, 'let n = 0; s.activeViewport.previewGroup.traverse((o) => { if (o.isMesh) n++ }); return n')
+    for (const [dy, sign] of [[-70, 1], [70, -1]] as const) {
+      await typeCmd(page, 'EXTRUDE', 'L', '')
+      await page.mouse.move(cx, cy + dy / 2)
+      await page.mouse.move(cx, cy + dy, { steps: 4 })
+      await expect.poll(previewMeshes).toBe(1)
+      await page.mouse.click(cx, cy + dy)
+      const h = (await store(page, "const e = s.doc.entities.find((x) => x.type === 'SOLID3D'); return e && e.props.height")) as number
+      expect(Math.sign(h)).toBe(sign)
+      expect(Math.abs(h)).toBeGreaterThan(5)
+      expect(await previewMeshes()).toBe(0)
+      await typeCmd(page, 'U')
+    }
+  })
+})
+
+test.describe('Cota explicit selection windows', () => {
+  test('W in an isometric view is a screen window: right to left still encloses, a click on an object is a corner', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    await typeCmd(page, 'BOX', '#0,0', '#20,20', '20')
+    await typeCmd(page, 'BOX', '#60,0', '#80,20', '20')
+    await typeCmd(page, '-VIEW', 'SEISO')
+    await typeCmd(page, 'ZOOM', 'E')
+    const box = (await page.locator('canvas').first().boundingBox())!
+    const scr = async (p: number[]) => {
+      const r = (await store(page, `return s.activeViewport.project({ x: ${p[0]}, y: ${p[1]}, z: ${p[2]} })`)) as number[]
+      return [box.x + r[0], box.y + r[1]]
+    }
+    // Rectángulo de pantalla que encierra la caja de la derecha; el primer clic cae sobre ella.
+    const pts = await Promise.all([[60, 0, 0], [80, 0, 0], [80, 20, 0], [60, 20, 0], [60, 0, 20], [80, 0, 20], [80, 20, 20], [60, 20, 20]].map(scr))
+    const xs = pts.map((p) => p[0])
+    const ys = pts.map((p) => p[1])
+    await typeCmd(page, 'ERASE', 'W')
+    // Primer clic sobre la caja de la izquierda (una ventana implícita la habría elegido); de derecha a izquierda.
+    const onLeft = await scr([20, 10, 20])
+    await page.mouse.click(Math.max(...xs) + 12, Math.min(...ys) - 12)
+    await page.mouse.click(Math.min(...xs) - 12, Math.max(...ys) + 12)
+    await expect(page.locator('.cmd-output')).toContainText('1 found')
+    await typeCmd(page, '')
+    expect(await store(page, "return s.doc.entities.filter((e) => e.type === 'SOLID3D').length")).toBe(1)
+    expect(onLeft[0]).toBeLessThan(Math.min(...xs))
+    // C con el primer clic sobre la caja que queda: es una esquina del cruce, no un pick.
+    await typeCmd(page, 'ERASE', 'C')
+    await page.mouse.click(onLeft[0], onLeft[1])
+    await page.mouse.click(onLeft[0] - 120, onLeft[1] + 20)
+    await expect(page.locator('.cmd-output')).toContainText('1 found')
+    await typeCmd(page, '')
+    expect(await store(page, "return s.doc.entities.filter((e) => e.type === 'SOLID3D').length")).toBe(0)
+  })
+})
+
 test.describe('Cota VIEWBASE alignment', () => {
   test('projected views keep the Monge correspondence even when a view has arcs', async ({ page }) => {
     await page.goto('/')
@@ -331,6 +392,18 @@ test.describe('Cota VIEWGEN', () => {
     expect(left.y).toBeCloseTo(front.y, 6)
     expect(left.x).toBeGreaterThan(front.x)
     expect(right.x).toBeLessThan(front.x)
+  })
+
+  test('from the model it goes to a new layout without the initial viewport', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    await typeCmd(page, 'BOX', '#0,0', '#40,30', '20')
+    await typeCmd(page, 'VIEWGEN', '')
+    await page.getByTestId('viewgen-ok').click()
+    await typeCmd(page, 'Planos', '#200,150')
+    await expect(page.locator('.cmd-output')).toContainText('view(s) created (ISO-E, first-angle')
+    const lay = (await store(page, "const l = s.doc.activeLayout; return { name: l.name, vps: l.entities.filter((e) => e.type === 'VIEWPORT').length, views: l.entities.filter((e) => e.props.view).length }")) as { name: string; vps: number; views: number }
+    expect(lay).toEqual({ name: 'Planos', vps: 0, views: 4 })
   })
 })
 

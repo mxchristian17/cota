@@ -7,6 +7,7 @@ import { tessellateArc } from '../../geom/arc'
 import { polylinePoints } from '../../geom/polyline'
 import type { Entity } from '../../document/types'
 import { DEFAULT_SEGMENTS, viewZ } from './primitives'
+import { heightPreview, signedHeight } from '../height'
 
 /** Perfil extruible: un círculo se vuelve CYLINDER paramétrico (conserva su centro). */
 type Extrudable = { id: string; profile?: Vec3[]; circle?: { center: Vec3; radius: number; normal: Vec3 } }
@@ -54,6 +55,15 @@ export const extrudeCommand: Command = {
         base: profileBase,
         valid: (v) => v !== 0,
         keywords: ['Direction', 'Path', 'Taper'],
+        // Con el cursor, la altura se toma sobre el eje de extrusión y con signo: el sólido crece hacia el lado
+        // donde está el cursor (un número tecleado positivo crece hacia quien mira).
+        measure: (p) => signedHeight(ctx, c0, axisOf(items[0], viewZ(ctx)), p),
+        preview: heightPreview(ctx, c0, () => axisOf(items[0], viewZ(ctx)), (h) =>
+          items.flatMap((it) => {
+            const props = solidFor(it, h, taper, viewZ(ctx))
+            return props ? [props] : []
+          }),
+        ),
       })
       if (r.kind === 'cancel') return
       if (r.kind === 'keyword' && r.keyword === 'Taper') {
@@ -68,7 +78,14 @@ export const extrudeCommand: Command = {
       if (r.kind === 'keyword' && r.keyword === 'Direction') {
         const p1 = await ctx.getPoint('Specify start point of direction: ')
         if (p1.kind !== 'point') return
-        const p2 = await ctx.getPoint('Specify end point of direction: ', { base: p1.point })
+        const from: Vec3 = [p1.point.x, p1.point.y, p1.point.z]
+        const p2 = await ctx.getPoint('Specify end point of direction: ', {
+          base: p1.point,
+          preview: (c) => {
+            const d = sub([c.x, c.y, c.z], from)
+            return Math.hypot(...d) < 1e-9 ? [] : items.map((it) => ({ kind: 'solid' as const, props: alongDirection(ringOf(it), d) }))
+          },
+        })
         if (p2.kind !== 'point') return
         const d: Vec3 = [p2.point.x - p1.point.x, p2.point.y - p1.point.y, p2.point.z - p1.point.z]
         if (Math.hypot(...d) < 1e-9) {
@@ -98,29 +115,12 @@ export const extrudeCommand: Command = {
         ctx.print('Invalid height.')
         continue
       }
-      const h = r.value
-      // La extrusión es perpendicular al plano del perfil (no siempre +Z), orientada hacia la vista actual.
-      const view = viewZ(ctx) // hacia el observador: la altura positiva crece hacia quien mira
-      const out: SolidProps[] = []
-      for (const it of items) {
-        if (taper) {
-          const t = tapered(it, h, taper, view)
-          if (!t) {
-            ctx.print('The taper angle is too large for that height: the profile would vanish.')
-            out.length = 0
-            break
-          }
-          out.push(t)
-          continue
-        }
-        // Un círculo extruido = cilindro paramétrico (centro conservado, render liso, sin facetado en snaps).
-        out.push(
-          it.circle
-            ? { op: 'CYLINDER', base: it.circle.center, radius: it.circle.radius, height: h, segments: DEFAULT_SEGMENTS, axis: orientAxis(it.circle.normal, view) }
-            : { op: 'EXTRUDE', profile: it.profile as Vec3[], height: h, axis: orientAxis(profileNormal(it.profile as Vec3[]), view) },
-        )
+      const out = items.map((it) => solidFor(it, r.value, taper, viewZ(ctx)))
+      if (out.some((x) => !x)) {
+        ctx.print('The taper angle is too large for that height: the profile would vanish.')
+        continue
       }
-      if (out.length) made = out
+      made = out as SolidProps[]
     }
     items.forEach((it, i) => {
       ctx.doc.addEntity({ type: 'SOLID3D', layer: ctx.currentLayerId(), props: made![i] })
@@ -139,6 +139,20 @@ const mul = (a: Vec3, k: number): Vec3 => [a[0] * k, a[1] * k, a[2] * k]
 const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 const cross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
 const unit = (a: Vec3): Vec3 => mul(a, 1 / (Math.hypot(...a) || 1))
+
+/** Eje de extrusión del perfil, orientado hacia la vista (`towards`). */
+function axisOf(it: Extrudable, towards: Vec3): Vec3 {
+  return unit(orientAxis(it.circle ? it.circle.normal : profileNormal(it.profile as Vec3[]), towards))
+}
+
+/** Sólido extruido `h` (con o sin ángulo de inclinación); null si la inclinación hace desaparecer el perfil. */
+function solidFor(it: Extrudable, h: number, taper: number, view: Vec3): SolidProps | null {
+  if (taper) return tapered(it, h, taper, view)
+  // Un círculo extruido = cilindro paramétrico (centro conservado, render liso, sin facetado en snaps).
+  return it.circle
+    ? { op: 'CYLINDER', base: it.circle.center, radius: it.circle.radius, height: h, segments: DEFAULT_SEGMENTS, axis: orientAxis(it.circle.normal, view) }
+    : { op: 'EXTRUDE', profile: it.profile as Vec3[], height: h, axis: orientAxis(profileNormal(it.profile as Vec3[]), view) }
+}
 
 /** Contorno del perfil como polígono (un círculo, muestreado). */
 function ringOf(it: Extrudable): Vec3[] {

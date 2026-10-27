@@ -8,6 +8,7 @@ import { EditLog } from '../../editing/editLog'
 import { pickCurve, ptVec } from '../../editing/pickCurve'
 import { askKeyword } from '../ask'
 import { sysvars } from '../sysvars'
+import { selectableEntities, visibleEntities } from '../selectionSets'
 
 type Mode = 'trim' | 'extend'
 
@@ -32,7 +33,7 @@ class TrimSession {
   }
 
   private edgeEntities(): Entity[] {
-    if (!this.edgeIds) return this.ctx.doc.entities
+    if (!this.edgeIds) return visibleEntities(this.ctx.doc) // "select all": lo que se ve (no las capas apagadas)
     return this.edgeIds.map((id) => this.ctx.doc.getEntity(id)).filter((e): e is Entity => !!e)
   }
 
@@ -145,7 +146,7 @@ async function fence(ctx: CommandContext, s: TrimSession, op: Mode): Promise<voi
   const f = polylineCurve(pts)
   if (!f) return
   const hits: Array<{ id: string; at: Vec3; s: number }> = []
-  for (const e of ctx.doc.entities) {
+  for (const e of selectableEntities(ctx.doc)) {
     const c = curveOf(e)
     if (!c) continue
     for (const h of intersectCurves(c, f)) hits.push({ id: e.id, at: h.point, s: h.t2 })
@@ -167,7 +168,7 @@ async function crossing(ctx: CommandContext, s: TrimSession, op: Mode): Promise<
   const cx = (box.minX + box.maxX) / 2
   const cy = (box.minY + box.maxY) / 2
   const items: Array<{ id: string; at: Vec3 }> = []
-  for (const e of ctx.doc.entities) {
+  for (const e of selectableEntities(ctx.doc)) {
     const c = curveOf(e)
     if (!c || !boxesOverlap(box, c.box(), 0)) continue
     // El tramo afectado es el que pasa por la ventana: se toma su punto más cercano al centro.

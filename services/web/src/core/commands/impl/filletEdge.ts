@@ -3,6 +3,7 @@ import type { Pt, Vec3 } from '../../math'
 import { fromVec3 } from '../../math'
 import type { EdgeBlendProps, EdgeRef, Entity, SolidProps } from '../../document/types'
 import type { PreviewShape } from '../../preview'
+import { selectableEntities } from '../selectionSets'
 import { closestOnSegment, vadd, vdist, vdot, vnorm, vscale, vsub } from '../../geom/vec3'
 import {
   edgeChain,
@@ -62,7 +63,7 @@ function pickEdge(ctx: CommandContext, p: Pt, ray: boolean): EdgeHit | null {
   const toViewer: Vec3 = r ? vscale(r.dir, -1) : (ctx.app.facingNormal?.() ?? ctx.app.constructionNormal())
   const wire = ctx.app.visualStyle().endsWith('wireframe')
   const hits: (EdgeHit & { dist: number; t: number })[] = []
-  for (const solid of ctx.doc.entities.filter(isSolid)) {
+  for (const solid of selectableEntities(ctx.doc).filter(isSolid)) {
     const topo = solidTopology(solid.props)
     if (!topo) continue
     if (r) {

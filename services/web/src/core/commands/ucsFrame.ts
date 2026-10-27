@@ -1,6 +1,6 @@
 import { keepCommon } from '../document/common'
 import type { DocumentModel } from '../document/DocumentModel'
-import type { Entity, EntityInput } from '../document/types'
+import type { Entity, EntityInput, SolidProps } from '../document/types'
 import { fromVec3, type Pt, type Vec3 } from '../math'
 import type { PreviewShape } from '../preview'
 import { invertRigid, rigidDir, rigidFromUcs, rigidPoint, transformEntity, type Rigid } from '../editing/rigid'
@@ -29,7 +29,13 @@ export function frameContext(ctx: CommandContext, ucs: Ucs): CommandContext {
       ? { kind: 'line', a: W(s.a), b: W(s.b) }
       : s.kind === 'polyline'
         ? { kind: 'polyline', points: s.points.map(W) }
-        : { kind: 'circle', center: W(s.center), radius: s.radius, normal: rigidDir(toWorld, s.normal ?? [0, 0, 1]) }
+        : s.kind === 'solid'
+          ? solidToWorld(s.props)
+          : { kind: 'circle', center: W(s.center), radius: s.radius, normal: rigidDir(toWorld, s.normal ?? [0, 0, 1]) }
+  const solidToWorld = (props: SolidProps): PreviewShape => {
+    const w = transformEntity({ id: '', type: 'SOLID3D', layer: '', props } as Entity, toWorld)
+    return { kind: 'solid', props: (w?.props as SolidProps | undefined) ?? props }
+  }
   const preview = <T extends { preview?: (c: Pt) => PreviewShape[] }>(o: T): T['preview'] =>
     o.preview && ((c: Pt) => o.preview!(L(c)).map(shapeToWorld))
 
@@ -41,7 +47,7 @@ export function frameContext(ctx: CommandContext, ucs: Ucs): CommandContext {
     const pick = r.pick && {
       ...r.pick,
       raw: L(r.pick.raw),
-      ...(r.pick.deferred ? { deferred: { ...r.pick.deferred, hint: LV(r.pick.deferred.hint), obj: deferredObj(r.pick.deferred.obj, LV) } } : {}),
+      ...(r.pick.deferred ? { deferred: { ...r.pick.deferred, hint: LV(r.pick.deferred.hint), obj: deferredObj(r.pick.deferred.obj, LV, (d) => rigidDir(toLocal, d)) } } : {}),
     }
     return { kind: 'point', point: L(r.point), ...(pick ? { pick } : {}) }
   }
@@ -73,10 +79,10 @@ export function frameContext(ctx: CommandContext, ucs: Ucs): CommandContext {
   }
 }
 
-function deferredObj<T extends { kind: string }>(o: T, LV: (v: Vec3) => Vec3): T {
-  const x = o as unknown as { kind: string; a?: Vec3; b?: Vec3; c?: Vec3; p?: Vec3 }
+function deferredObj<T extends { kind: string }>(o: T, LV: (v: Vec3) => Vec3, LD: (v: Vec3) => Vec3): T {
+  const x = o as unknown as { kind: string; a?: Vec3; b?: Vec3; c?: Vec3; n?: Vec3; p?: Vec3 }
   if (x.kind === 'line') return { ...o, a: LV(x.a!), b: LV(x.b!) }
-  if (x.kind === 'circle') return { ...o, c: LV(x.c!) }
+  if (x.kind === 'circle') return { ...o, c: LV(x.c!), ...(x.n ? { n: LD(x.n) } : {}) }
   return { ...o, p: LV(x.p!) }
 }
 

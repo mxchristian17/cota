@@ -74,10 +74,17 @@ export function mongeLayout(choice: ViewGenChoice, size: (v: GenView) => { w: nu
   const rowT = has(above) ? f.h / 2 + gap + size(above).h / 2 : null
   const rowB = has(below) ? -(f.h / 2 + gap + size(below).h / 2) : null
   const corner: Record<string, [number, number]> = { ISO: [1, 1], SWISO: [-1, 1], NEISO: [1, -1], NWISO: [-1, -1] }
+  // Cada isométrica va a su esquina, salvo que esa esquina agrande la lámina y haya otra libre dentro de la cruz
+  // (en ISO-E con planta y lateral izquierda, la SE va abajo a la derecha, junto a la planta).
+  const inside = ([sx, sy]: [number, number]) => (sx > 0 ? colR : colL) !== null && (sy > 0 ? rowT : rowB) !== null
+  const taken = new Set<string>()
   for (const v of ISO_VIEWS) {
     if (!has(v)) continue
     const s = size(v)
-    const [sx, sy] = corner[v]
+    const [nx, ny] = corner[v]
+    const options: Array<[number, number]> = [[nx, ny], [nx, -ny], [-nx, ny], [-nx, -ny]]
+    const [sx, sy] = options.find((c) => inside(c) && !taken.has(String(c))) ?? options.find((c) => !taken.has(String(c))) ?? corner[v]
+    taken.add(String([sx, sy]))
     const cx = sx > 0 ? (colR ?? f.w / 2 + gap + s.w / 2) : (colL ?? -(f.w / 2 + gap + s.w / 2))
     const cy = sy > 0 ? (rowT ?? f.h / 2 + gap + s.h / 2) : (rowB ?? -(f.h / 2 + gap + s.h / 2))
     out.push({ view: v, x: cx, y: cy, align: 'free' })

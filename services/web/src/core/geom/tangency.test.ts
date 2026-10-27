@@ -140,3 +140,21 @@ describe('LINE con primer punto diferido (el bug: TAN sólo andaba para terminar
     expect(Math.hypot(r.point.x, r.point.y)).toBeCloseTo(5, 9)
   })
 })
+
+describe('tangentes diferidas fuera del plano XY', () => {
+  it('TAN-TAN entre dos círculos de un plano vertical: la recta queda en su plano y del lado marcado', () => {
+    const n: [number, number, number] = [0, -1, 0]
+    const big = { kind: 'circle' as const, c: [11, 4, 89] as [number, number, number], r: 14, n }
+    const small = { kind: 'circle' as const, c: [109, 4, 70] as [number, number, number], r: 10, n }
+    for (const side of [1, -1]) {
+      const seg = resolveDeferredLine({ kind: 'tangent', obj: big, hint: [11, 4, 89 + side * 14] }, { kind: 'tangent', obj: small, hint: [109, 4, 70 + side * 10] })!
+      expect(seg).not.toBeNull()
+      const [a, b] = seg
+      expect(a[1]).toBeCloseTo(4, 9)
+      expect(b[1]).toBeCloseTo(4, 9)
+      expect(Math.hypot(a[0] - 11, a[2] - 89)).toBeCloseTo(14, 9)
+      expect(Math.hypot(b[0] - 109, b[2] - 70)).toBeCloseTo(10, 9)
+      expect(Math.sign(a[2] - 89)).toBe(side) // la de arriba arriba, la de abajo abajo
+    }
+  })
+})

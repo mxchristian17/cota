@@ -165,6 +165,7 @@ function FloatingViewport({ entity, rect, clipPath, active, maximized, paperRef,
         onRightClickCommand: rightClickEnter,
         onContextMenu: openContextMenu,
         isSelectMode: () => st().isSelectMode(),
+        selectionArea: () => st().selectionArea(),
         isCommandActive: () => useStore.getState().engine.busy,
         onActivate: () => st().setActiveViewport(vp),
         onViewChange: () => {
@@ -310,6 +311,7 @@ export function LayoutView({ layoutId }: { layoutId: string }) {
         onRightClickCommand: rightClickEnter,
         onContextMenu: openContextMenu,
         isSelectMode: () => st().doc.inPaperSpace && st().isSelectMode(),
+        selectionArea: () => (st().doc.inPaperSpace ? st().selectionArea() : null),
         isCommandActive: () => useStore.getState().engine.busy,
         onActivate: () => {
           if (st().doc.inPaperSpace) st().setActiveViewport(paper)

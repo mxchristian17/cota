@@ -106,6 +106,7 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
         openContextMenu(x, y, world)
       },
       isSelectMode: () => isSelectMode(),
+      selectionArea: () => useStore.getState().selectionArea(),
       isCommandActive: () => useStore.getState().engine.busy,
       onCameraChange: (az, el, mode) => {
         setCam({ az, el, mode }) // el cubo de vistas de este pane sigue su propia cámara

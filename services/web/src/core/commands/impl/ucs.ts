@@ -4,6 +4,7 @@ import { pt } from '../../math'
 import { arcBasis, arcPointAtAngle } from '../../geom/arc'
 import { vcross, vdist, vdot, vnorm, vscale, vsub } from '../../geom/vec3'
 import { faceUcsAt } from '../../editing/faceUcs'
+import { visibleEntities } from '../selectionSets'
 import { linearDir } from '../../dimension/dimGeometry'
 import {
   isWorldUcs,
@@ -49,7 +50,7 @@ function faceUcs(ctx: CommandContext, p: Pt, skip = 0): Ucs | null {
   const ray = ctx.app.viewRay?.(p)
   const o: Vec3 = ray ? ray.origin : [p.x, p.y, p.z + 1e6]
   const d: Vec3 = ray ? ray.dir : [0, 0, -1]
-  const hit = faceUcsAt(ctx.doc.entities, o, d, skip, current(ctx).x)
+  const hit = faceUcsAt(visibleEntities(ctx.doc), o, d, skip, current(ctx).x)
   if (hit && !hit.planar) ctx.print('The face must be planar.')
   return hit?.planar ? hit.ucs : null
 }

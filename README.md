@@ -113,7 +113,7 @@ You now have a plate with a hole. Continue with the [getting started guide](docs
 - [Examples](examples/) — sample drawings you can open
 - [Self-hosting](docs/self-hosting.md) — static hosting, Docker, the optional server and its settings
 - [Architecture](docs/architecture.md) — how Cota is built, for contributors
-- [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Security](SECURITY.md)
+- [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Security](SECURITY.md)
 
 ## Built with
 

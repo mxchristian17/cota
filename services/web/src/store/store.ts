@@ -242,6 +242,8 @@ export interface AppState {
     subtract?: boolean,
   ) => void
   isSelectMode: () => boolean
+  /** Ventana/cruce pedido con W/C en el prompt de selección (el visor la abre con ese tipo). */
+  selectionArea: () => 'window' | 'crossing' | null
   cancel: () => void
   setCurrentLayer: (id: string) => void
   createLayer: (name: string) => void
@@ -1514,8 +1516,10 @@ export const useStore = create<AppState>((set, get) => {
         const l = layerSvc.get(e.layer)
         return layerEditable(l)
       })
-      const ids = entitiesInScreenBox(selectable, rect, crossing, project)
-      if (engine.isSelecting) {
+      const area = engine.selectionArea
+      const ids = entitiesInScreenBox(selectable, rect, area ? area === 'crossing' : crossing, project)
+      if (area) engine.completeArea(ids)
+      else if (engine.isSelecting) {
         if (subtract) engine.removePicks(ids)
         else engine.addPicks(ids)
       } else if (!engine.busy) {
@@ -1524,6 +1528,7 @@ export const useStore = create<AppState>((set, get) => {
       }
     },
     isSelectMode: () => engine.isSelecting || (!engine.hasPending && !engine.busy),
+    selectionArea: () => engine.selectionArea,
     // ESC: cancela el comando/prompt en curso y, además, deselecciona (como el CAD clásico).
     cancel: () => {
       get().viewports.forEach((vp) => vp.cancelPendingBox()) // Esc cierra la ventana de selección abierta con un clic

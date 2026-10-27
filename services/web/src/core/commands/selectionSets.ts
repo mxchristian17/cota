@@ -1,7 +1,7 @@
 import type { DocumentModel } from '../document/DocumentModel'
 import type { Entity } from '../document/types'
 import { entityOutline } from '../editing/bounds'
-import { layerEditable } from '../layers/visibility'
+import { layerEditable, layerVisible } from '../layers/visibility'
 import type { Pt } from '../math'
 
 /**
@@ -13,6 +13,15 @@ import type { Pt } from '../math'
 type P2 = [number, number]
 
 /** Entidades que se pueden seleccionar: capa encendida, descongelada y desbloqueada. */
+/**
+ * Entidades a la vista (capas encendidas; las congeladas se ven en gris): las que sirven de referencia, como los
+ * bordes de corte de TRIM o la cara de UCS Face. Una capa apagada no interactúa con el modelo.
+ */
+export function visibleEntities(doc: DocumentModel): Entity[] {
+  const layers = new Map(doc.layers.map((l) => [l.id, l]))
+  return doc.entities.filter((e) => layerVisible(layers.get(e.layer)))
+}
+
 export function selectableEntities(doc: DocumentModel): Entity[] {
   const layers = new Map(doc.layers.map((l) => [l.id, l]))
   return doc.entities.filter((e) => {

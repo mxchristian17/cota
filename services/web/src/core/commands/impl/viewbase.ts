@@ -210,16 +210,7 @@ export const viewbaseCommand: Command = {
       const sel = await ctx.getSelectionOrKeyword('Select objects or [Entire model] <Entire model>: ', ['Entire'])
       if (sel === null) return
       if (sel.kind === 'selection' && sel.ids.length) source = sel.ids
-      const def = ctx.doc.layouts[0]?.name ?? 'Layout1'
-      const name = (await ctx.getString(`Enter new or existing layout name to make current <${def}>: `, { default: def }))?.trim()
-      if (!name) return
-      const lay = ctx.doc.findLayoutByName(name) ?? ctx.doc.addLayout(name)
-      const fresh = !lay.initialized
-      activateTab(ctx.doc, lay.id, ctx.currentLayerId(), ctx.app.sheetInit())
-      // Un layout que se arma recién para las vistas no lleva el viewport inicial (taparía las vistas).
-      const vps = fresh ? lay.entities.filter((e) => e.type === 'VIEWPORT') : []
-      if (vps.length === 1) ctx.doc.removeEntity(vps[0].id)
-      ctx.app.redraw()
+      if ((await toLayout(ctx)) !== 'layout') return
     }
     const layout = ctx.doc.activeLayout
     if (!layout || ctx.doc.activeTab === MODEL_TAB) {
@@ -370,6 +361,25 @@ export const viewstdCommand: Command = {
 }
 
 /**
+ * Desde el modelo, las vistas de dibujo van a un layout (CAD clásico): se pide su nombre (uno nuevo se crea) y se
+ * lo activa. Un layout que se arma recién para las vistas no lleva el viewport inicial, que las taparía. Con
+ * `allowModel`, `Model` deja las vistas en el modelo. null = cancelado.
+ */
+async function toLayout(ctx: CommandContext, allowModel = false): Promise<'layout' | 'model' | null> {
+  const def = ctx.doc.layouts[0]?.name ?? 'Layout1'
+  const name = (await ctx.getString(`Enter new or existing layout name to make current${allowModel ? ' or [Model]' : ''} <${def}>: `, { default: def }))?.trim()
+  if (!name) return null
+  if (allowModel && /^m(odel)?$/i.test(name)) return 'model'
+  const lay = ctx.doc.findLayoutByName(name) ?? ctx.doc.addLayout(name)
+  const fresh = !lay.initialized
+  activateTab(ctx.doc, lay.id, ctx.currentLayerId(), ctx.app.sheetInit())
+  const vps = fresh ? lay.entities.filter((e) => e.type === 'VIEWPORT') : []
+  if (vps.length === 1) ctx.doc.removeEntity(vps[0].id)
+  ctx.app.redraw()
+  return 'layout'
+}
+
+/**
  * VIEWGEN: todas las vistas de Monge de una pieza de una vez. Un diálogo muestra el esquema de las vistas para
  * elegir cuáles (y ISO-E o ISO-A); en un layout se crean vistas de dibujo asociadas (la base es el alzado y las
  * demás quedan alineadas con ella), en el modelo, bloques 2D con la proyección.
@@ -384,6 +394,8 @@ export const viewgenCommand: Command = {
     const source = sel.kind === 'selection' && sel.ids.length ? sel.ids : null
     const choice = await ctx.app.viewGenDialog?.({ ...DEFAULT_VIEWGEN, std: ctx.doc.vars.VIEWPROJECTION === 'third' ? 'A' : 'E' })
     if (!choice) return
+    // Desde el modelo: a un layout (como VIEWBASE), o `Model` para dejar los bloques 2D en el modelo.
+    if (!ctx.doc.inPaperSpace && (await toLayout(ctx, true)) === null) return
     const paper = ctx.doc.inPaperSpace && ctx.doc.activeTab !== MODEL_TAB
     const views = [...new Set<GenView>(['FRONT', ...choice.views])]
     const hiddenOf = (v: GenView): HiddenMode => (ISO_VIEWS.includes(v) ? 'shadedVisible' : choice.hidden ? 'visibleHidden' : 'visible')

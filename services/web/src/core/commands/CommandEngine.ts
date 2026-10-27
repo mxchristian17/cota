@@ -205,7 +205,28 @@ export class CommandEngine {
   }
 
   get isSelecting(): boolean {
-    return this.pending?.type === 'selection'
+    const p = this.pending
+    // Un borde o un polígono en curso (F/WP/CP) pide puntos: los clics no eligen objetos ni abren ventanas.
+    return p?.type === 'selection' && !(p.sub && (p.sub.kind === 'Fence' || p.sub.kind === 'WPolygon' || p.sub.kind === 'CPolygon'))
+  }
+
+  /**
+   * Ventana o cruce pedidos con `W`/`C` en "Select objects": el visor la abre en pantalla con ese tipo, aunque el
+   * primer clic caiga sobre un objeto y sin importar el sentido (null = ventana implícita, por el sentido).
+   */
+  get selectionArea(): 'window' | 'crossing' | null {
+    const p = this.pending
+    if (p?.type !== 'selection' || !p.sub) return null
+    return p.sub.kind === 'Window' ? 'window' : p.sub.kind === 'Crossing' ? 'crossing' : null
+  }
+
+  /** Cierra la ventana `W`/`C` con los objetos que encerró en pantalla. */
+  completeArea(ids: string[]): void {
+    const sel = this.pending
+    if (sel?.type !== 'selection' || !sel.sub) return
+    sel.sub = undefined
+    this.applySel(sel, ids, !!sel.remove)
+    this.setPrompt(sel.prompt)
   }
 
   /** ¿Hay un prompt esperando un punto/distancia? (para activar el object snap solo entonces). */

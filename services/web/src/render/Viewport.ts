@@ -21,7 +21,7 @@ import { faceUcsAt, type FaceHit } from '../core/editing/faceUcs'
 import { rayFaces, solidTopology } from '../core/editing/topology'
 import { DEFAULT_VISUAL_STYLE, type CameraMode, type ViewName, type VisualStyle } from '../core/view'
 import { CameraController } from './CameraController'
-import { solidEdgePositions, solidGeometry } from './csg'
+import { previewSolidGeometry, solidEdgePositions, solidGeometry } from './csg'
 import { ellipsePoints } from '../core/geom/ellipse'
 import { arcBasis, tessellateArc } from '../core/geom/arc'
 import { polylinePoints } from '../core/geom/polyline'
@@ -122,6 +122,8 @@ export interface ViewportCallbacks {
   /** Clic derecho sin arrastrar (sin prompt activo): menú contextual en (clientX, clientY). */
   onContextMenu?: (clientX: number, clientY: number, world: Pt) => void
   isSelectMode?: () => boolean
+  /** Ventana o cruce pedido con W/C: la ventana se abre aunque el clic caiga sobre un objeto y su tipo es fijo. */
+  selectionArea?: () => 'window' | 'crossing' | null
   onCameraChange?: (az: number, el: number, mode: CameraMode) => void
   /** Se invoca cuando este viewport recibe interacción (para marcarlo como activo). */
   onActivate?: () => void
@@ -246,6 +248,8 @@ export class Viewport {
     opacity: 0.9,
     transparent: true,
   })
+  /** Materiales compartidos por los overlays: viven lo que el viewport (se liberan en `dispose`). */
+  private readonly overlayMaterials = new Set<THREE.Material>([this.previewMaterial, this.snapMaterial, this.trackMaterial])
   private readonly raycaster = new THREE.Raycaster()
   private previewProvider: ((cursor: Pt) => PreviewShape[]) | null = null
   private data: ViewportData | null = null
@@ -395,7 +399,9 @@ export class Viewport {
     this.ro = new ResizeObserver(() => this.resize())
     this.ro.observe(container)
     this.resize()
-    this.tick()
+    // El primer cuadro va en el próximo frame: sus callbacks (cámara, modo de selección…) pueden referirse al
+    // viewport que todavía se está construyendo (`const vp = new Viewport(…)` del componente).
+    this.raf = requestAnimationFrame(this.tick)
   }
 
   setProvider(provider: () => ViewportData): void {
@@ -963,7 +969,8 @@ export class Viewport {
       const start = this.boxStartPx
       const cur0 = this.pxOf(e.clientX, e.clientY)
       // Clic simple en vacío en modo selección: abre la ventana (la otra esquina va con el próximo clic).
-      if (!this.boxPending && !this.boxActive && start && this.cb.isSelectMode?.() && !this.pickAt(e.clientX, e.clientY)) {
+      const forced = this.cb.selectionArea?.() ?? null
+      if (!this.boxPending && !this.boxActive && start && this.cb.isSelectMode?.() && (forced || !this.pickAt(e.clientX, e.clientY))) {
         this.boxPending = true
         this.boxActive = true
         this.draggingBox = true
@@ -981,7 +988,7 @@ export class Viewport {
             minY: Math.min(this.boxStartPx[1], cur[1]),
             maxY: Math.max(this.boxStartPx[1], cur[1]),
           },
-          cur[0] < this.boxStartPx[0], // derecha→izquierda = crossing
+          forced ? forced === 'crossing' : cur[0] < this.boxStartPx[0], // derecha→izquierda = crossing
           e.shiftKey,
         )
       } else {
@@ -1009,7 +1016,8 @@ export class Viewport {
     }
     const [sx, sy] = this.boxStartPx
     const [cx, cy] = this.curPx
-    const crossing = cx < sx
+    const forced = this.cb.selectionArea?.() ?? null
+    const crossing = forced ? forced === 'crossing' : cx < sx
     this.boxEl.style.display = 'block'
     this.boxEl.style.left = `${Math.min(sx, cx)}px`
     this.boxEl.style.top = `${Math.min(sy, cy)}px`
@@ -1488,7 +1496,9 @@ export class Viewport {
     group.traverse((obj) => {
       const any = obj as unknown as { geometry?: THREE.BufferGeometry; material?: THREE.Material | THREE.Material[] }
       if (!obj.userData.cachedGeom) any.geometry?.dispose()
-      if (any.material) {
+      // Los materiales compartidos de los overlays (preview, snap, tracking) se reutilizan en el próximo
+      // cuadro: liberarlos obligaría a recompilar su programa en cada movimiento del cursor.
+      if (any.material && !this.overlayMaterials.has(any.material as THREE.Material)) {
         if (Array.isArray(any.material)) any.material.forEach((m) => m.dispose())
         else any.material.dispose()
       }
@@ -2468,6 +2478,16 @@ export class Viewport {
       } else if (s.kind === 'polyline' && s.points.length >= 2) {
         const pts = s.points.map((p) => new THREE.Vector3(p.x, p.y, p.z))
         this.previewGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), this.previewMaterial))
+      } else if (s.kind === 'solid') {
+        const g = previewSolidGeometry(s.props)
+        if (!g) continue
+        // Sombreado translúcido del color del rubber-band (respeta la profundidad del modelo) + sus aristas vivas.
+        const fill = new THREE.Mesh(
+          g,
+          new THREE.MeshLambertMaterial({ color: this.previewMaterial.color, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }),
+        )
+        const edges = new THREE.EdgesGeometry(g, 30)
+        this.previewGroup.add(fill, new THREE.LineSegments(edges, this.previewMaterial))
       }
     }
   }

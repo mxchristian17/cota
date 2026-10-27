@@ -7,6 +7,7 @@ import { sweepStartRef } from '../core/editing/solid'
 import { registerSolidMesher, solidTopology } from '../core/editing/topology'
 import { blendTools } from '../core/editing/edgeBlend'
 import { dropStrayTriangles, type BoolOp } from './csgClean'
+import { closeTJunctions } from './tjunctions'
 
 /** Segmentos de una primitiva curva, acotados (un `.cota` o la IA pueden traer valores absurdos). */
 export const MAX_SEGMENTS = 512
@@ -65,6 +66,90 @@ function booleanOp(a: Brush, b: Brush, op: BoolOp, checkB = true): Brush {
   next.updateMatrixWorld()
   const clean = dropStrayTriangles(next.geometry, a.geometry, b.geometry, op, checkB)
   return clean === next.geometry ? next : csgBrush(clean)
+}
+
+/**
+ * Caras coplanares entre operandos (un agujero de la altura justa de la placa, una pieza apoyada sobre otra): la CSG
+ * las parte en miles de astillas y tarda segundos por operación. Se agranda apenas B (`ε`, una cienmilésima del
+ * tamaño) en las caras que coinciden con un plano de A: en la resta, las de igual sentido (el agujero asoma de la
+ * placa); en la unión, las de sentido opuesto (la pieza apoyada penetra en la otra). El resultado no cambia: sus
+ * vértices nacen de cortar B con los planos de A. Devuelve B (una copia si hubo que mover algo).
+ */
+export const csgNudgeOptions = { enabled: true }
+
+export function nudgeCoplanar(a: THREE.BufferGeometry, b: THREE.BufferGeometry, op: BoolOp): THREE.BufferGeometry {
+  if (op === 'intersect' || !csgNudgeOptions.enabled) return b
+  const pa = a.getAttribute('position') as THREE.BufferAttribute | undefined
+  const pb = b.getAttribute('position') as THREE.BufferAttribute | undefined
+  if (!pa || !pb) return b
+  const box = new THREE.Box3().setFromBufferAttribute(pa).union(new THREE.Box3().setFromBufferAttribute(pb))
+  const size = box.getSize(new THREE.Vector3()).length()
+  if (!(size > 0)) return b
+  const tol = size * 1e-7
+  const eps = size * 1e-5
+  const ia = a.getIndex()
+  const ib = b.getIndex()
+  const q = (v: number) => Math.round(v * 1e4)
+  const key = (n: THREE.Vector3, d: number) => `${q(n.x)},${q(n.y)},${q(n.z)},${Math.round(d / tol)}`
+  const v0 = new THREE.Vector3()
+  const v1 = new THREE.Vector3()
+  const v2 = new THREE.Vector3()
+  const n = new THREE.Vector3()
+  const plane = (pos: THREE.BufferAttribute, idx: THREE.BufferAttribute | null, t: number): number | null => {
+    const at = (k: number) => (idx ? idx.getX(3 * t + k) : 3 * t + k)
+    v0.fromBufferAttribute(pos, at(0))
+    v1.fromBufferAttribute(pos, at(1))
+    v2.fromBufferAttribute(pos, at(2))
+    n.subVectors(v1, v0).cross(v2.clone().sub(v0))
+    const len = n.length()
+    if (len < 1e-12 * size * size) return null
+    n.divideScalar(len)
+    return n.dot(v0)
+  }
+  const planes = new Set<string>()
+  const ta = (ia ? ia.count : pa.count) / 3
+  for (let t = 0; t < ta; t++) {
+    const d = plane(pa, ia, t)
+    if (d !== null) planes.add(key(n, d))
+  }
+  const has = (nn: THREE.Vector3, d: number) => {
+    const r = Math.round(d / tol)
+    for (const dr of [-1, 0, 1]) if (planes.has(`${q(nn.x)},${q(nn.y)},${q(nn.z)},${r + dr}`)) return true
+    return false
+  }
+  // Desplazamiento por posición (todas las copias de un vértice se mueven igual: sin grietas), una vez por normal.
+  const pkey = (x: number, y: number, z: number) => `${Math.round(x / tol)},${Math.round(y / tol)},${Math.round(z / tol)}`
+  const push = new Map<string, Map<string, THREE.Vector3>>()
+  const tb = (ib ? ib.count : pb.count) / 3
+  const flip = new THREE.Vector3()
+  for (let t = 0; t < tb; t++) {
+    const d = plane(pb, ib, t)
+    if (d === null) continue
+    const hit = op === 'subtract' ? has(n, d) : has(flip.copy(n).negate(), -d)
+    if (!hit) continue
+    const nk = `${q(n.x)},${q(n.y)},${q(n.z)}`
+    for (let k = 0; k < 3; k++) {
+      const i = ib ? ib.getX(3 * t + k) : 3 * t + k
+      const pk = pkey(pb.getX(i), pb.getY(i), pb.getZ(i))
+      let m = push.get(pk)
+      if (!m) push.set(pk, (m = new Map()))
+      if (!m.has(nk)) m.set(nk, n.clone())
+    }
+  }
+  if (push.size === 0) return b
+  const out = b.clone()
+  const po = out.getAttribute('position') as THREE.BufferAttribute
+  for (let i = 0; i < po.count; i++) {
+    const m = push.get(pkey(po.getX(i), po.getY(i), po.getZ(i)))
+    if (!m) continue
+    let [dx, dy, dz] = [0, 0, 0]
+    for (const v of m.values()) [dx, dy, dz] = [dx + v.x * eps, dy + v.y * eps, dz + v.z * eps]
+    po.setXYZ(i, po.getX(i) + dx, po.getY(i) + dy, po.getZ(i) + dz)
+  }
+  po.needsUpdate = true
+  out.computeBoundingBox()
+  out.computeBoundingSphere()
+  return out
 }
 
 function extrudeGeometry(profile: Vec3[], height: number, axis?: Vec3): THREE.BufferGeometry {
@@ -444,7 +529,7 @@ function evalTree(props: SolidProps): THREE.BufferGeometry {
   let acc = csgBrush(evalTree(operands[0]))
   for (let i = 1; i < operands.length; i++) {
     try {
-      acc = booleanOp(acc, csgBrush(evalTree(operands[i])), op)
+      acc = booleanOp(acc, csgBrush(nudgeCoplanar(acc.geometry, evalTree(operands[i]), op)), op)
     } catch (err) {
       // Un operando degenerado no debe romper todo: se omite y se conserva lo acumulado.
       console.warn('Cota: boolean operation failed; one operand is skipped.', err)
@@ -476,6 +561,8 @@ export function solidGeometry(props: SolidProps): THREE.BufferGeometry {
   let geom: THREE.BufferGeometry
   try {
     geom = evalTree(props)
+    // La CSG deja uniones en T: sin cerrarlas se ven puntitos del fondo sobre las caras (y la malla no es cerrada).
+    if (!LEAF_OPS.has(props.op)) geom = closeTJunctions(geom)
     // Una CSG sobre geometría degenerada puede producir posiciones NaN/Inf: eso ensuciaría los
     // bounds (zoomExtents) y el render. Si aparece, se descarta la geometría de ese sólido.
     if (!hasFinitePositions(geom)) {
@@ -490,6 +577,19 @@ export function solidGeometry(props: SolidProps): THREE.BufferGeometry {
   if (cache.size > 200) cache.clear()
   cache.set(key, geom)
   return geom
+}
+
+/**
+ * Geometría de un sólido para la vista previa de un comando: sin caché (cambia con cada movimiento del cursor y
+ * no debe desalojar los sólidos del dibujo de la caché). Quien la pide la libera; null si no se puede evaluar.
+ */
+export function previewSolidGeometry(props: SolidProps): THREE.BufferGeometry | null {
+  try {
+    const g = evalTree(props)
+    return hasFinitePositions(g) ? g : null
+  } catch {
+    return null
+  }
 }
 
 const LEAF_OPS = new Set(['BOX', 'CYLINDER', 'CONE', 'SPHERE', 'EXTRUDE', 'REVOLVE', 'TORUS'])

@@ -4,6 +4,46 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-10-27
+
+### Added
+- EXTRUDE, BOX, CYLINDER and CONE show the solid they will create while you pick the height, shaded and
+  translucent, and the height follows the side of the cursor: move it below the profile to extrude downwards (into
+  another solid to cut a pocket). A typed positive height still grows towards the viewer.
+- CYLINDER and CONE ▸ Axis endpoint: the axis goes from the base center to a picked point in any direction (a
+  horizontal shaft without changing the UCS).
+- VIEWGEN from the model asks for a layout, like VIEWBASE: a new one is created without its initial viewport, so
+  the views are not hidden behind it (`Model` keeps the 2D blocks in the model).
+- Public roadmap (`ROADMAP.md`): command line for professional use, an AI agent panel and MCP server, mechanisms
+  and joints, precision gears, ray-traced rendering, physics and CAM.
+
+### Fixed
+- Solids made with booleans showed tiny dark specks on flat faces: the mesh had thousands of T-junctions (a vertex
+  in the middle of a neighbour's edge) that left sub-pixel cracks. They are closed now, and nearly coincident
+  vertices are welded.
+- UNION, SUBTRACT and INTERSECT keep the layer and linetype of the first object picked (the result went to the
+  current layer). SUBTRACT ignores an object picked both as the base and as something to subtract.
+- `W` or `C` typed at "Select objects" in a 3D view: the window is drawn on the screen, even if its first corner
+  falls on an object and whatever its direction (it was measured on the drawing plane and could miss what you see).
+  During a Fence or a polygon, clicks are points.
+- Lines tangent to circles drawn in a rotated UCS (TAN to TAN) are solved in the plane of the circles; they came out
+  of that plane.
+- TRIM of a circle whose remaining part passes through its 0° point gives an arc, not a two-arc polyline (JOIN can
+  then close the outline).
+- Objects on layers that are turned off no longer act as cutting edges in TRIM ▸ select all, and FILLETEDGE,
+  CHAMFEREDGE and UCS ▸ Face only pick solids you can see and edit.
+- Colors 10–255 of the classic color index (in DXF files and `-LAYER Color`) showed as white; the full table is used.
+- VIEWGEN places the isometric view in a free corner next to the other views, so the sheet is not taller than
+  needed and the scale is larger.
+- The console warning "render loop error" when a view was created (the first frame ran before the view existed).
+- A height picked with a 3D object snap is measured along the extrusion axis, not as the straight distance to
+  the point.
+
+### Performance
+- Booleans where faces touch or are flush (a hole as deep as the plate, a part resting on another) are about 50
+  times faster: a plate with four holes went from 6.6 s to 0.13 s.
+- The rubber-band, object snap and tracking overlays no longer rebuild their shaders on every mouse move.
+
 ## [1.4.1] — 2026-10-27
 
 ### Fixed
