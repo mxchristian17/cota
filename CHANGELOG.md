@@ -21,6 +21,10 @@ All notable changes to Cota are documented here. The project follows [Semantic V
   still Enter at "Select objects".
 - Clipboard: COPYCLIP (Ctrl+C), CUTCLIP (Ctrl+X), COPYBASE (Ctrl+Shift+C), PASTECLIP (Ctrl+V) and PASTEORIG; and
   SELECTSIMILAR.
+- EXTRUDE options as in classic CAD: Direction (oblique prism), Path (sweep along a line, polyline, arc or spline)
+  and Taper angle (circles become frustums; polygons keep every side at the same offset).
+- Locked layers are shown faded (as LAYLOCKFADECTL 50): visible and snappable, but not selectable.
+- The layer lineweight is chosen from the standard list (Default, 0.05 … 2.11 mm) and is used when plotting.
 - Default lighting follows the camera (two distant lights), so faces with different orientations never share
   the same shade.
 

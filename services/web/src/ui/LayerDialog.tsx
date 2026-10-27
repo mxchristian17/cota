@@ -37,6 +37,9 @@ function LayerNameInput({ id, name, onRename }: { id: string; name: string; onRe
   )
 }
 
+/** Grosores estándar del CAD clásico (mm); 0 = Default (el de la hoja, 0.25 mm). */
+const LINEWEIGHTS = [0, 0.05, 0.09, 0.13, 0.15, 0.18, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.53, 0.6, 0.7, 0.8, 0.9, 1, 1.06, 1.2, 1.4, 1.58, 2, 2.11]
+
 export function LayerDialog() {
   // Suscripción a `version` para refrescar ante cambios en las capas.
   useStore((s) => s.version)
@@ -246,15 +249,19 @@ export function LayerDialog() {
                     />
                   </td>
                   <td>
-                    <input
+                    <select
                       className="field lw-input"
-                      type="number"
-                      step="0.05"
-                      min="0"
-                      title="Line weight (mm)"
-                      value={l.lineWeight}
+                      title="Lineweight (mm): used when plotting and in the PDF"
+                      data-testid={`layer-lw-${l.name}`}
+                      value={String(l.lineWeight)}
                       onChange={(e) => setLineWeight(l.id, Number(e.target.value))}
-                    />
+                    >
+                      {(LINEWEIGHTS.includes(l.lineWeight) ? LINEWEIGHTS : [...LINEWEIGHTS, l.lineWeight].sort((a, b) => a - b)).map((w) => (
+                        <option key={w} value={String(w)}>
+                          {w === 0 ? 'Default' : `${w.toFixed(2)} mm`}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td>
                     <select

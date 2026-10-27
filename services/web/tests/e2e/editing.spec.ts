@@ -119,7 +119,7 @@ test.describe('Cota editing', () => {
     await typeCmd(page, 'EXTRUDE')
     await page.mouse.click(cx + 25 * s, cy) // borde inferior del segundo (x = 25)
     await typeCmd(page, '')
-    await expect(page.locator('.cmd-prompt')).toContainText('Specify height of extrusion <25.0000>:')
+    await expect(page.locator('.cmd-prompt')).toContainText('Specify height of extrusion or [Direction/Path/Taper angle] <25.0000>:')
     await typeCmd(page, '')
     await expect.poll(solids).toEqual([25, 25])
   })

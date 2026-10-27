@@ -2007,6 +2007,8 @@ export class Viewport {
       if (!layerShown(layer)) return
       const selected = selection.has(e.id)
       const color = new THREE.Color(selected ? HIGHLIGHT : this.ink(layer?.color ?? '#ffffff'))
+      // Capas bloqueadas: atenuadas como el CAD clásico (LAYLOCKFADECTL 50); se ven y dan snaps, pero no se editan.
+      if (layer?.locked && !selected) color.lerp(new THREE.Color(this.bgColor), 0.5)
       if (e.type === 'SOLID3D') {
         this.entityGroup.add(this.buildSolid(e, color, selected))
         return
