@@ -1,10 +1,13 @@
 import { useStore } from '../store/store'
 import { focusCommandLine } from './focus'
 
-const ITEMS: Array<{ a: 'exit' | 'pan' | 'zoom' | 'window' | 'original' | 'extents'; label: string }> = [
+const ITEMS: Array<{ a: 'exit' | 'pan' | 'zoom' | 'orbit' | 'forbit' | 'corbit' | 'window' | 'original' | 'extents'; label: string }> = [
   { a: 'exit', label: 'Exit' },
   { a: 'pan', label: 'Pan' },
   { a: 'zoom', label: 'Zoom' },
+  { a: 'orbit', label: 'Orbit' },
+  { a: 'forbit', label: 'Free Orbit' },
+  { a: 'corbit', label: 'Continuous Orbit' },
   { a: 'window', label: 'Zoom Window' },
   { a: 'original', label: 'Zoom Original' },
   { a: 'extents', label: 'Zoom Extents' },

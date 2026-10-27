@@ -43,6 +43,11 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | `ZOOM` | `Z` | Zoom: window, scale (n, nX, nXP), All/Center/Dynamic/Extents/Previous/Scale/Window/Object, Enter = real time |
 | `PAN` | `P` | Real-time pan: drag with the left button (Esc or Enter to exit) |
 | `-PAN` | `-P` | Pan by a displacement or from a base point to a second point |
+| `3DORBIT` | `3DO`, `ORBIT` | Constrained orbit: drag to turn the view around the target, keeping the Z axis up |
+| `3DFORBIT` | — | Free orbit: drag to turn the view in any direction (it may roll) |
+| `3DCORBIT` | — | Continuous orbit: drag and release to keep the view spinning; click to stop |
+| `3DPAN` | — | Real-time pan in a 3D view |
+| `3DZOOM` | — | Real-time zoom in a 3D view |
 | `VIEW` | `V`, `-VIEW`, `-V` | Views: standard (Top/Front/…/NWiso) and named views (?/Delete/Orthographic/Restore/Save/Window) |
 | `PLAN` | — | Plan view of a UCS [Current ucs/Ucs/World] |
 | `PERSPECTIVE` | — | Perspective projection |
@@ -204,6 +209,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | `UNION` | `UNI` | Boolean union of solids |
 | `SUBTRACT` | `SU` | Boolean subtraction of solids |
 | `INTERSECT` | `IN` | Boolean intersection of solids |
+| `SLICE` | `SL` | Slice solids with a plane, keeping one side or both |
 | `FILLETEDGE` | — | Round and fillet the edges of solid objects |
 | `CHAMFEREDGE` | — | Bevel the edges of solid objects |
 | `EXPLODE` | `X` | Explode block references, polylines and hatches into their component objects |

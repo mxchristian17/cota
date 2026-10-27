@@ -1,7 +1,7 @@
 {
   "name": "cota",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
   "description": "Free, open-source 2D and 3D CAD that runs in the browser",
   "license": "Apache-2.0",

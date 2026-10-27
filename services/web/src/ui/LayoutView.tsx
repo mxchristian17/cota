@@ -201,7 +201,10 @@ function FloatingViewport({ entity, rect, clipPath, active, maximized, paperRef,
       }
       // PSLTSCALE: los trazos miden en el papel lo mismo que en el espacio papel.
       const lt = doc.linetypeContext(e?.type === 'VIEWPORT' ? { paperPerModel: paperPerModel(e.props.scale, doc.units) } : 'model')
-      return baseData(vp, memo.entities, isMs(), memo.layers, e?.type === 'VIEWPORT' ? annoScaleOf(e.props.scale, doc.units) : undefined, lt)
+      const data = baseData(vp, memo.entities, isMs(), memo.layers, e?.type === 'VIEWPORT' ? annoScaleOf(e.props.scale, doc.units) : undefined, lt)
+      // Grosores de capa a escala del papel (un viewport a 1:2 los dibuja igual de gruesos en la hoja).
+      if (e?.type === 'VIEWPORT') data.lwUnitsPerMm = 1 / paperPerModel(e.props.scale, doc.units)
+      return data
     })
     vp.setPreviewProvider((c) => (isMs() ? st().computePreview(c) : []))
     return () => {
@@ -328,6 +331,7 @@ export function LayoutView({ layoutId }: { layoutId: string }) {
       const doc = st().doc
       const paperEnts = doc.layoutEntities(layoutId)
       const data = baseData(paper, paperEnts, doc.inPaperSpace)
+      data.lwUnitsPerMm = 1 // el papel se dibuja en mm
       if (!doc.inPaperSpace) return data
       if (extras?.rev !== doc.revision) extras = { rev: doc.revision, list: paperSnapProxies(paperEnts, doc.modelEntities, doc.blocks, doc.layers, doc.units) }
       return { ...data, snapExtras: extras.list }

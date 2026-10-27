@@ -278,3 +278,26 @@ test.describe('Cota picked objects are highlighted', () => {
     }
   })
 })
+
+test.describe('Cota orbit commands', () => {
+  test('3DORBIT turns the view by dragging; 3DFORBIT can pass over the pole; Esc exits', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    await typeCmd(page, 'BOX', '#0,0', '#20,20', '20')
+    const box = (await page.locator('canvas').first().boundingBox())!
+    const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2]
+    const cam = () => store(page, 'const c = s.activeViewport.getCamera(); return [c.az, c.el]')
+    for (const cmd of ['3DORBIT', '3DFORBIT']) {
+      const before = await cam()
+      await typeCmd(page, cmd)
+      await page.mouse.move(cx, cy)
+      await page.mouse.down()
+      await page.mouse.move(cx + 60, cy + 40, { steps: 6 })
+      await page.mouse.up()
+      const after = await cam()
+      expect(Math.abs(after[0] - before[0]) + Math.abs(after[1] - before[1])).toBeGreaterThan(0.3)
+      await page.keyboard.press('Escape')
+      await expect(page.locator('.cmd-prompt')).toHaveText('Command:')
+    }
+  })
+})

@@ -1,7 +1,7 @@
 import { fromVec3, pt, toVec3, type Pt, type Vec3 } from '../math'
 import type { ArcProps, CircleProps, EllipseProps, Entity } from '../document/types'
 import { ucsToWorld, worldToUcs, type Ucs } from '../ucs'
-import { solidArcCenters, solidCenters, solidQuadrants } from '../editing/solid'
+import { solidArcCenters, solidCenters, solidQuadrants, solidVertices } from '../editing/solid'
 import { ellipseMinorVec, ellipseParamSweep, ellipsePointAt, ellipsePoints, ellipseQuadrants, isEllipseArc } from '../geom/ellipse'
 import {
   arcBasis,
@@ -534,6 +534,15 @@ export function computeSnap(cursor: Pt, entities: Entity[], s: SnapSettings): Sn
       }
     }
     if (wantInt) {
+      const realVerts = new Map<number, Pt[]>()
+      const facetJoint = (owner: number, p: Pt): boolean => {
+        const e = entities[owner]
+        if (e?.type !== 'SOLID3D') return false
+        let vs = realVerts.get(owner)
+        if (!vs) realVerts.set(owner, (vs = solidVertices(e.props).map(fromVec3)))
+        const tol = 1e-6 * (1 + Math.hypot(p.x, p.y, p.z))
+        return !vs.some((q) => Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z) < Math.max(tol, 1e-4))
+      }
       for (let i = 0; i < nearSegs.length; i++) {
         for (let j = i + 1; j < nearSegs.length; j++) {
           const { a: a1, b: b1, owner: o1, exact: x1 } = nearSegs[i]
@@ -541,12 +550,14 @@ export function computeSnap(cursor: Pt, entities: Entity[], s: SnapSettings): Sn
           // Entre dos curvas analíticas (o dentro de una), el INT exacto ya está calculado arriba.
           if (s.osnap.intersection && !(x1 && x2) && !(o1 === o2 && x1)) {
             const ip = segIntersect3D(a1, b1, a2, b2)
-            if (ip) add(ip, 'intersection')
+            // En un sólido, dos tramos de una misma arista curva (el facetado de un empalme o de un cilindro) se tocan
+            // en cada vértice del facetado: eso no es una intersección. Las esquinas reales sí lo son.
+            if (ip && !(o1 === o2 && facetJoint(o1, ip))) add(ip, 'intersection')
           }
           // Apparent intersection: se cruzan EN PANTALLA aunque no se toquen en el espacio.
           if (s.osnap.apparentIntersection) {
             const ap = apparentIntersection(a1, b1, a2, b2, s)
-            if (ap) add(ap, 'apparentIntersection')
+            if (ap && !(o1 === o2 && facetJoint(o1, ap))) add(ap, 'apparentIntersection')
           }
         }
       }

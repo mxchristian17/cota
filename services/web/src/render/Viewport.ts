@@ -1,6 +1,9 @@
 import { hiddenLayerIds, layerEditable, layerVisible } from '../core/layers/visibility'
 import type { Deferred } from '../core/geom/tangency'
 import * as THREE from 'three'
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js'
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js'
 import type { Pt, Vec3 } from '../core/math'
 import type { AttDisp, BlockDef, DimensionEntity, Entity, Layer, MeshEntity, SolidEntity } from '../core/document/types'
 import { PREVIEW_COLORS, type PreviewShape } from '../core/preview'
@@ -84,6 +87,11 @@ export interface ViewportData {
   snapLive?: Entity[]
   /** ORTHO activo (los cruces de la recta de ortho con los objetos dan INT). */
   ortho?: boolean
+  /**
+   * Grosores de línea en pantalla (layouts): unidades del dibujo por mm de papel (1 en el papel; 1/escala en un
+   * viewport flotante). Sin él (espacio modelo) las líneas son finas.
+   */
+  lwUnitsPerMm?: number
 }
 
 export interface RectPx {
@@ -204,6 +212,10 @@ export class Viewport {
   private readonly scene = new THREE.Scene()
   private readonly controller = new CameraController()
   private readonly entityGroup = new THREE.Group()
+  /** Contornos de las superficies curvas de los sólidos, según la vista (no se seleccionan). */
+  private readonly silhouetteGroup = new THREE.Group()
+  private silhouetteKey = ''
+  private silhouetteMs = 0
   private readonly previewGroup = new THREE.Group()
   private readonly snapGroup = new THREE.Group()
   /** UCS dinámica (DUCS): cara plana de un sólido bajo el cursor y su resaltado. */
@@ -262,13 +274,16 @@ export class Viewport {
   /** Esferas envolventes (mundo) por entidad expandida, para el culling espacial del snap. */
   private snapSpheres: { c: THREE.Vector3; r: number }[] | null = null
   private raf = 0
-  private dragging: 'pan' | 'orbit' | 'rtzoom' | null = null
+  private dragging: 'pan' | 'orbit' | 'forbit' | 'rtzoom' | null = null
   /** Historial de vistas para ZOOM Previous. */
   private viewHistory: CameraState[] = []
   private lastWheelAt = 0
   private lastMiddleDown = 0
   /** Modo Realtime de ZOOM/PAN: el arrastre con el botón izquierdo navega. */
-  private realtime: 'zoom' | 'pan' | null = null
+  private realtime: 'zoom' | 'pan' | 'orbit' | 'forbit' | 'corbit' | null = null
+  /** 3DCORBIT: giro que sigue después de soltar (px por cuadro). */
+  private spin: { dx: number; dy: number } | null = null
+  private lastDrag = { dx: 0, dy: 0 }
   /** Vista al entrar en Realtime (*Zoom Original*). */
   private realtimeOrigin: CameraState | null = null
   private readonly lastPan = new THREE.Vector2()
@@ -279,6 +294,9 @@ export class Viewport {
   private readonly keyLight = new THREE.DirectionalLight(0xffffff, 2.2)
   private readonly fillLight = new THREE.DirectionalLight(0xffffff, 0.35)
   private snapListKey = ''
+  /** Líneas con grosor de los layouts (la fina queda para el pick). */
+  private wideLines: { thin: THREE.LineSegments; wide: LineSegments2; mm: number }[] = []
+  private lineweightZoom = -1
   /** Objetos que se ven pero no se seleccionan (capas congeladas o bloqueadas). */
   private unpickable = new Set<string>()
   private snapLiveRef: Entity[] | undefined
@@ -347,7 +365,7 @@ export class Viewport {
     // las caras con distinta orientación nunca quedan del mismo tono, se mire desde donde se mire.
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.45))
     this.scene.add(this.keyLight, this.keyLight.target, this.fillLight, this.fillLight.target)
-    this.scene.add(this.entityGroup, this.previewGroup, this.snapGroup, this.gripGroup, this.ducsGroup)
+    this.scene.add(this.entityGroup, this.silhouetteGroup, this.previewGroup, this.snapGroup, this.gripGroup, this.ducsGroup)
     this.ducsGroup.renderOrder = 11
     // Overlays por encima de la geometría: preview < glifos de snap < grips.
     this.previewGroup.renderOrder = 10
@@ -623,13 +641,14 @@ export class Viewport {
   }
 
   /** Modo Realtime (ZOOM ↵ / PAN): `null` sale. */
-  setRealtime(mode: 'zoom' | 'pan' | null): void {
+  setRealtime(mode: 'zoom' | 'pan' | 'orbit' | 'forbit' | 'corbit' | null): void {
+    this.spin = null
     if (mode && !this.realtime) {
       this.realtimeOrigin = this.getCamera()
       this.recordView()
     }
     this.realtime = mode
-    this.renderer.domElement.style.cursor = mode === 'zoom' ? 'zoom-in' : mode === 'pan' ? 'grab' : ''
+    this.renderer.domElement.style.cursor = mode === 'zoom' ? 'zoom-in' : mode === 'pan' ? 'grab' : mode ? 'move' : ''
   }
 
   /** *Zoom Original*: la vista al entrar en Realtime. */
@@ -782,7 +801,9 @@ export class Viewport {
       else if (this.dragging === 'rtzoom') {
         // Zoom Realtime: subir medio alto de la ventana acerca al doble (bajar, aleja), desde el centro.
         this.controller.zoom(Math.pow(2, dy / Math.max(1, this.controller.pxHeight / 2)))
-      } else this.controller.orbit(dx, dy)
+      } else if (this.dragging === 'forbit') this.controller.freeOrbit(dx, dy)
+      else this.controller.orbit(dx, dy)
+      this.lastDrag = { dx, dy }
     }
     const px = this.pxOf(e.clientX, e.clientY)
     this.lastPx[0] = px[0]
@@ -847,7 +868,8 @@ export class Viewport {
       return
     }
     if (this.realtime && e.button === 0) {
-      this.dragging = this.realtime === 'zoom' ? 'rtzoom' : 'pan'
+      this.spin = null // un clic detiene la órbita continua
+      this.dragging = this.realtime === 'zoom' ? 'rtzoom' : this.realtime === 'pan' ? 'pan' : this.realtime === 'forbit' ? 'forbit' : 'orbit'
       this.lastPan.set(e.clientX, e.clientY)
       this.renderer.domElement.setPointerCapture(e.pointerId)
       if (this.realtime === 'pan') this.renderer.domElement.style.cursor = 'grabbing'
@@ -908,6 +930,8 @@ export class Viewport {
 
   private onPointerUp = (e: PointerEvent): void => {
     if (this.realtime && e.button === 0 && this.dragging) {
+      // 3DCORBIT: al soltar en movimiento, la vista sigue girando con esa velocidad hasta el próximo clic.
+      if (this.realtime === 'corbit' && Math.hypot(this.lastDrag.dx, this.lastDrag.dy) > 0.5) this.spin = { ...this.lastDrag }
       this.dragging = null
       this.renderer.domElement.releasePointerCapture(e.pointerId)
       if (this.realtime === 'pan') this.renderer.domElement.style.cursor = 'grab'
@@ -915,6 +939,7 @@ export class Viewport {
     }
     if (this.dragging && (e.button === 1 || e.button === 2)) {
       this.dragging = null
+      this.invalidate() // siluetas pendientes de la órbita
       this.renderer.domElement.releasePointerCapture(e.pointerId)
       const down = this.rightDown
       this.rightDown = null
@@ -1207,6 +1232,7 @@ export class Viewport {
     this.width = Math.max(1, this.container.clientWidth)
     this.height = Math.max(1, this.container.clientHeight)
     this.renderer.setSize(this.width, this.height, false)
+    this.lineweightZoom = -1
     this.controller.setSize(this.width, this.height)
   }
 
@@ -1778,6 +1804,10 @@ export class Viewport {
     const getLine = (m: Map<string, LineBatch>, k: string): LineBatch => { let b = m.get(k); if (!b) { b = { pos: [], ranges: [], n: 0 }; m.set(k, b) } return b }
     const getPoints = (m: Map<string, PointBatch>, k: string): PointBatch => { let b = m.get(k); if (!b) { b = { pos: [] }; m.set(k, b) } return b }
     const bgHex = '#' + this.bgColor.getHexString()
+    // Grosor de capa (mm; 0 = Default, 0.25 mm) sólo en los layouts.
+    const lwUnits = this.data?.lwUnitsPerMm
+    const lwKey = (l: Layer | undefined): string => (lwUnits ? `|${l?.lineWeight || 0.25}` : '')
+    this.wideLines = []
 
     this.unpickable = new Set(entities.filter((e) => !layerEditable(layerMap.get(e.layer))).map((e) => e.id))
     for (const e of entities) {
@@ -1785,7 +1815,7 @@ export class Viewport {
         const layer = layerMap.get(e.layer)
         if (!layerVisible(layer)) continue
         const selected = selection.has(e.id)
-        const colorHex = this.ink(layer?.color ?? '#ffffff')
+        const colorHex = this.layerHex(layer)
 
         // Individuales: seleccionadas (resaltado), anotaciones y polilíneas anchas.
         if ((selected && e.type !== 'SHADE') || e.type === 'DIMENSION' || e.type === 'TEXT' || e.type === 'ATTDEF') {
@@ -1833,7 +1863,7 @@ export class Viewport {
               pa = eg.getAttribute('position').array as ArrayLike<number>
               eg.dispose()
             }
-            const b = getLine(edgeB, `${ro}|${style === 'shadedEdges' ? '#111111' : colorHex}`)
+            const b = getLine(edgeB, `${ro}|${style === 'shadedEdges' ? '#111111' : colorHex}${lwKey(layer)}`)
             b.ranges.push({ s: b.n, id: e.id })
             for (let i = 0; i < pa.length; i++) b.pos.push(pa[i])
             b.n += pa.length / 3
@@ -1870,7 +1900,7 @@ export class Viewport {
         const dashes = ltCtx ? entityDashes(e, entityPattern(e, layerOf, ltCtx), ltCtx.plinegen) : null
         if (dashes) {
           // Tipo de línea: los trazos al lote visible; el recorrido entero, invisible, para el pick.
-          const b = getLine(lineB, `${ro}|${colorHex}`)
+          const b = getLine(lineB, `${ro}|${colorHex}${lwKey(layer)}`)
           b.ranges.push({ s: b.n, id: e.id })
           for (const d of dashes.dashes) for (let i = 0; i + 1 < d.length; i++) {
             b.pos.push(d[i][0], d[i][1], d[i][2], d[i + 1][0], d[i + 1][1], d[i + 1][2])
@@ -1887,7 +1917,7 @@ export class Viewport {
         }
         const verts = this.entityLinePoints(e)
         if (!verts || verts.length < 2) continue
-        const b = getLine(lineB, `${ro}|${colorHex}`)
+        const b = getLine(lineB, `${ro}|${colorHex}${lwKey(layer)}`)
         b.ranges.push({ s: b.n, id: e.id })
         for (let i = 0; i + 1 < verts.length; i++) {
           const a = verts[i]
@@ -1985,7 +2015,7 @@ export class Viewport {
    *  `pickOnly`: invisible (recorrido completo de una línea con trazos). */
   private addLineBatch(b: LineBatch, key: string, pickOnly = false): void {
     if (b.pos.length === 0) return
-    const [ro, colorHex] = key.split('|')
+    const [ro, colorHex, lw] = key.split('|')
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3))
     const seg = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: new THREE.Color(colorHex), visible: !pickOnly }))
@@ -1993,6 +2023,42 @@ export class Viewport {
     seg.userData.rangeKind = 'line'
     seg.renderOrder = Number(ro)
     this.entityGroup.add(seg)
+    if (lw && !pickOnly && this.data?.lwUnitsPerMm) {
+      // Línea con grosor (en píxeles según el zoom): se ve en lugar de la fina, que queda para el pick.
+      const wg = new LineSegmentsGeometry().setPositions(b.pos)
+      const mat = new LineMaterial({ color: new THREE.Color(colorHex).getHex(), linewidth: 1 })
+      mat.resolution.set(this.width, this.height)
+      const wide = new LineSegments2(wg, mat)
+      wide.renderOrder = Number(ro)
+      wide.raycast = () => {}
+      wide.visible = false
+      this.entityGroup.add(wide)
+      this.wideLines.push({ thin: seg, wide, mm: Number(lw) })
+    }
+    this.lineweightZoom = -1
+  }
+
+  /**
+   * Grosores en pantalla: cada línea con grosor mide `mm` de papel al zoom actual; por debajo de 1,5 px se dibuja la
+   * línea fina (como el CAD clásico, que no baja de un píxel).
+   */
+  private updateLineweights(): void {
+    const units = this.data?.lwUnitsPerMm
+    if (!this.wideLines.length || !units) return
+    const wpp = this.controller.worldPerPx() || 1
+    if (wpp === this.lineweightZoom) return
+    this.lineweightZoom = wpp
+    for (const w of this.wideLines) {
+      const px = (w.mm * units) / wpp
+      const show = px > 1.5
+      w.wide.visible = show
+      ;(w.thin.material as THREE.LineBasicMaterial).visible = !show
+      if (show) {
+        const m = w.wide.material as LineMaterial
+        m.linewidth = px
+        m.resolution.set(this.width, this.height)
+      }
+    }
   }
 
   /** Resuelve el entityId de un impacto de raycast sobre una geometría fusionada (búsqueda binaria). */
@@ -2028,6 +2094,79 @@ export class Viewport {
     return hex
   }
 
+  /**
+   * Color con que se ve una capa: el color 7 según el fondo; las congeladas en grises (#222 a #CCC según la
+   * luminosidad de su color) y las bloqueadas atenuadas (como LAYLOCKFADECTL 50). Las dos se ven y dan snaps.
+   */
+  private layerHex(layer: Layer | undefined): string {
+    const hex = this.ink(layer?.color ?? '#ffffff')
+    if (!layer?.frozen && !layer?.locked) return hex
+    const color = new THREE.Color(hex)
+    if (layer.frozen) {
+      const c = color.getRGB({ r: 0, g: 0, b: 0 }, THREE.SRGBColorSpace)
+      const g = (0x22 + (0xcc - 0x22) * (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b)) / 255
+      color.setRGB(g, g, g, THREE.SRGBColorSpace)
+    } else color.lerp(new THREE.Color(this.bgColor), 0.5)
+    return '#' + color.getHexString()
+  }
+
+  /**
+   * Contornos (siluetas) de las caras curvas de los sólidos vistos desde la cámara: donde una superficie suave pasa de
+   * mirar al observador a darle la espalda (los lados de un cilindro, el borde de una esfera o de un tubo barrido).
+   * Se recalculan al cambiar la vista; si es costoso, sólo cuando se suelta la órbita.
+   */
+  private updateSilhouettes(): void {
+    const d = this.data
+    const style = this.visualStyle
+    const cam = this.controller.camera
+    const persp = this.controller.mode !== 'ortho'
+    const dir = new THREE.Vector3()
+    cam.getWorldDirection(dir)
+    const q = (v: number) => Math.round(v * 2000)
+    const key = d && style !== 'shaded' ? `${this.lastRevision}|${this.lastSelectionKey}|${q(dir.x)},${q(dir.y)},${q(dir.z)}${persp ? `|${q(cam.position.x)},${q(cam.position.y)},${q(cam.position.z)}` : ''}` : ''
+    if (key === this.silhouetteKey) return
+    if (key && this.dragging && this.silhouetteMs > 30) return // pesado: se actualiza al terminar de orbitar
+    this.silhouetteKey = key
+    this.disposeGroup(this.silhouetteGroup)
+    if (!key || !d) return
+    const t0 = performance.now()
+    const layers = new Map(d.layers.map((l) => [l.id, l]))
+    const sel = new Set(d.selection)
+    const byColor = new Map<string, number[]>()
+    const toViewer = dir.clone().negate()
+    for (const e of this.entities()) {
+      if (e.type !== 'SOLID3D' || this.lodSmall.get(e.id)) continue
+      const layer = layers.get(e.layer)
+      if (!layerVisible(layer)) continue
+      const topo = solidTopology(e.props)
+      if (!topo) continue
+      const { verts, normals, triFace, links } = topo
+      const hex = sel.has(e.id) ? '#' + new THREE.Color(HIGHLIGHT).getHexString() : style === 'shadedEdges' ? '#111111' : this.layerHex(layer)
+      let out = byColor.get(hex)
+      if (!out) byColor.set(hex, (out = []))
+      for (const [ta, tb, a, b] of links) {
+        if (triFace[ta] !== triFace[tb]) continue // entre caras distintas: arista viva, ya dibujada
+        const [na, nb] = [normals[ta], normals[tb]]
+        if (na[0] * nb[0] + na[1] * nb[1] + na[2] * nb[2] > 1 - 1e-9) continue // misma faceta plana
+        const [pa, pb] = [verts[a], verts[b]]
+        let v = toViewer
+        if (persp) v = new THREE.Vector3((pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2, (pa[2] + pb[2]) / 2).sub(cam.position).negate()
+        const da = na[0] * v.x + na[1] * v.y + na[2] * v.z
+        const db = nb[0] * v.x + nb[1] * v.y + nb[2] * v.z
+        if (da > 0 !== db > 0) out.push(pa[0], pa[1], pa[2], pb[0], pb[1], pb[2])
+      }
+    }
+    for (const [hex, pos] of byColor) {
+      if (!pos.length) continue
+      const g = new THREE.BufferGeometry()
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+      const seg = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: new THREE.Color(hex) }))
+      seg.raycast = () => {}
+      this.silhouetteGroup.add(seg)
+    }
+    this.silhouetteMs = performance.now() - t0
+  }
+
   /** Caras sombreadas: el negro del color 7 sobre papel se aclara a gris para que se lea el sombreado. */
   private faceHex(hex: string): string {
     return hex === '#000000' && this.lightBg() ? FACE_ON_PAPER : hex
@@ -2039,14 +2178,7 @@ export class Viewport {
       const layer = layerMap.get(e.layer)
       if (!layerVisible(layer)) return
       const selected = selection.has(e.id)
-      const color = new THREE.Color(selected ? HIGHLIGHT : this.ink(layer?.color ?? '#ffffff'))
-      // Capas congeladas: en grises (#222 a #CCC según la luminosidad del color); bloqueadas: atenuadas (como
-      // LAYLOCKFADECTL 50). Las dos se ven y dan snaps, pero no se seleccionan ni se editan.
-      if (layer?.frozen && !selected) {
-        const c = color.getRGB({ r: 0, g: 0, b: 0 }, THREE.SRGBColorSpace)
-        const g = (0x22 + (0xcc - 0x22) * (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b)) / 255
-        color.setRGB(g, g, g, THREE.SRGBColorSpace)
-      } else if (layer?.locked && !selected) color.lerp(new THREE.Color(this.bgColor), 0.5)
+      const color = new THREE.Color(selected ? HIGHLIGHT : this.layerHex(layer))
       if (e.type === 'SOLID3D') {
         this.entityGroup.add(this.buildSolid(e, color, selected))
         return
@@ -2421,6 +2553,10 @@ export class Viewport {
     // detener el loop de animación y congelar el viewport. Pase lo que pase, se re-agenda el RAF.
     try {
       this.data = this.provider?.() ?? null
+      if (this.spin && !this.dragging) {
+        this.controller.orbit(this.spin.dx, this.spin.dy)
+        this.invalidate()
+      }
       // Fuera del primer punto de un comando de dibujo, la UCS dinámica no aplica: se borra el resaltado.
       if (this.ducsFace && !this.data?.ducs) {
         this.ducsFace = null
@@ -2513,6 +2649,8 @@ export class Viewport {
         this.updateDimLabels()
         this.updateTextLabels()
         this.aimLights()
+        this.updateLineweights()
+        this.updateSilhouettes()
         this.renderer.render(this.scene, this.controller.camera)
         this.dirty = false
       }

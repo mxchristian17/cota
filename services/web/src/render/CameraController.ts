@@ -202,6 +202,25 @@ export class CameraController {
     this.update()
   }
 
+  /**
+   * Órbita libre (3DFORBIT): gira la vista alrededor de los ejes de la pantalla sin el límite del polo; la vertical de
+   * la cámara acompaña el giro (la vista puede quedar inclinada, como en el CAD clásico).
+   */
+  freeOrbit(dxPx: number, dyPx: number): void {
+    const eye = this.eye().sub(this.target).normalize()
+    const up = this.upVector().normalize()
+    const right = new THREE.Vector3().crossVectors(up, eye).normalize()
+    const q = new THREE.Quaternion()
+      .setFromAxisAngle(up, -dxPx * 0.01)
+      .multiply(new THREE.Quaternion().setFromAxisAngle(right, -dyPx * 0.01))
+    eye.applyQuaternion(q)
+    const newUp = up.applyQuaternion(q).normalize()
+    this.az = Math.atan2(eye.y, eye.x)
+    this.el = Math.asin(Math.max(-1, Math.min(1, eye.z)))
+    this.upOverride = newUp
+    this.update()
+  }
+
   pan(dxPx: number, dyPx: number): void {
     const wpp = this.worldPerPx()
     const e = this.camera.matrixWorld.elements

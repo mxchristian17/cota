@@ -72,7 +72,7 @@ async function zoomWindowFlow(ctx: CommandContext, first: Pt): Promise<void> {
 }
 
 /** Zoom en tiempo real (ZOOM ↵) o pan en tiempo real (PAN): arrastrar con el botón izquierdo. */
-export async function realtimeMode(ctx: CommandContext, mode: 'zoom' | 'pan'): Promise<void> {
+export async function realtimeMode(ctx: CommandContext, mode: 'zoom' | 'pan' | 'orbit' | 'forbit' | 'corbit'): Promise<void> {
   ctx.app.realtime?.(mode)
   try {
     await ctx.getString('Press ESC or ENTER to exit, or right-click to display shortcut menu.', { default: '' })
@@ -277,6 +277,24 @@ export const panCommand: Command = {
     await realtimeMode(ctx, 'pan')
   },
 }
+
+/** Navegación 3D en tiempo real, como el CAD clásico (Esc o Enter para salir; clic derecho, las otras). */
+const nav = (name: string, aliases: string[], mode: 'zoom' | 'pan' | 'orbit' | 'forbit' | 'corbit', description: string): Command => ({
+  name,
+  aliases,
+  description,
+  async run(ctx) {
+    await realtimeMode(ctx, mode)
+  },
+})
+
+export const navCommands: Command[] = [
+  nav('3DORBIT', ['3DO', 'ORBIT'], 'orbit', 'Constrained orbit: drag to turn the view around the target, keeping the Z axis up'),
+  nav('3DFORBIT', [], 'forbit', 'Free orbit: drag to turn the view in any direction (it may roll)'),
+  nav('3DCORBIT', [], 'corbit', 'Continuous orbit: drag and release to keep the view spinning; click to stop'),
+  nav('3DPAN', [], 'pan', 'Real-time pan in a 3D view'),
+  nav('3DZOOM', [], 'zoom', 'Real-time zoom in a 3D view'),
+]
 
 /** -PAN: desplaza la vista por un desplazamiento o de un punto base a otro. */
 export const dashPanCommand: Command = {

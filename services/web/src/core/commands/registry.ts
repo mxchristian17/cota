@@ -39,7 +39,7 @@ import { centerlineCommand, mleaderAlignCommand, mleaderCommand, mleaderEditComm
 import { revolveCommand } from './impl/revolve'
 import { intersectCommand, subtractCommand, unionCommand } from './impl/csg'
 import { orthographicCommand, perspectiveCommand, viewCommand } from './impl/view'
-import { dashPanCommand, limitsCommand, panCommand, zoomCommand, zoomVarCommands } from './impl/zoom'
+import { dashPanCommand, limitsCommand, navCommands, panCommand, zoomCommand, zoomVarCommands } from './impl/zoom'
 import { arrayCommand } from './impl/array'
 import { blockCommand, explodeCommand, insertCommand } from './impl/block'
 import { flatshotCommand } from './impl/project'
@@ -72,6 +72,7 @@ import { redrawCommand } from './impl/redraw'
 import { dashToolbarCommand, fullscreenCommand, gridCommand, layerCommand, propertiesCommand, toolbarCommand, screenCommands, navvcubeCommand } from './impl/ui'
 import { promptCommand } from './impl/ai'
 import { clipboardCommands } from './impl/clipboard'
+import { sliceCommand } from './impl/slice'
 import {
   dimAlignedCommand,
   dimAngularCommand,
@@ -121,6 +122,7 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   engine.register(moveCommand)
   engine.register(copyCommand)
   for (const c of clipboardCommands) engine.register(c)
+  engine.register(sliceCommand)
   engine.register(scaleCommand)
   engine.register(rotateCommand)
   engine.register(mirrorCommand)
@@ -165,6 +167,7 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   engine.register(orthographicCommand)
   engine.register(zoomCommand)
   engine.register(panCommand)
+  for (const c of navCommands) engine.register(c)
   engine.register(dashPanCommand)
   engine.register(limitsCommand)
   for (const c of zoomVarCommands) registerVariable(engine, c)

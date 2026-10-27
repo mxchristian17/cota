@@ -4,6 +4,8 @@ import type { OsnapConfig } from './osnap'
 import { WORLD_UCS } from '../ucs'
 import { pt, type Pt } from '../math'
 import type { Entity, LineEntity } from '../document/types'
+import { solidSnapWireframe } from '../editing/solid'
+import '../../render/csg'
 
 const ALL_ON: OsnapConfig = {
   endpoint: true,
@@ -368,3 +370,19 @@ describe('PER/TAN diferidos', () => {
   })
 })
 
+
+describe('sin intersecciones en el facetado de un sólido', () => {
+  it('los vértices del facetado de un empalme no dan INT; las esquinas reales sí', () => {
+    const round: Entity = { id: 'r', type: 'SOLID3D', layer: '0', props: { op: 'FILLETEDGE', solid: { op: 'BOX', origin: [0, 0, 0], width: 10, depth: 10, height: 10 }, edges: [{ at: [5, 0, 10] }], radius: 2 } as never }
+    // Vista lateral (y, z): el arco del empalme en x = 0 queda en pantalla tal cual.
+    const side = { project: (p: Pt) => [p.y, p.z] as [number, number], osnap: { ...ALL_OFF, intersection: true }, pixelThreshold: 0.3 }
+    const pts = solidSnapWireframe(round.props as never).flat().filter((v) => v[0] === 0 && v[1] > 0.4 && v[1] < 1.6 && v[2] > 8.05)
+    expect(pts.length).toBeGreaterThan(0)
+    for (const v of pts) {
+      const r = computeSnap({ x: 0, y: v[1], z: v[2] }, [round], { ...base({ x: v[1], y: v[2], z: 0 }), ...side })
+      expect(r.type).not.toBe('intersection')
+    }
+    const corner = computeSnap({ x: 0, y: 10, z: 10 }, [round], { ...base({ x: 10, y: 10, z: 0 }), ...side })
+    expect(corner.type).toBe('intersection')
+  })
+})

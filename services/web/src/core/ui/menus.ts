@@ -19,7 +19,7 @@ export const CATEGORIES: { label: string; names: string[] }[] = [
   {
     label: 'View',
     names: [
-      'REDRAW', 'ZOOM', '@zoom', '§Pan', 'PAN', '-PAN', '§Views', 'VIEW', 'PLAN', 'PERSPECTIVE', 'ORTHOGRAPHIC', '@views',
+      'REDRAW', 'ZOOM', '@zoom', '§Pan', 'PAN', '-PAN', '§Orbit', '3DORBIT', '3DFORBIT', '3DCORBIT', '3DPAN', '3DZOOM', '§Views', 'VIEW', 'PLAN', 'PERSPECTIVE', 'ORTHOGRAPHIC', '@views',
       '§Viewports', 'VPORTS', 'MVIEW', 'MSPACE', 'PSPACE', 'VPMAX', 'VPMIN', 'VPCLIP', 'VPLAYER',
       '§Visual styles', 'VSCURRENT', 'SHADEMODE', '§Display', 'FULLSCREEN', 'CLEANSCREENON', 'CLEANSCREENOFF', 'COMMANDLINE', 'COMMANDLINEHIDE', 'NAVVCUBE', 'UCSICON', 'ATTDISP',
     ],
@@ -56,7 +56,7 @@ export const CATEGORIES: { label: string; names: string[] }[] = [
       'PROPERTIES', 'MATCHPROP', '§Object', 'PEDIT', 'HATCHEDIT', 'ATTEDIT', 'EATTEDIT',
       '§Modify', 'ERASE', 'COPY', 'MIRROR', 'OFFSET', 'ARRAY', 'MOVE', 'ROTATE', 'SCALE', 'STRETCH', 'LENGTHEN', 'TRIM', 'EXTEND',
       'BREAKATPOINT', 'BREAK', 'JOIN', 'CHAMFER', 'FILLET',
-      '§3D operations', 'ALIGN', '§Solid editing', 'UNION', 'SUBTRACT', 'INTERSECT', 'FILLETEDGE', 'CHAMFEREDGE', '§', 'EXPLODE',
+      '§3D operations', 'ALIGN', '§Solid editing', 'UNION', 'SUBTRACT', 'INTERSECT', 'SLICE', 'FILLETEDGE', 'CHAMFEREDGE', '§', 'EXPLODE',
     ],
   },
   { label: 'Help', names: ['HELP', 'ABOUT'] },

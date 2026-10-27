@@ -134,7 +134,7 @@ export interface AppHooks {
   /** Rectángulo visible en el plano del objetivo (ZOOM Dynamic). */
   viewRect?(): { center: Vec3; right: Vec3; up: Vec3; width: number; height: number } | null
   /** Modo Realtime de ZOOM/PAN (null sale). */
-  realtime?(mode: 'zoom' | 'pan' | null): void
+  realtime?(mode: 'zoom' | 'pan' | 'orbit' | 'forbit' | 'corbit' | null): void
   /** Vista que encuadraría la ventana `a`–`b`, sin aplicarla (-VIEW Window). */
   windowViewState?(a: Pt, b: Pt): ViewState | null
   /** Vista actual y restauración (vistas guardadas, ZOOM Dynamic). */

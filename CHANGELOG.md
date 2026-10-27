@@ -4,6 +4,23 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-10-27
+
+### Added
+- Orbit commands: 3DORBIT (also 3DO and ORBIT), 3DFORBIT (free orbit, may roll the view), 3DCORBIT (keeps spinning
+  after you release; click to stop), 3DPAN and 3DZOOM. Right-click during any of them switches between Pan, Zoom
+  and the three orbits.
+- SLICE: cut solids with a plane through two points (perpendicular to the UCS XY plane), three points, the XY / YZ
+  / ZX planes, a Z axis or the current view, keeping one side or both.
+- Layer lineweights are drawn on screen in layouts (paper space and the model seen through viewports), at their
+  real width on the sheet. The model stays with thin lines.
+- Curved faces of solids show their silhouette from the current view: the sides of a cylinder, the outline of a
+  sphere or of a swept tube are drawn, not only their end circles.
+
+### Fixed
+- Object snaps on filleted or curved solids no longer offer an intersection at every facet of the tessellation;
+  real corners still snap.
+
 ## [1.1.0] — 2026-10-27
 
 ### Added

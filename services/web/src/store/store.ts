@@ -265,7 +265,7 @@ export interface AppState {
   realtimeMenu: { x: number; y: number } | null
   setRealtimeMenu: (m: { x: number; y: number } | null) => void
   /** Acción del menú Realtime: Exit, Pan, Zoom, Zoom Window, Zoom Original, Zoom Extents. */
-  realtimeAction: (a: 'exit' | 'pan' | 'zoom' | 'window' | 'original' | 'extents') => void
+  realtimeAction: (a: 'exit' | 'pan' | 'zoom' | 'orbit' | 'forbit' | 'corbit' | 'window' | 'original' | 'extents') => void
   /** Panel *Hatch Creation* / *Hatch Editor*: los sombreados a los que se aplican los cambios. */
   hatchPanel: { mode: 'create' | 'edit'; ids: string[] } | null
   setHatchPanel: (p: { mode: 'create' | 'edit'; ids: string[] } | null) => void
@@ -1182,7 +1182,7 @@ export const useStore = create<AppState>((set, get) => {
     realtimeAction: (a) => {
       const vp = get().activeViewport
       set({ realtimeMenu: null })
-      if (a === 'pan' || a === 'zoom') vp?.setRealtime(a)
+      if (a === 'pan' || a === 'zoom' || a === 'orbit' || a === 'forbit' || a === 'corbit') vp?.setRealtime(a)
       else if (a === 'original') vp?.realtimeOriginal()
       else if (a === 'extents') vp?.zoomExtents()
       else {
