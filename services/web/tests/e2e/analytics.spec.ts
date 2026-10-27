@@ -1,52 +1,49 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 /** Llama a `startAnalytics` del módulo real (el servidor de desarrollo lo sirve tal cual) con una configuración. */
-const start = (page: import('@playwright/test').Page, env: Record<string, string>) =>
+const start = (page: Page, env: Record<string, string>) =>
   page.evaluate(async (e) => {
     const m = await import('/src/analytics.ts' as string)
     m.startAnalytics(e)
   }, env)
 
-test.describe('Cota usage statistics (optional)', () => {
-  test('nothing is sent without configuration; Google loads only after consent and never after a refusal', async ({ page }) => {
+const SITE = '2f0e5b1c-9a7d-4c3e-8f61-0b2d4a6c8e10'
+
+test.describe('Cota usage statistics (optional, cookieless)', () => {
+  test('nothing is sent without a valid configuration', async ({ page }) => {
     const external: string[] = []
-    await page.route(/googletagmanager\.com|goatcounter\.com/, (route) => {
+    await page.route(/umami/, (route) => {
       external.push(route.request().url())
-      return route.fulfill({ status: 204, body: '' })
+      return route.fulfill({ status: 200, body: '{}' })
     })
     await page.goto('/')
     await expect(page.getByTestId('command-input')).toBeVisible()
     await start(page, {})
-    await start(page, { VITE_ANALYTICS_GA4: 'javascript:alert(1)', VITE_ANALYTICS_GOATCOUNTER: 'https://evil.example/count' })
-    expect(external).toEqual([])
-
-    await start(page, { VITE_ANALYTICS_GA4: 'G-ABC123XYZ' })
-    await expect(page.getByTestId('analytics-consent')).toBeVisible()
-    expect(external).toEqual([]) // el aviso todavía no fue respondido
-    await page.getByTestId('analytics-allow').click()
-    await expect.poll(() => external.some((u) => u.includes('gtag/js?id=G-ABC123XYZ'))).toBe(true)
-    await start(page, { VITE_ANALYTICS_GA4: 'G-ABC123XYZ' })
-    await expect(page.getByTestId('analytics-consent')).toHaveCount(0) // la respuesta se recuerda
-
-    await page.evaluate(() => localStorage.setItem('cota.analyticsConsent', 'no'))
-    external.length = 0
-    await start(page, { VITE_ANALYTICS_GA4: 'G-ABC123XYZ' })
-    await expect(page.getByTestId('analytics-consent')).toHaveCount(0)
+    await start(page, { VITE_ANALYTICS_UMAMI: 'not-an-id' })
+    await start(page, { VITE_ANALYTICS_UMAMI: SITE, VITE_ANALYTICS_UMAMI_HOST: 'javascript:alert(1)' })
+    await page.waitForTimeout(300)
     expect(external).toEqual([])
   })
 
-  test('GoatCounter counts the visit with a single request, without cookies or third-party code', async ({ page }) => {
-    const hits: string[] = []
-    await page.route(/goatcounter\.com/, (route) => {
-      hits.push(route.request().url())
-      return route.fulfill({ status: 204, body: '' })
+  test('a visit is one request, leaving sends the end of the visit; no cookies and no third-party code', async ({ page }) => {
+    const sent: Array<{ url: string; body: { type: string; payload: Record<string, string> } }> = []
+    await page.route(/gateway\.umami\.is/, (route) => {
+      sent.push({ url: route.request().url(), body: route.request().postDataJSON() })
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{}', headers: { 'access-control-allow-origin': '*' } })
     })
-    await page.goto('/')
+    await page.goto('/?utm_source=linkedin')
     await expect(page.getByTestId('command-input')).toBeVisible()
-    await start(page, { VITE_ANALYTICS_GOATCOUNTER: 'https://cota.goatcounter.com/count' })
-    await expect.poll(() => hits.length).toBe(1)
-    expect(hits[0]).toMatch(/^https:\/\/cota\.goatcounter\.com\/count\?p=%2F/)
-    expect(await page.locator('script[src*="goatcounter"], script[src*="zgo.at"]').count()).toBe(0)
+    await start(page, { VITE_ANALYTICS_UMAMI: SITE })
+    await expect.poll(() => sent.length).toBe(1)
+    expect(sent[0].url).toBe('https://gateway.umami.is/api/send')
+    expect(sent[0].body.type).toBe('event')
+    expect(sent[0].body.payload.website).toBe(SITE)
+    expect(sent[0].body.payload.url).toBe('/?utm_source=linkedin') // la atribución del enlace
+    expect(sent[0].body.payload.name).toBeUndefined()
+    await page.evaluate(() => window.dispatchEvent(new Event('pagehide')))
+    await expect.poll(() => sent.length).toBe(2)
+    expect(sent[1].body.payload.name).toBe('leave')
+    expect(await page.locator('script[src*="umami"]').count()).toBe(0)
     expect(await page.context().cookies()).toEqual([])
   })
 })

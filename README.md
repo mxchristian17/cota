@@ -130,11 +130,11 @@ Bug reports, feature requests and pull requests are welcome. Read [CONTRIBUTING.
 
 ## Privacy
 
-The online demo has no accounts and no trackers. It may count visits anonymously (the page, the site you came
-from, the screen size and the language) with GoatCounter, which sets no cookies; if Google Analytics is used
-instead, nothing from Google loads until you accept it, and your answer is remembered. "Do Not Track" is honored.
-Your drawings, commands and settings are never sent: they stay in your browser (or in the folder you choose).
-Builds you make yourself send no statistics at all. The site is hosted by GitHub Pages, which keeps its own server logs under
+The online demo has no accounts, cookies or third-party scripts. It counts visits anonymously with
+[Umami](https://umami.is) (open source): the page, the site you came from, the screen size, the language and how
+long the visit lasted. Umami groups a visit with an identifier that changes every day and cannot be linked to a
+person, and "Do Not Track" is honored. Your drawings, commands and settings are never sent: they stay in your
+browser (or in the folder you choose). Builds you make yourself send no statistics at all. The site is hosted by GitHub Pages, which keeps its own server logs under
 the [GitHub Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).
 If you run the optional server, you are responsible for the data it stores; the AI feature sends your prompts
 to the provider whose API key you configure.

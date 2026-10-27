@@ -38,8 +38,8 @@ jobs:
           COTA_BASE: /${{ github.event.repository.name }}/
           # Estadísticas de visitas de la demo, opcionales: variables del repo (Settings ▸ Secrets and variables ▸
           # Actions ▸ Variables). Vacías = sin estadísticas. Ver services/web/src/analytics.ts.
-          VITE_ANALYTICS_GOATCOUNTER: ${{ vars.ANALYTICS_GOATCOUNTER }}
-          VITE_ANALYTICS_GA4: ${{ vars.ANALYTICS_GA4 }}
+          VITE_ANALYTICS_UMAMI: ${{ vars.ANALYTICS_UMAMI }}
+          VITE_ANALYTICS_UMAMI_HOST: ${{ vars.ANALYTICS_UMAMI_HOST }}
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

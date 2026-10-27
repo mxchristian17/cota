@@ -4,6 +4,14 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [1.9.0] — 2026-10-27
+
+### Changed
+- Visit statistics for a public deployment use [Umami](https://umami.is) (open source, no cookies): visits, where
+  visitors come from (including UTM tags) and how long the visit lasted. No third-party script is loaded; off
+  unless the build sets `VITE_ANALYTICS_UMAMI`. The Google Analytics and GoatCounter options added in 1.8.0 are
+  removed.
+
 ## [1.8.0] — 2026-10-27
 
 ### Added

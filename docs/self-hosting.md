@@ -161,13 +161,16 @@ the users' disks.
 
 ## Visit statistics (optional)
 
-Builds send no statistics unless you configure them at build time:
+Builds send no statistics unless you configure them at build time. Cota supports [Umami](https://umami.is), an
+open-source, cookieless analytics service (Umami Cloud has a free plan, or you can host Umami yourself):
 
-| Variable | Value | Behavior |
-| --- | --- | --- |
-| `VITE_ANALYTICS_GOATCOUNTER` | `https://<code>.goatcounter.com/count` | One request per visit, no cookies, no third-party script |
-| `VITE_ANALYTICS_GA4` | `G-XXXXXXXXXX` | Google Analytics 4, loaded only after the visitor accepts a notice |
+| Variable | Value |
+| --- | --- |
+| `VITE_ANALYTICS_UMAMI` | The website id from Umami (a UUID) |
+| `VITE_ANALYTICS_UMAMI_HOST` | Optional: your Umami server, e.g. `https://stats.example.com` (default: Umami Cloud) |
 
-On GitHub Pages, set them as repository variables `ANALYTICS_GOATCOUNTER` or `ANALYTICS_GA4` (Settings ▸ Secrets and
-variables ▸ Actions ▸ Variables); the Pages workflow passes them to the build. Only visits are counted: drawings,
-commands and anything typed are never sent, and visitors with "Do Not Track" are not counted.
+No third-party script is loaded: Cota sends one request when the page opens and one when the visitor leaves (so
+Umami can measure how long the visit lasted). Drawings, commands and anything typed are never sent, and visitors
+with "Do Not Track" are not counted. On GitHub Pages, set the repository variables `ANALYTICS_UMAMI` (and
+optionally `ANALYTICS_UMAMI_HOST`) in Settings ▸ Secrets and variables ▸ Actions ▸ Variables; the Pages workflow
+passes them to the build.
