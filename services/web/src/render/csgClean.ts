@@ -31,13 +31,35 @@ function bvhOf(g: THREE.BufferGeometry): MeshBVH {
   return (g as THREE.BufferGeometry & { boundsTree?: MeshBVH }).boundsTree ?? new MeshBVH(g)
 }
 
+/**
+ * Raycast tolerante: three-mesh-bvh interpola las normales del impacto y, en un triángulo sin área (la CSG los deja),
+ * la interpolación es null y el raycast falla. Entonces se repite sobre una copia sólo con posiciones.
+ */
+const plain = new WeakMap<MeshBVH, MeshBVH>()
+function safeRaycast(bvh: MeshBVH, r: THREE.Ray): THREE.Intersection[] {
+  try {
+    return bvh.raycast(r, THREE.DoubleSide)
+  } catch {
+    let alt = plain.get(bvh)
+    if (!alt) {
+      const src = bvh.geometry
+      const g = new THREE.BufferGeometry()
+      g.setAttribute('position', src.getAttribute('position'))
+      if (src.index) g.setIndex(src.index.clone())
+      alt = new MeshBVH(g)
+      plain.set(bvh, alt)
+    }
+    return alt.raycast(r, THREE.DoubleSide)
+  }
+}
+
 /** Posición de `p` respecto de una malla cerrada: sobre su superficie (a menos de `eps`), dentro o fuera. */
 function classify(bvh: MeshBVH, p: THREE.Vector3, eps: number): Side {
   if (bvh.closestPointToPoint(p, near, 0, eps)) return 'on'
   let inside = 0
   for (const d of DIRS) {
     ray.set(p, d)
-    const ds = bvh.raycast(ray, THREE.DoubleSide).map((h) => h.distance).sort((a, b) => a - b)
+    const ds = safeRaycast(bvh, ray).map((h) => h.distance).sort((a, b) => a - b)
     // Un rayo que pasa por una arista compartida la cuenta dos veces: impactos a la misma distancia = uno.
     let n = 0
     for (let i = 0; i < ds.length; i++) if (i === 0 || ds[i] - ds[i - 1] > eps) n++

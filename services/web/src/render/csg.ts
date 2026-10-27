@@ -43,7 +43,50 @@ const cache = new Map<string, THREE.BufferGeometry>()
 /** three-bvh-csg exige que TODOS los operandos tengan el MISMO set de atributos (position/normal/uv).
  *  Las primitivas de Three traen los tres; las geometrías custom (LOFT) no traen `uv`. Normalizamos
  *  cada geometría antes de la CSG: garantizamos `normal` y agregamos `uv` (relleno) si falta. */
-function prepareForCsg(geom: THREE.BufferGeometry): THREE.BufferGeometry {
+/**
+ * Sin triángulos de área nula: three-bvh-csg clasifica lanzando rayos contra los operandos y, en un triángulo
+ * degenerado, la interpolación de la normal del impacto es null y la operación entera falla (el operando se perdía).
+ */
+function withoutSlivers(geom: THREE.BufferGeometry): THREE.BufferGeometry {
+  const pos = geom.getAttribute('position') as THREE.BufferAttribute | undefined
+  if (!pos) return geom
+  const idx = geom.getIndex()
+  const n = (idx ? idx.count : pos.count) / 3
+  geom.computeBoundingBox()
+  const size = geom.boundingBox ? geom.boundingBox.getSize(new THREE.Vector3()).length() : 0
+  const min = (size * 1e-9) ** 2
+  const [a, b, c] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]
+  const keep: number[] = []
+  for (let t = 0; t < n; t++) {
+    const at = (k: number) => (idx ? idx.getX(3 * t + k) : 3 * t + k)
+    a.fromBufferAttribute(pos, at(0))
+    b.fromBufferAttribute(pos, at(1))
+    c.fromBufferAttribute(pos, at(2))
+    // Relativo a sus lados: una aguja muy larga y finita también anula el denominador baricéntrico de three.js
+    // (cancelación), aunque su área no sea cero.
+    const u = b.sub(a)
+    const v = c.sub(a)
+    const uu = u.lengthSq()
+    const vv = v.lengthSq()
+    const cr = u.clone().cross(v).lengthSq()
+    if (cr > min && cr > 1e-10 * uu * vv) keep.push(t)
+  }
+  if (keep.length === n) return geom
+  const src = idx ? geom.toNonIndexed() : geom
+  const out = new THREE.BufferGeometry()
+  for (const [name, attr] of Object.entries(src.attributes)) {
+    const at = attr as THREE.BufferAttribute
+    const arr = new Float32Array(keep.length * 3 * at.itemSize)
+    keep.forEach((t, i) => {
+      for (let k = 0; k < 3 * at.itemSize; k++) arr[i * 3 * at.itemSize + k] = at.array[t * 3 * at.itemSize + k]
+    })
+    out.setAttribute(name, new THREE.BufferAttribute(arr, at.itemSize))
+  }
+  return out
+}
+
+function prepareForCsg(raw: THREE.BufferGeometry): THREE.BufferGeometry {
+  const geom = withoutSlivers(raw)
   tagSurfaces(geom)
   if (!geom.getAttribute('normal')) geom.computeVertexNormals()
   if (!geom.getAttribute('uv')) {

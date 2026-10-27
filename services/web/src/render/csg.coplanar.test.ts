@@ -40,3 +40,21 @@ describe('booleanas con caras coplanares', () => {
     expect(volume(solidGeometry({ op: 'SUBTRACT', operands: [plate, pocket] }))).toBeCloseTo(300 * 110 * 12 - volume(solidGeometry(pocket)), 1)
   })
 })
+
+describe('operandos con triángulos aguja', () => {
+  it('un cigüeñal real (brazos, muñón, volante con alivianados y chaflán) se une sin perder operandos', async () => {
+    const props = (await import('./__fixtures__/crankshaft.json')).default as SolidProps
+    const warn = console.warn
+    const warnings: unknown[] = []
+    console.warn = (...a: unknown[]) => void warnings.push(a[0])
+    try {
+      const t = performance.now()
+      const g = solidGeometry(props)
+      expect(warnings).toEqual([]) // antes: "boolean operation failed; one operand is skipped" (null.dot en el raycast)
+      expect(g.getAttribute('position').count / 3).toBeGreaterThan(7000)
+      expect(performance.now() - t).toBeLessThan(20_000)
+    } finally {
+      console.warn = warn
+    }
+  }, 30_000)
+})

@@ -48,6 +48,8 @@ export function closeTJunctions(geom: THREE.BufferGeometry): THREE.BufferGeometr
     ids[i] = id
   }
 
+  const P = (id: number): [number, number, number] => [pos.getX(uniq[id]), pos.getY(uniq[id]), pos.getZ(uniq[id])]
+
   // Aristas sin pareja: ahí están las T.
   const tris = n / 3
   const ekey = (a: number, b: number) => (a < b ? a * 4294967296 + b : b * 4294967296 + a)
@@ -69,15 +71,21 @@ export function closeTJunctions(geom: THREE.BufferGeometry): THREE.BufferGeometr
       if (count.get(ekey(a, b)) === 1) candidates.add(a).add(b)
     }
   }
+  /** Triángulo sin área (vértices alineados): no se ve y rompe la interpolación de normales del raycast. */
+  const flat = (t: number) => {
+    const [a, b, c] = [P(ids[3 * t]), P(ids[3 * t + 1]), P(ids[3 * t + 2])]
+    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+    const v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]]
+    return Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]) < weld * weld
+  }
   let welded = false
-  for (let t = 0; t < tris && !welded; t++) welded = degenerate(t)
+  for (let t = 0; t < tris && !welded; t++) welded = degenerate(t) || flat(t)
   if (candidates.size === 0 && !welded) return geom
 
   // Grilla espacial de los extremos de aristas abiertas.
   const cell = size / 128
   const grid = new Map<string, number[]>()
   const ck = (x: number, y: number, z: number) => `${Math.floor(x / cell)},${Math.floor(y / cell)},${Math.floor(z / cell)}`
-  const P = (id: number): [number, number, number] => [pos.getX(uniq[id]), pos.getY(uniq[id]), pos.getZ(uniq[id])]
   for (const id of candidates) {
     const [x, y, z] = P(id)
     const k = ck(x, y, z)
@@ -149,8 +157,8 @@ export function closeTJunctions(geom: THREE.BufferGeometry): THREE.BufferGeometr
 
   for (let t = 0; t < tris; t++) {
     const i0 = 3 * t
-    if (ids[i0] === ids[i0 + 1] || ids[i0 + 1] === ids[i0 + 2] || ids[i0] === ids[i0 + 2]) {
-      changed = true // astilla que la soldadura dejó sin área
+    if (degenerate(t) || flat(t)) {
+      changed = true // astilla sin área (soldada o con sus tres vértices alineados)
       continue
     }
     const extra: Array<Array<{ id: number; t: number }>> = [0, 1, 2].map((k) => {

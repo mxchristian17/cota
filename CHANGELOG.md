@@ -4,6 +4,13 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [1.5.1] — 2026-10-27
+
+### Fixed
+- A union of many parts (a crankshaft with its webs, pin and a flywheel with lightening holes) could silently drop
+  one of them: needle-thin triangles in an operand made the boolean fail. They are removed before each operation,
+  and the inside/outside test retries without normals when it meets one.
+
 ## [1.5.0] — 2026-10-27
 
 ### Added
