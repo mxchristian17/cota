@@ -176,6 +176,8 @@ export interface AppHooks {
   currentViewBasis?(): ProjBasis | null
   /** Proyección 2D con líneas ocultas de lo 3D visible del modelo (o de los objetos `ids`). */
   projectModel?(ids: string[] | null, basis: ProjBasis, opts: { showObscured: boolean; tangential: boolean }): ProjItem[]
+  /** Proyección, en coordenadas de la vista, del centro 3D de lo que se documenta (origen común de las vistas). */
+  viewOrigin?(ids: string[] | null, basis: ProjBasis): [number, number] | null
   /** Triángulos sombreados de lo 3D visible del modelo (o de `ids`) vistos en `basis`. */
   shadeModel?(ids: string[] | null, basis: ProjBasis): ShadeProps
   /** Tramos de la proyección con sus extremos 3D, sin unir (SOLPROF sin proyectar). */
@@ -254,6 +256,11 @@ export interface CommandContext {
   getSelection(prompt: string): Promise<string[] | null>
   /** Resalta objetos hasta que termina el comando (los encontrados por una ventana de STRETCH, etc.). */
   highlight(ids: string[]): void
+  /**
+   * Marca (resaltados) los objetos que el comando tomó con un clic (FILLET, OFFSET, BREAK…), sin cambiar la
+   * selección: así se ve sobre qué se está trabajando. Se sueltan al terminar el comando.
+   */
+  markPicked(ids: string[]): void
   /** Selección (sin tomar la pre-selección) que también acepta opciones tecleadas. null si se cancela. */
   getSelectionOrKeyword(prompt: string, keywords: string[]): Promise<{ kind: 'selection'; ids: string[] } | { kind: 'keyword'; keyword: string } | null>
   /** Solicita texto libre por la línea de comandos (p. ej. nombre de archivo). null si se cancela. */

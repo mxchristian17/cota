@@ -1,4 +1,4 @@
-import { frozenLayerIds, layerShown } from '../core/layers/visibility'
+import { frozenLayerIds, layerEditable, layerShown } from '../core/layers/visibility'
 import { type ProjStd } from '../core/viewNet'
 import { setChainBase } from '../core/commands/impl/dim'
 import { reassociatePoint } from '../core/dimension/assoc'
@@ -171,6 +171,8 @@ export interface AppState {
   aiMinimized: boolean
   aiLod: number
   aiLog: string[]
+  /** Objetos que el comando en curso tomó con un clic: se ven resaltados (no son la selección). */
+  picked: string[]
   selection: string[]
   // auth / persistencia
   token: string | null
@@ -607,6 +609,18 @@ export const useStore = create<AppState>((set, get) => {
     const { meshes, hints } = modelMeshes(ids)
     return meshes.length ? flatshotItems(meshes, hints, basis, opts) : []
   }
+  /** Centro 3D (caja envolvente) de lo que se documenta, proyectado a la vista: el origen común de las vistas. */
+  const viewOrigin = (ids: string[] | null, basis: ProjBasis): [number, number] | null => {
+    const lo = [Infinity, Infinity, Infinity]
+    const hi = [-Infinity, -Infinity, -Infinity]
+    for (const m of modelMeshes(ids).meshes) {
+      for (const v of m.vertices) for (let k = 0; k < 3; k++) [lo[k], hi[k]] = [Math.min(lo[k], v[k]), Math.max(hi[k], v[k])]
+    }
+    if (!isFinite(lo[0])) return null
+    const c = [0, 1, 2].map((k) => (lo[k] + hi[k]) / 2)
+    const dotb = (b: number[]) => c[0] * b[0] + c[1] * b[1] + c[2] * b[2]
+    return [dotb(basis.right), dotb(basis.up)]
+  }
   /** Firma del modelo (para saber si una vista de dibujo quedó desactualizada). */
   const modelSignature = (): string => {
     const text = JSON.stringify(doc.modelEntities.map((e) => [e.id, e.type, e.layer, e.props])) + JSON.stringify(doc.blocks.filter((b) => !b.name.startsWith('*')))
@@ -629,7 +643,7 @@ export const useStore = create<AppState>((set, get) => {
           const { meshes, colors } = modelMeshes(v.source)
           return shadeViewTriangles(meshes, colors, v.basis)
         })() : null
-        doc.setBlock({ name: e.props.name, entities: viewBlockEntities(items, layers, shade).entities })
+        doc.setBlock({ name: e.props.name, entities: viewBlockEntities(items, layers, shade, viewOrigin(v.source, v.basis)).entities })
         v.sig = sig
         n++
       }
@@ -856,6 +870,7 @@ export const useStore = create<AppState>((set, get) => {
     },
     currentViewBasis: () => currentViewBasis(),
     projectModel: (ids, basis, opts) => projectModel(ids, basis, opts),
+    viewOrigin: (ids, basis) => viewOrigin(ids, basis),
     shadeModel: (ids, basis) => {
       const { meshes, colors } = modelMeshes(ids)
       return shadeViewTriangles(meshes, colors, basis)
@@ -987,6 +1002,7 @@ export const useStore = create<AppState>((set, get) => {
     currentUcs: () => get().ucs,
     currentSelection: () => get().selection,
     onSelectionChange: (ids) => set({ selection: ids }),
+    onPicked: (ids) => set({ picked: ids }),
     app,
     onPrompt: (prompt) => set({ prompt }),
     onPrint: print,
@@ -1195,6 +1211,7 @@ export const useStore = create<AppState>((set, get) => {
     aiLod: 2,
     aiLog: [],
     selection: [],
+    picked: [],
     token: null,
     email: null,
     docId: null,
@@ -1407,7 +1424,7 @@ export const useStore = create<AppState>((set, get) => {
       const e0 = doc.getEntity(entityId)
       if (!e0) return
       const l = layerSvc.get(e0.layer)
-      if (l && (l.locked || !layerShown(l))) return
+      if (l && !layerEditable(l)) return
       // Fantasma en vivo: clona la entidad y aplica el grip al cursor (el motor aplica ORTHO/snap).
       const preview = (cursor: Pt): PreviewShape[] => {
         const src = doc.getEntity(entityId)
@@ -1427,7 +1444,7 @@ export const useStore = create<AppState>((set, get) => {
       const e = doc.getEntity(entityId)
       if (!e) return
       const l = layerSvc.get(e.layer)
-      if (l && (l.locked || !layerShown(l))) return
+      if (l && !layerEditable(l)) return
       // No-op: fijar el grip en su mismo lugar no genera un paso de undo.
       const g = grip.point
       if (Math.hypot(to[0] - g[0], to[1] - g[1], to[2] - g[2]) < 1e-9) return
@@ -1443,7 +1460,7 @@ export const useStore = create<AppState>((set, get) => {
     boxSelect: (rect, crossing, project, subtract = false) => {
       const selectable = doc.entities.filter((e) => {
         const l = layerSvc.get(e.layer)
-        return !l || (layerShown(l) && !l.locked)
+        return layerEditable(l)
       })
       const ids = entitiesInScreenBox(selectable, rect, crossing, project)
       if (engine.isSelecting) {
@@ -2308,7 +2325,7 @@ export const useStore = create<AppState>((set, get) => {
         const e = doc.getEntity(id)
         if (!e) return false
         const l = layerSvc.get(e.layer)
-        return !l || (layerShown(l) && !l.locked)
+        return layerEditable(l)
       })
       if (removable.length === 0) return
       pushSnapshot()

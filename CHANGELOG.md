@@ -4,7 +4,16 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-10-27
+
 ### Added
+- Frozen layers are shown in grays (from #222 to #CCC, by the brightness of their color): they cannot be
+  selected or edited but still give object snaps. Layers turned off disappear completely until turned on.
+- A clean click inside a solid selects it, in wireframe styles too.
+- Objects taken with a click by FILLET, CHAMFER, OFFSET, BREAK, LENGTHEN, JOIN, MATCHPROP, PEDIT and DIMEDIT stay
+  highlighted until the command ends.
+- Color 7 behaves as in classic CAD in both directions: white layers display black on a light background and
+  black layers display white on a dark one.
 - Unexpected errors show a closable message and the app keeps working; if the interface itself fails it is
   remounted instead of leaving a blank screen.
 - Solids show their tangent edges (where a flat face meets a fillet), in the model and in drawing views, as in
@@ -31,6 +40,7 @@ All notable changes to Cota are documented here. The project follows [Semantic V
   the same shade.
 
 ### Changed
+- GitHub Actions on their current major versions; Zustand 5.0.16.
 - React 19; @eslint/js 10 and current typescript-eslint; GitHub Actions on their current major versions.
 - Development toolchain updated: Vite 8, Vitest 5, ESLint 10, Playwright 1.64, @vitejs/plugin-react 6. No known
   vulnerabilities in the development dependencies either (`npm audit`: 0).
@@ -38,6 +48,11 @@ All notable changes to Cota are documented here. The project follows [Semantic V
   by hand, with tests.
 
 ### Fixed
+- EXTRUDE ▸ Path follows the path exactly (its corners are mitered instead of rounded off), no longer twists along
+  S-shaped curves, starts at the end of the path nearest the profile, and reports when the path lies in the
+  profile's plane. A height picked with the cursor is measured from the profile.
+- Drawing views keep their projection alignment: a view with arcs (a bored or notched part) was shifted sideways
+  from its parent. VIEWUPDATE on existing views realigns them.
 - VIEWPROJ with solids selected in the model hung the app; any command asking for objects again no longer loops
   on the preselection.
 - Coordinates no longer carry floating-point noise (a line drawn to x = 1 stored 0.9999999999995453); ortho keeps

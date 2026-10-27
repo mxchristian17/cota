@@ -33,6 +33,8 @@ export interface CommandEngineDeps {
   currentUcs: () => Ucs
   currentSelection: () => string[]
   onSelectionChange: (ids: string[]) => void
+  /** Objetos tomados por el comando en curso (sólo para resaltarlos). */
+  onPicked?: (ids: string[]) => void
   app: AppHooks
   onPrompt: (prompt: string) => void
   onPrint: (line: string) => void
@@ -145,6 +147,10 @@ export class CommandEngine {
       getDistance: (prompt, opts) => this.requestDistance(prompt, opts),
       getAngle: (prompt, opts) => this.requestAngle(prompt, opts),
       getSelection: (prompt) => this.requestSelection(prompt),
+      markPicked: (ids) => {
+        for (const id of ids) if (!this.picked.includes(id)) this.picked.push(id)
+        this.deps.onPicked?.([...this.picked])
+      },
       highlight: (ids) => {
         this.selectionUsed = true // se suelta al terminar el comando
         this.deps.onSelectionChange(ids)
@@ -441,6 +447,10 @@ export class CommandEngine {
       if (this.selectionUsed && cmd.name !== 'SELECT' && cmd.name !== 'SELECTSIMILAR') this.deps.onSelectionChange([])
       // Sin ruido de punto flotante en lo que quedó guardado (1 y no 0.9999999999995453).
       this.ctx.doc.cleanNumbers()
+      if (this.picked.length) {
+        this.picked = []
+        this.deps.onPicked?.([])
+      }
       this.deps.onAfterCommand(cmd.name)
       this.setPrompt('')
       this.deps.onChange()
@@ -588,6 +598,7 @@ export class CommandEngine {
   private previousSet: string[] = []
   /** ¿El comando en curso pidió una selección? (para vaciarla al terminar). */
   private selectionUsed = false
+  private picked: string[] = []
   private preselectionTaken = false
 
   /** Agrega (o quita) ids a la selección en curso, como un paso deshacible; informa "N found". */

@@ -198,7 +198,7 @@ test.describe('Cota paletas: LAYER modal + Properties', () => {
     expect(await layerNames()).toEqual(['Abajo', 'Arriba', '0'])
   })
 
-  test('Freeze: la capa congelada no se ve ni se selecciona; la actual no se congela', async ({ page }) => {
+  test('Freeze: la capa congelada se ve en grises pero no se selecciona; la actual no se congela', async ({ page }) => {
     const selection = () =>
       page.evaluate(() => (window as unknown as { __cotaStore: { getState: () => { selection: string[] } } }).__cotaStore.getState().selection.length)
     await typeCmd(page, 'LA')

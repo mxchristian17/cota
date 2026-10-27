@@ -126,7 +126,7 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
         entities: s.doc.entities,
         blocks: s.doc.blocks,
         layers: s.doc.layers,
-        selection: s.selection,
+        selection: s.picked.length ? [...s.selection, ...s.picked] : s.selection,
         gridSnap: s.gridSnap,
         gridStep: s.gridStep,
         gridOn: s.gridOn,

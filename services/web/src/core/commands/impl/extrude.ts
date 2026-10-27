@@ -43,11 +43,15 @@ export const extrudeCommand: Command = {
     }
 
     // Opciones del CAD clásico: Direction (dos puntos), Path (barrido por una curva) y Taper angle.
+    const ring0 = ringOf(items[0])
+    const c0 = mul(ring0.reduce(add, [0, 0, 0] as Vec3), 1 / ring0.length)
+    const profileBase = { x: c0[0], y: c0[1], z: c0[2] }
     let taper = 0
     let made: SolidProps[] | null = null
     while (!made) {
       const r = await askDistance(ctx, 'EXTRUDE.height', `Specify height of extrusion or [Direction/Path/Taper angle]${taper ? ` (taper ${fmt(taper)}°)` : ''}`, {
-        base: { x: 0, y: 0, z: 0 },
+        // La altura con el cursor se mide desde el perfil (no desde el origen del dibujo).
+        base: profileBase,
         valid: (v) => v !== 0,
         keywords: ['Direction', 'Path', 'Taper'],
       })
@@ -77,12 +81,17 @@ export const extrudeCommand: Command = {
       if (r.kind === 'keyword' && r.keyword === 'Path') {
         const sel = await ctx.getSelection('Select extrusion path: ')
         if (!sel?.length) return
-        const path = sel.map((id) => ctx.doc.getEntity(id)).map((e) => (e && !items.some((it) => it.id === e.id) ? pathPoints(e) : null)).find((x) => x)
+        const path = sel.map((id) => ctx.doc.getEntity(id)).map((e) => (e && !items.some((it) => it.id === e.id) ? pathOf(e) : null)).find((x) => x)
         if (!path) {
           ctx.print('The path must be a line, polyline, arc or spline.')
           continue
         }
-        made = items.map((it) => alongPath(ringOf(it), path))
+        const swept = items.map((it) => alongPath(ringOf(it), path.points, path.smooth))
+        if (swept.some((x) => !x)) {
+          ctx.print('The path lies in the plane of the profile: it cannot be extruded along it.')
+          continue
+        }
+        made = swept as SolidProps[]
         break
       }
       if (r.kind !== 'distance' || r.value === 0) {
@@ -143,24 +152,32 @@ function alongDirection(ring: Vec3[], d: Vec3): SolidProps {
   return { op: 'LOFT', sections: [ring, ring.map((p) => add(p, d))] }
 }
 
-/** Curva de una entidad que sirve de recorrido. */
-function pathPoints(e: Entity): Vec3[] | null {
-  if (e.type === 'LINE') return [e.props.start, e.props.end]
-  if (e.type === 'POLYLINE') return polylinePoints(e.props)
-  if (e.type === 'ARC') return tessellateArc(e.props)
-  if (e.type === 'SPLINE') return e.props.controlPoints
+/** Curva de una entidad que sirve de recorrido (la spline, por sus puntos de control, se suaviza al barrer). */
+function pathOf(e: Entity): { points: Vec3[]; smooth: boolean } | null {
+  if (e.type === 'LINE') return { points: [e.props.start, e.props.end], smooth: false }
+  if (e.type === 'POLYLINE') return { points: polylinePoints(e.props), smooth: false }
+  if (e.type === 'ARC') return { points: tessellateArc(e.props), smooth: false }
+  if (e.type === 'SPLINE' && e.props.controlPoints.length >= 2) return { points: e.props.controlPoints, smooth: true }
   return null
 }
 
-/** Path: el recorrido se lleva al centroide del perfil (como el CAD clásico) y el perfil se barre por él. */
-function alongPath(ring: Vec3[], path: Vec3[]): SolidProps {
+/**
+ * Path, como el CAD clásico: el recorrido arranca en su extremo más cercano al perfil, se lleva al centroide del
+ * perfil y el perfil se barre por él. El perfil se toma en el plano perpendicular al primer tramo; si el recorrido
+ * está en el plano del perfil no hay sólido (null).
+ */
+function alongPath(ring: Vec3[], path: Vec3[], smooth: boolean): SolidProps | null {
   const c = mul(ring.reduce(add, [0, 0, 0] as Vec3), 1 / ring.length)
-  const moved = path.map((p) => add(sub(p, path[0]), c))
-  const t = unit(sub(path[1], path[0]))
+  const near = (p: Vec3) => Math.hypot(...sub(p, c))
+  const p = near(path[path.length - 1]) < near(path[0]) ? [...path].reverse() : path
+  const moved = p.map((q) => add(sub(q, p[0]), c))
+  const t = unit(sub(moved.find((q) => Math.hypot(...sub(q, moved[0])) > 1e-9) ?? moved[1], moved[0]))
+  const n = unit(profileNormal(ring))
+  if (Math.abs(dot(n, t)) < 0.1) return null
   const r = unit(cross(Math.abs(t[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0], t))
   const y = cross(t, r)
   const profile = ring.map((q): [number, number] => [dot(sub(q, c), r), dot(sub(q, c), y)])
-  return { op: 'SWEEP', profile, path: moved, ref: r }
+  return { op: 'SWEEP', profile, path: moved, ref: r, ...(smooth ? { smooth: true } : {}) }
 }
 
 /**

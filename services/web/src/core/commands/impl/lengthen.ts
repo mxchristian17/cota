@@ -73,6 +73,7 @@ async function change(ctx: CommandContext): Promise<void> {
       ctx.print('No object found.')
       continue
     }
+    ctx.markPicked([pk.entity.id])
     if (pk.curve.closed) {
       ctx.print('This object has no length definition.')
       continue

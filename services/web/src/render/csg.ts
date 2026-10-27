@@ -3,6 +3,7 @@ import { ADDITION, Brush, Evaluator, INTERSECTION, SUBTRACTION } from 'three-bvh
 import type { Vec3 } from '../core/math'
 import type { EdgeBlendProps, MeshProps, RevolveProps, SolidBasis, SolidProps } from '../core/document/types'
 import { revolveMesh } from '../core/editing/revolve'
+import { sweepStartRef } from '../core/editing/solid'
 import { registerSolidMesher, solidTopology } from '../core/editing/topology'
 import { blendTools } from '../core/editing/edgeBlend'
 import { dropStrayTriangles, type BoolOp } from './csgClean'
@@ -142,27 +143,108 @@ function revolveGeometry(props: RevolveProps): THREE.BufferGeometry {
   return geom
 }
 
+/**
+ * Barrido de un perfil 2D por un recorrido (EXTRUDE ▸ Path). El recorrido se toma tal cual (una polilínea con sus
+ * esquinas; sólo una spline se suaviza) y el perfil avanza con marcos de transporte paralelo, que no giran en las
+ * curvas en S como los de Frenet. En cada quiebre la sección se corta a inglete (plano bisector).
+ */
 function sweepGeometry(props: {
   profile: Array<[number, number]>
   path: Vec3[]
-  steps?: number
   ref?: Vec3
   mirror?: boolean
+  smooth?: boolean
 }): THREE.BufferGeometry {
-  const curve = new THREE.CatmullRomCurve3(props.path.map((p) => new THREE.Vector3(p[0], p[1], p[2])))
-  const steps = props.steps ?? Math.max(16, props.path.length * 4)
-  let profile = props.mirror ? props.profile.map(([x, y]): [number, number] => [x, -y]) : props.profile
-  if (props.ref) {
-    // Con `ref`: los marcos de three.js giran alrededor de la tangente; girar el perfil el ángulo
-    // entre su normal inicial y `ref` equivale a barrer con la X del perfil en `ref`.
-    const f = curve.computeFrenetFrames(steps, false)
-    const r = new THREE.Vector3(props.ref[0], props.ref[1], props.ref[2])
-    const phi = Math.atan2(r.dot(f.binormals[0]), r.dot(f.normals[0]))
-    const [c, s] = [Math.cos(phi), Math.sin(phi)]
-    profile = profile.map(([x, y]): [number, number] => [x * c - y * s, x * s + y * c])
+  const V = (p: Vec3) => new THREE.Vector3(p[0], p[1], p[2])
+  let pts = props.path.map(V)
+  if (props.smooth && pts.length > 2) pts = new THREE.CatmullRomCurve3(pts).getPoints(Math.max(32, pts.length * 16))
+  pts = pts.filter((p, i) => i === 0 || p.distanceTo(pts[i - 1]) > 1e-9)
+  const profile = props.profile.filter((q, i, a) => i === 0 || q[0] !== a[i - 1][0] || q[1] !== a[i - 1][1])
+  if (profile.length > 2 && profile[0][0] === profile[profile.length - 1][0] && profile[0][1] === profile[profile.length - 1][1]) profile.pop()
+  if (pts.length < 2 || profile.length < 3) return new THREE.BufferGeometry()
+  const sy = props.mirror ? -1 : 1
+  // Perfil en sentido antihorario (con el espejo ya aplicado): así las caras laterales miran hacia afuera.
+  let area2 = 0
+  for (let i = 0; i < profile.length; i++) {
+    const [a, b] = [profile[i], profile[(i + 1) % profile.length]]
+    area2 += a[0] * b[1] * sy - b[0] * a[1] * sy
   }
-  const shape = new THREE.Shape(profile.map(([x, y]) => new THREE.Vector2(x, y)))
-  return new THREE.ExtrudeGeometry(shape, { extrudePath: curve, steps, bevelEnabled: false })
+  if (area2 < 0) profile.reverse()
+  const dirs = pts.slice(1).map((p, i) => p.clone().sub(pts[i]).normalize())
+  // Marco inicial: X del perfil en `ref` (o la que elige el barrido), Y = tangente × X.
+  const r = V(sweepStartRef(props))
+  r.addScaledVector(dirs[0], -r.dot(dirs[0]))
+  if (r.lengthSq() < 1e-12) r.copy(V(sweepStartRef({ path: props.path })))
+  r.normalize()
+  const u = new THREE.Vector3().crossVectors(dirs[0], r)
+  const rings: THREE.Vector3[][] = []
+  const q = new THREE.Vector3()
+  for (let i = 0; i < pts.length; i++) {
+    const P = pts[i]
+    const din = dirs[Math.max(0, i - 1)]
+    const dout = i < dirs.length ? dirs[i] : null
+    const miter = i > 0 && dout ? din.clone().add(dout) : null
+    const useMiter = !!miter && miter.lengthSq() > 1e-6 && din.dot(dout!) < 1 - 1e-12
+    if (useMiter) miter!.normalize()
+    rings.push(
+      profile.map(([x, y]) => {
+        q.copy(P).addScaledVector(r, x).addScaledVector(u, y * sy)
+        if (!useMiter) return q.clone()
+        // Sección perpendicular al tramo de llegada, llevada al plano bisector a lo largo de ese tramo.
+        const s = -q.clone().sub(P).dot(miter!) / din.dot(miter!)
+        return q.clone().addScaledVector(din, s)
+      }),
+    )
+    // Transporte paralelo: el marco gira lo mínimo para seguir al tramo siguiente.
+    if (i > 0 && dout) {
+      const rot = new THREE.Quaternion().setFromUnitVectors(din, dout)
+      r.applyQuaternion(rot)
+      u.applyQuaternion(rot)
+    }
+  }
+  const pos: number[] = []
+  const tri = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z)
+  const caps = THREE.ShapeUtils.triangulateShape(profile.map(([x, y]) => new THREE.Vector2(x, y * sy)), [])
+  const first = rings[0]
+  const last = rings[rings.length - 1]
+  // Cada tapa mira hacia afuera del recorrido (la inicial hacia atrás, la final hacia adelante).
+  const capTri = (ring: THREE.Vector3[], [a, b, c]: number[], out: THREE.Vector3) => {
+    const n = new THREE.Vector3().crossVectors(ring[b].clone().sub(ring[a]), ring[c].clone().sub(ring[a]))
+    if (n.dot(out) >= 0) tri(ring[a], ring[b], ring[c])
+    else tri(ring[a], ring[c], ring[b])
+  }
+  for (const f of caps) capTri(first, f, dirs[0].clone().negate())
+  const capStart = pos.length / 3
+  for (const f of caps) capTri(last, f, dirs[dirs.length - 1])
+  const capEnd = pos.length / 3
+  const m = profile.length
+  for (let i = 0; i + 1 < rings.length; i++) {
+    for (let j = 0; j < m; j++) {
+      const a = rings[i][j]
+      const b = rings[i][(j + 1) % m]
+      const c = rings[i + 1][(j + 1) % m]
+      const d = rings[i + 1][j]
+      tri(a, b, c)
+      tri(a, c, d)
+    }
+  }
+  // Orientación hacia afuera: volumen con signo positivo (el perfil puede venir en cualquier sentido).
+  let vol = 0
+  for (let k = 0; k + 8 < pos.length; k += 9) {
+    vol += pos[k] * (pos[k + 4] * pos[k + 8] - pos[k + 5] * pos[k + 7]) - pos[k + 1] * (pos[k + 3] * pos[k + 8] - pos[k + 5] * pos[k + 6]) + pos[k + 2] * (pos[k + 3] * pos[k + 7] - pos[k + 4] * pos[k + 6])
+  }
+  if (vol < 0) {
+    for (let k = 0; k + 8 < pos.length; k += 9) {
+      for (let c = 0; c < 3; c++) [pos[k + 3 + c], pos[k + 6 + c]] = [pos[k + 6 + c], pos[k + 3 + c]]
+    }
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.addGroup(0, capStart, 0)
+  g.addGroup(capStart, capEnd - capStart, 1)
+  g.addGroup(capEnd, pos.length / 3 - capEnd, 2)
+  g.computeVertexNormals()
+  return g
 }
 
 /** Loft custom: une secciones (anillos) con caras laterales + tapas (fan). */

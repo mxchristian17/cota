@@ -103,8 +103,11 @@ test.describe('Cota: interacción de CAD clásica', () => {
   test('elegir una capa con objetos seleccionados los mueve a esa capa', async ({ page }) => {
     await typeCmd(page, 'RECTANGLE', '-30,-20', '#30,20')
     const { cx, cy, s } = await canvasRef(page)
-    await page.mouse.click(cx, cy - 20 * s) // borde superior
-    await expect(page.getByTestId('properties')).toContainText('RECTANGLE')
+    // Con la máquina cargada el primer clic puede llegar antes de que el canvas termine de dibujar: se reintenta.
+    await expect(async () => {
+      await page.mouse.click(cx, cy - 20 * s) // borde superior
+      await expect(page.getByTestId('properties')).toContainText('RECTANGLE', { timeout: 1500 })
+    }).toPass({ timeout: 15_000 })
     // crea la capa "Muros" en el modal de capas y la fija con el objeto seleccionado
     await typeCmd(page, 'LAYER')
     await expect(page.getByTestId('layer-dialog')).toBeVisible()

@@ -143,6 +143,7 @@ async function runCorner(ctx: CommandContext, tool: CornerTool): Promise<void> {
         ctx.print(err ?? '')
         continue
       }
+      ctx.markPicked([a.entity.id])
       done = await second(ctx, tool, log, a)
     }
     if (done === null || !multiple) return

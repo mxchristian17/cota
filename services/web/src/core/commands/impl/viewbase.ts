@@ -71,7 +71,7 @@ function buildView(ctx: CommandContext, block: string, source: string[] | null, 
   if (items.length === 0) return null
   const layers = { visible: ctx.app.ensureLayer?.('MD_Visible', undefined, '#ffffff') ?? '0', hidden: ctx.app.ensureLayer?.('MD_Hidden', 'HIDDEN', '#ffffff') ?? '0' }
   const shade = isShaded(hidden) ? (ctx.app.shadeModel?.(source, basis) ?? null) : null
-  const { entities, width, height } = viewBlockEntities(items, layers, shade)
+  const { entities, width, height } = viewBlockEntities(items, layers, shade, ctx.app.viewOrigin?.(source, basis) ?? null)
   ctx.doc.setBlock({ name: block, entities })
   return { width, height }
 }

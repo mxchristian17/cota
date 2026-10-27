@@ -26,7 +26,10 @@ async function selectObject(ctx: CommandContext): Promise<{ pk: CurvePick; point
     const r = await ctx.getPoint('Select object: ')
     if (r.kind !== 'point') return null
     const pk = pickCurve(ctx.doc, r.point, r.pick)
-    if (pk) return { pk, point: r.point }
+    if (pk) {
+      ctx.markPicked([pk.entity.id])
+      return { pk, point: r.point }
+    }
     ctx.print('No object found.')
   }
 }

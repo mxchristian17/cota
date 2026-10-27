@@ -3,6 +3,7 @@ import { mapShade } from '../projection/shade'
 import type { Vec3 } from '../math'
 import { ISO_AZ, type ViewName } from '../view'
 import type { ProjBasis, ProjItem } from '../projection/orthographic'
+import { arcBounds } from '../geom/arc'
 
 /**
  * Vistas de dibujo: VIEWBASE / VIEWPROJ del CAD clásico (*Model Documentation*). Cada vista es una
@@ -142,7 +143,17 @@ export function parseScale(text: string): number | null {
  * Entidades del bloque de una vista: líneas, arcos y círculos 2D centrados en el centro de su caja (la
  * inserción se ubica en el centro de la vista). Devuelve también el tamaño en unidades de modelo.
  */
-export function viewBlockEntities(items: ProjItem[], layers: { visible: string; hidden: string }, shade?: ShadeProps | null): { entities: Entity[]; width: number; height: number } {
+/**
+ * Entidades del bloque de una vista. `origin` (coordenadas de la vista) es el punto del bloque que queda en la
+ * inserción: si todas las vistas de una pieza usan la proyección del MISMO punto 3D (su centro), las vistas
+ * alineadas quedan en correspondencia exacta (Monge). Sin él, el centro del recuadro de la vista.
+ */
+export function viewBlockEntities(
+  items: ProjItem[],
+  layers: { visible: string; hidden: string },
+  shade?: ShadeProps | null,
+  origin?: [number, number] | null,
+): { entities: Entity[]; width: number; height: number } {
   let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity]
   const grow = (x: number, y: number) => {
     x0 = Math.min(x0, x)
@@ -154,13 +165,18 @@ export function viewBlockEntities(items: ProjItem[], layers: { visible: string; 
     if (it.kind === 'line') {
       grow(...it.a)
       grow(...it.b)
-    } else {
+    } else if (it.kind === 'circle') {
       grow(it.c[0] - it.r, it.c[1] - it.r)
       grow(it.c[0] + it.r, it.c[1] + it.r)
+    } else {
+      // Un arco sólo ocupa su tramo (antes contaba como el círculo entero y descentraba la vista).
+      const b = arcBounds({ center: [it.c[0], it.c[1], 0], radius: it.r, startAngle: it.a0, endAngle: it.a1, normal: [0, 0, 1] })
+      grow(b.minX, b.minY)
+      grow(b.maxX, b.maxY)
     }
   }
   if (!isFinite(x0)) return { entities: [], width: 0, height: 0 }
-  const [cx, cy] = [(x0 + x1) / 2, (y0 + y1) / 2]
+  const [cx, cy] = origin ?? [(x0 + x1) / 2, (y0 + y1) / 2]
   const at = (p: [number, number]): Vec3 => [p[0] - cx, p[1] - cy, 0]
   const lines: Entity[] = items.map((it, i) => {
     const id = `v${i + 1}`
@@ -171,7 +187,10 @@ export function viewBlockEntities(items: ProjItem[], layers: { visible: string; 
   })
   // El sombreado va primero (se pinta debajo de las líneas), corrido al mismo centro.
   const entities: Entity[] = shade && shade.tris.length ? [{ id: 'shade', type: 'SHADE', layer: layers.visible, props: mapShade(shade, (v) => [v[0] - cx, v[1] - cy, v[2]]) }, ...lines] : lines
-  return { entities, width: x1 - x0, height: y1 - y0 }
+  // Con un origen común el bloque no queda centrado: el ancho y el alto cubren lo dibujado a ambos lados.
+  const w = origin ? 2 * Math.max(Math.abs(x0 - cx), Math.abs(x1 - cx)) : x1 - x0
+  const h = origin ? 2 * Math.max(Math.abs(y0 - cy), Math.abs(y1 - cy)) : y1 - y0
+  return { entities, width: w, height: h }
 }
 
 type ViewInsert = Extract<Entity, { type: 'INSERT' }> & { props: InsertProps & { view: DrawingViewData } }

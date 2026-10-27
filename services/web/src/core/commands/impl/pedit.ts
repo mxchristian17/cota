@@ -339,6 +339,7 @@ export const peditCommand: Command = {
         }
         if (r.pick?.id) {
           ids = [r.pick.id]
+          ctx.markPicked(ids)
           break
         }
         ctx.print('0 found')

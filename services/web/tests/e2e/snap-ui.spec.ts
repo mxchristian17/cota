@@ -155,7 +155,7 @@ test.describe('Cota snap/UCS + UI', () => {
     expect(a[1]).toBeGreaterThan(0) // la tangente de arriba (del lado del clic)
   })
 
-  test('las capas apagadas o congeladas no dan snaps', async ({ page }) => {
+  test('las capas apagadas no dan snaps; las congeladas sí', async ({ page }) => {
     await typeCmd(page, '-LAYER', 'M', 'Oculta', '', 'LINE', '#0,0', '#40,0', '', '-LAYER', 'S', '0', '')
     const { cx, cy, s } = await canvasRef(page)
     const startOfNewLine = async () => {
@@ -167,10 +167,15 @@ test.describe('Cota snap/UCS + UI', () => {
       return (await lastEntity(page)).props.start as number[]
     }
     expect((await startOfNewLine())[0]).toBeCloseTo(40, 6) // visible: ENDpoint
-    for (const opt of ['OFF', 'F']) {
-      await typeCmd(page, 'U', '-LAYER', opt, 'Oculta', '')
-      expect((await startOfNewLine())[0]).not.toBeCloseTo(40, 3)
-      await typeCmd(page, 'U', '-LAYER', 'ON', 'Oculta', 'T', 'Oculta', '')
+    // Apagada: desaparece y no da snaps. Congelada: se ve en grises y, como una bloqueada, sigue dando snaps.
+    await typeCmd(page, 'U') // sin la línea de prueba (empieza en x = 40)
+    for (const [opt, snaps] of [['OFF', false], ['F', true]] as const) {
+      await typeCmd(page, '-LAYER', opt, 'Oculta', '')
+      const x = (await startOfNewLine())[0]
+      if (snaps) expect(x).toBeCloseTo(40, 6)
+      else expect(x).not.toBeCloseTo(40, 3)
+      await typeCmd(page, 'U')
+      await typeCmd(page, '-LAYER', opt === 'OFF' ? 'ON' : 'T', 'Oculta', '')
     }
   })
 })

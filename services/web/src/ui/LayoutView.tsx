@@ -39,7 +39,7 @@ function baseData(
     entities,
     blocks: s.doc.blocks,
     layers,
-    selection: active ? s.selection : [],
+    selection: active ? (s.picked.length ? [...s.selection, ...s.picked] : s.selection) : [],
     gridSnap: s.gridSnap,
     gridStep: s.gridStep,
     esnap: s.esnap,

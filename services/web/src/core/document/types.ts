@@ -285,6 +285,8 @@ export interface SweepProps {
   ref?: Vec3
   /** El perfil quedó espejado (MIRROR): su Y se invierte respecto del recorrido. */
   mirror?: boolean
+  /** El recorrido son los puntos de control de una spline: se suaviza (como se dibuja) antes de barrer. */
+  smooth?: boolean
 }
 
 /** Loft: secciones (anillos) con MISMA cantidad de vértices, unidas con caras laterales + tapas. */

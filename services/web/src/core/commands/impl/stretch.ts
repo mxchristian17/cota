@@ -1,5 +1,5 @@
 import { commonOf } from '../../document/common'
-import { layerShown } from '../../layers/visibility'
+import { layerEditable } from '../../layers/visibility'
 import { toVec3, type Pt, type Vec3 } from '../../math'
 import type { Entity } from '../../document/types'
 import { entityPreviewShapes } from '../../editing/entityPreview'
@@ -55,7 +55,7 @@ export const stretchCommand: Command = {
     // Entidades tocadas por la ventana: `stretchEntity` devuelve 'none' cuando ningún punto de la
     // entidad cae dentro, así que sirve como test de cruce (el desplazamiento de prueba es irrelevante).
     // Se excluyen las capas bloqueadas u ocultas, como en el resto de la edición.
-    const editable = new Set(ctx.doc.layers.filter((l) => layerShown(l) && !l.locked).map((l) => l.id))
+    const editable = new Set(ctx.doc.layers.filter((l) => layerEditable(l)).map((l) => l.id))
     const ids: string[] = []
     for (const e of ctx.doc.entities) {
       if (!editable.has(e.layer)) continue

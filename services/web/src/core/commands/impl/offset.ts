@@ -115,6 +115,7 @@ export const offsetCommand: Command = {
         ctx.print('Cannot offset that object.')
         continue
       }
+      ctx.markPicked([pk.entity.id])
       const s = await ctx.getPoint(`${what} or [Exit/Multiple/Undo] <Exit>: `, { keywords: ['Exit', 'Multiple', 'Undo'] })
       if (s.kind === 'cancel' || (s.kind === 'keyword' && s.keyword === 'Exit')) return
       if (s.kind === 'keyword' && s.keyword === 'Undo') {

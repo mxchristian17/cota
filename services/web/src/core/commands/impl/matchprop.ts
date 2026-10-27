@@ -80,6 +80,7 @@ export const matchPropCommand: Command = {
       if (r.kind !== 'point') return
       src = r.pick?.id ? ctx.doc.getEntity(r.pick.id) : undefined
       if (!src) ctx.print('No object found.')
+      else ctx.markPicked([src.id])
     }
     for (;;) {
       ctx.print(`Current active settings: ${ALL.filter((s) => active.has(s)).join(' ') || '(none)'}`)

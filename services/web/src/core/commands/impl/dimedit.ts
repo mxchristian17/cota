@@ -25,7 +25,10 @@ async function pickDim(ctx: CommandContext, prompt: string, ok: (d: DimensionEnt
     if (r.kind === 'keyword') return r.keyword
     if (r.kind !== 'point') return null
     const e = r.pick?.id ? ctx.doc.getEntity(r.pick.id) : undefined
-    if (e?.type === 'DIMENSION' && ok(e)) return { d: e, at: toVec3(r.point) }
+    if (e?.type === 'DIMENSION' && ok(e)) {
+      ctx.markPicked([e.id])
+      return { d: e, at: toVec3(r.point) }
+    }
     ctx.print(e?.type === 'DIMENSION' ? 'That dimension type is not supported here.' : 'Object is not a dimension.')
   }
 }

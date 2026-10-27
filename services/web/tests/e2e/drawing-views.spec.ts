@@ -197,3 +197,84 @@ test.describe('Cota OPEN 3D models', () => {
     await expect(page.locator('.cmd-output')).toContainText('Command: LINE')
   })
 })
+
+test.describe('Cota picking solids', () => {
+  test('a clean click inside a solid selects it, in wireframe too; a frozen layer is visible but not selectable', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    await typeCmd(page, 'BOX', '#-20,-20', '#20,20', '10')
+    await typeCmd(page, 'ZOOM', 'C', '#0,0', '100')
+    const box = (await page.locator('canvas').first().boundingBox())!
+    const [cx, cy] = [box.x + box.width / 2 + 7, box.y + box.height / 2 + 5] // dentro de la cara, lejos de las aristas
+    for (const style of ['2DWIREFRAME', 'REALISTIC']) {
+      await typeCmd(page, 'VSCURRENT', style)
+      await store(page, 's.clearSelection()')
+      await expect(async () => {
+        await page.mouse.click(cx, cy)
+        expect(await store(page, 'return s.selection.length')).toBe(1)
+      }).toPass({ timeout: 10_000 })
+    }
+    await store(page, 's.clearSelection()')
+    // Una pieza en una capa congelada (encima de la otra): se ve pero el clic pasa de largo hasta la de abajo.
+    await typeCmd(page, '-LAYER', 'M', 'Hielo', '')
+    await typeCmd(page, 'BOX', '#-20,-20,10', '#20,20,10', '10')
+    await typeCmd(page, '-LAYER', 'S', '0', 'F', 'Hielo', '')
+    await store(page, 's.clearSelection()')
+    await page.mouse.click(cx, cy)
+    const picked = await store(page, 'return s.selection.map((id) => s.doc.getEntity(id).layer)')
+    expect(picked).toEqual(['0'])
+    await store(page, 's.clearSelection()')
+  })
+})
+
+test.describe('Cota VIEWBASE alignment', () => {
+  test('projected views keep the Monge correspondence even when a view has arcs', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    // Caja menos un cilindro que la muerde: en la vista de arriba queda un arco cuyo círculo completo se sale de la
+    // pieza (antes eso corría esa vista hacia un costado).
+    await store(
+      page,
+      `s.doc.addEntity({ type: 'SOLID3D', layer: '0', props: { op: 'SUBTRACT', operands: [
+        { op: 'BOX', origin: [0, 0, 0], width: 100, depth: 60, height: 10 },
+        { op: 'CYLINDER', base: [30, -20, 0], radius: 45, height: 10, segments: 64 } ] } }); s.doc.touch()`,
+    )
+    await typeCmd(page, 'VIEWBASE', '', '', '#150,150', '#150,60', '#40,150', '')
+    await expect(page.locator('.cmd-output')).toContainText('Base view created with 2 projected view(s)', { timeout: 30_000 })
+    const ext = await store(
+      page,
+      `return s.doc.activeLayout.entities.filter((e) => e.props.view).map((e) => {
+        const b = s.doc.blocks.find((x) => x.name === e.props.name)
+        const xs = [], ys = []
+        const s0 = e.props.scale[0]
+        for (const l of b.entities) if (l.type === 'LINE') for (const p of [l.props.start, l.props.end]) { xs.push(p[0] * s0 + e.props.position[0]); ys.push(p[1] * s0 + e.props.position[1]) }
+        return { o: e.props.view.orientation, minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) }
+      })`,
+    )
+    const [front, below, side] = ext
+    expect(front.o).toBe('FRONT')
+    // Vista de abajo (alineada en vertical): mismos x que el frente; lateral (en horizontal): mismos y.
+    expect(below.minX).toBeCloseTo(front.minX, 3)
+    expect(below.maxX).toBeCloseTo(front.maxX, 3)
+    expect(side.minY).toBeCloseTo(front.minY, 3)
+    expect(side.maxY).toBeCloseTo(front.maxY, 3)
+  })
+})
+
+test.describe('Cota picked objects are highlighted', () => {
+  test('FILLET and OFFSET highlight the object taken with a click until the command ends', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    await typeCmd(page, 'LINE', '#-40,0', '#40,0', '')
+    await typeCmd(page, 'ZOOM', 'C', '#0,0', '100')
+    const box = (await page.locator('canvas').first().boundingBox())!
+    const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2]
+    for (const cmd of ['FILLET', 'OFFSET']) {
+      await typeCmd(page, cmd, ...(cmd === 'OFFSET' ? ['5'] : []))
+      await page.mouse.click(cx + 20, cy)
+      await expect.poll(() => store(page, 'return s.picked.length')).toBe(1)
+      await page.keyboard.press('Escape')
+      await expect.poll(() => store(page, 'return s.picked.length')).toBe(0)
+    }
+  })
+})

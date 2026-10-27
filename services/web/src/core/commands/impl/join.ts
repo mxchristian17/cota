@@ -14,7 +14,10 @@ async function arcsToJoin(ctx: CommandContext, src: Entity): Promise<string[] | 
     if (r.kind === 'cancel') return ids.length ? ids : null
     if (r.kind === 'keyword') return 'close'
     const pk = pickCurve(ctx.doc, r.point, r.pick, (e) => e.id !== src.id && !ids.includes(e.id))
-    if (pk) ids.push(pk.entity.id)
+    if (pk) {
+      ids.push(pk.entity.id)
+      ctx.markPicked([src.id, pk.entity.id])
+    }
   }
 }
 

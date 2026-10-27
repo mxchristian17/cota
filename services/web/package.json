@@ -1,7 +1,7 @@
 {
   "name": "cota",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "Free, open-source 2D and 3D CAD that runs in the browser",
   "license": "Apache-2.0",
@@ -46,7 +46,7 @@
     "three": "^0.169.0",
     "three-bvh-csg": "^0.0.16",
     "three-mesh-bvh": "^0.7.8",
-    "zustand": "^5.0.15"
+    "zustand": "^5.0.16"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

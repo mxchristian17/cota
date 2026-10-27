@@ -1,7 +1,7 @@
 import type { DocumentModel } from '../document/DocumentModel'
 import type { Entity } from '../document/types'
 import { entityOutline } from '../editing/bounds'
-import { layerShown } from '../layers/visibility'
+import { layerEditable } from '../layers/visibility'
 import type { Pt } from '../math'
 
 /**
@@ -17,7 +17,7 @@ export function selectableEntities(doc: DocumentModel): Entity[] {
   const layers = new Map(doc.layers.map((l) => [l.id, l]))
   return doc.entities.filter((e) => {
     const l = layers.get(e.layer)
-    return layerShown(l) && !l?.locked
+    return layerEditable(l)
   })
 }
 

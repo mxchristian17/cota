@@ -1,4 +1,4 @@
-import { frozenLayerIds, hiddenLayerIds, layerShown } from '../core/layers/visibility'
+import { hiddenLayerIds, layerEditable, layerVisible } from '../core/layers/visibility'
 import type { Deferred } from '../core/geom/tangency'
 import * as THREE from 'three'
 import type { Pt, Vec3 } from '../core/math'
@@ -15,6 +15,7 @@ import { isWorldUcs, ORTHO_UCS, orthoUcs, sameUcs, ucsZ, WORLD_UCS, type OrthoUc
 import { sysvars } from '../core/commands/sysvars'
 import { isSmall, lodActive, sizeSignature, type SizeSig } from '../core/render/lod'
 import { faceUcsAt, type FaceHit } from '../core/editing/faceUcs'
+import { rayFaces, solidTopology } from '../core/editing/topology'
 import { DEFAULT_VISUAL_STYLE, type CameraMode, type ViewName, type VisualStyle } from '../core/view'
 import { CameraController } from './CameraController'
 import { solidEdgePositions, solidGeometry } from './csg'
@@ -278,6 +279,8 @@ export class Viewport {
   private readonly keyLight = new THREE.DirectionalLight(0xffffff, 2.2)
   private readonly fillLight = new THREE.DirectionalLight(0xffffff, 0.35)
   private snapListKey = ''
+  /** Objetos que se ven pero no se seleccionan (capas congeladas o bloqueadas). */
+  private unpickable = new Set<string>()
   private snapLiveRef: Entity[] | undefined
   /** Escala de anotación con la que se dibujaron las cotas anotativas (cambia con la escala del viewport). */
   private lastAnnoScale: number | undefined = undefined
@@ -1071,7 +1074,7 @@ export class Viewport {
     this.ducsFace = null
     if (this.kind === 'model' && this.data?.ducs) {
       const layers = new Map(this.data.layers.map((l) => [l.id, l]))
-      const solids = this.data.entities.filter((e) => e.type === 'SOLID3D' && layerShown(layers.get(e.layer)))
+      const solids = this.data.entities.filter((e) => e.type === 'SOLID3D' && layerEditable(layers.get(e.layer)))
       if (solids.length) {
         const [nx, ny] = this.ndc(clientX, clientY)
         const ray = this.controller.rayFromNdc(nx, ny)
@@ -1152,9 +1155,10 @@ export class Viewport {
         while (obj && !obj.userData.entityId) obj = obj.parent
         id = (obj?.userData.entityId as string | undefined) ?? null
       }
-      if (id) found.push({ id, h })
+      // Las capas congeladas o bloqueadas se ven pero no se seleccionan: el clic sigue hacia lo que está detrás.
+      if (id && !this.unpickable.has(id)) found.push({ id, h })
     }
-    if (found.length === 0) return null
+    if (found.length === 0) return this.solidUnder(clientX, clientY)
     // Orden de capas: entre lo que está a la misma profundidad (p. ej. todo el dibujo 2D) gana
     // la capa de más arriba; dentro de la capa, lo más cercano al cursor y después lo más nuevo.
     const tol = 3 * this.controller.worldPerPx() + 1e-9
@@ -1174,6 +1178,29 @@ export class Viewport {
       return (ob?.o ?? -Infinity) - (oa?.o ?? -Infinity) || px(a.h.point) - px(b.h.point) || (ob?.i ?? 0) - (oa?.i ?? 0)
     })
     return near[0].id
+  }
+
+  /**
+   * Sólido bajo el cursor por sus caras (topología), para un clic dentro de la pieza aunque no se dibujen sus caras
+   * (estilos de alambre) o la malla no se haya impactado.
+   */
+  private solidUnder(clientX: number, clientY: number): string | null {
+    const d = this.data
+    if (!d) return null
+    const solids = d.entities.filter((e) => e.type === 'SOLID3D' && !this.unpickable.has(e.id) && layerVisible(d.layers.find((l) => l.id === e.layer)))
+    if (!solids.length) return null
+    const [nx, ny] = this.ndc(clientX, clientY)
+    const ray = this.controller.rayFromNdc(nx, ny)
+    const o: Vec3 = [ray.origin.x, ray.origin.y, ray.origin.z]
+    const dir: Vec3 = [ray.direction.x, ray.direction.y, ray.direction.z]
+    let best: { id: string; t: number } | null = null
+    for (const e of solids) {
+      if (e.type !== 'SOLID3D') continue
+      const topo = solidTopology(e.props)
+      if (!topo) continue
+      for (const h of rayFaces(topo, o, dir)) if (!best || h.t < best.t) best = { id: e.id, t: h.t }
+    }
+    return best?.id ?? null
   }
 
   private resize(): void {
@@ -1197,7 +1224,7 @@ export class Viewport {
   private entities(): Entity[] {
     const d = this.data
     if (!d) return []
-    if (!this.expanded) this.expanded = expandEntities(d.entities, d.blocks, { attdisp: d.attdisp, skipLayers: frozenLayerIds(d.layers) })
+    if (!this.expanded) this.expanded = expandEntities(d.entities, d.blocks, { attdisp: d.attdisp })
     return this.expanded
   }
 
@@ -1752,10 +1779,11 @@ export class Viewport {
     const getPoints = (m: Map<string, PointBatch>, k: string): PointBatch => { let b = m.get(k); if (!b) { b = { pos: [] }; m.set(k, b) } return b }
     const bgHex = '#' + this.bgColor.getHexString()
 
+    this.unpickable = new Set(entities.filter((e) => !layerEditable(layerMap.get(e.layer))).map((e) => e.id))
     for (const e of entities) {
       try {
         const layer = layerMap.get(e.layer)
-        if (!layerShown(layer)) continue
+        if (!layerVisible(layer)) continue
         const selected = selection.has(e.id)
         const colorHex = this.ink(layer?.color ?? '#ffffff')
 
@@ -1989,10 +2017,15 @@ export class Viewport {
   }
 
   /** Color de dibujo: el blanco (color 7 del CAD clásico) se dibuja negro sobre fondos claros (papel). */
+  /**
+   * Color 7 del CAD clásico ("blanco/negro"): una capa blanca se ve negra sobre fondo claro (modo claro, papel) y una
+   * negra se ve blanca sobre fondo oscuro. Los demás colores se muestran tal cual, como en el CAD clásico.
+   */
   private ink(hex: string): string {
     const h = hex.toLowerCase()
-    if (h !== '#ffffff' && h !== '#fff') return hex
-    return this.lightBg() ? '#000000' : hex
+    if (h === '#ffffff' || h === '#fff') return this.lightBg() ? '#000000' : hex
+    if (h === '#000000' || h === '#000') return this.lightBg() ? hex : '#ffffff'
+    return hex
   }
 
   /** Caras sombreadas: el negro del color 7 sobre papel se aclara a gris para que se lea el sombreado. */
@@ -2004,11 +2037,16 @@ export class Viewport {
   private buildEntity(e: Entity, layerMap: Map<string, Layer>, selection: Set<string>): void {
     {
       const layer = layerMap.get(e.layer)
-      if (!layerShown(layer)) return
+      if (!layerVisible(layer)) return
       const selected = selection.has(e.id)
       const color = new THREE.Color(selected ? HIGHLIGHT : this.ink(layer?.color ?? '#ffffff'))
-      // Capas bloqueadas: atenuadas como el CAD clásico (LAYLOCKFADECTL 50); se ven y dan snaps, pero no se editan.
-      if (layer?.locked && !selected) color.lerp(new THREE.Color(this.bgColor), 0.5)
+      // Capas congeladas: en grises (#222 a #CCC según la luminosidad del color); bloqueadas: atenuadas (como
+      // LAYLOCKFADECTL 50). Las dos se ven y dan snaps, pero no se seleccionan ni se editan.
+      if (layer?.frozen && !selected) {
+        const c = color.getRGB({ r: 0, g: 0, b: 0 }, THREE.SRGBColorSpace)
+        const g = (0x22 + (0xcc - 0x22) * (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b)) / 255
+        color.setRGB(g, g, g, THREE.SRGBColorSpace)
+      } else if (layer?.locked && !selected) color.lerp(new THREE.Color(this.bgColor), 0.5)
       if (e.type === 'SOLID3D') {
         this.entityGroup.add(this.buildSolid(e, color, selected))
         return
@@ -2346,7 +2384,7 @@ export class Viewport {
     for (const e of d.entities) {
       if (!sel.has(e.id)) continue
       const layer = layerMap.get(e.layer)
-      if (!layerShown(layer)) continue
+      if (!layerVisible(layer)) continue
       for (const grip of entityGrips(e)) {
         list.push({ grip, entityId: e.id })
         if (list.length >= Viewport.MAX_GRIPS) break
@@ -2427,7 +2465,7 @@ export class Viewport {
           this.lastRevision = data.revision
           this.lastAnnoScale = data.annoScale
           this.lastSelectionKey = selKey
-          this.expanded = expandEntities(data.entities, data.blocks, { attdisp: data.attdisp, skipLayers: frozenLayerIds(data.layers) })
+          this.expanded = expandEntities(data.entities, data.blocks, { attdisp: data.attdisp })
           this.snapList = null
           this.hasFieldTexts = this.expanded.some(
             (e) => (e.type === 'TEXT' && hasFields(e.props.text)) || (e.type === 'DIMENSION' && !!e.props.textOverride && hasFields(e.props.textOverride)),
