@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { solidGeometry } from './csg'
+import { solidEdgePositions, solidGeometry } from './csg'
 import type { SolidProps } from '../core/document/types'
 
 function volume(g: THREE.BufferGeometry): number {
@@ -57,4 +57,18 @@ describe('operandos con triángulos aguja', () => {
       console.warn = warn
     }
   }, 30_000)
+})
+
+describe('rendimiento de piezas con muchas booleanas', () => {
+  it('cilindro con nueve aletas: unión, alesaje y aristas en tiempos de uso interactivo', () => {
+    const cyl = (x0: number, x1: number, r: number): SolidProps => ({ op: 'CYLINDER', base: [x0, 0, 70], radius: r, height: x1 - x0, segments: 48, axis: [1, 0, 0] })
+    const fins = Array.from({ length: 9 }, (_, k) => cyl(106 + 10 * k, 109 + 10 * k, 46))
+    const union: SolidProps = { op: 'UNION', operands: [cyl(96, 214, 30), ...fins, cyl(198, 216, 40), { op: 'BOX', origin: [120, -28, 14], width: 68, depth: 56, height: 36 }] }
+    solidGeometry(union)
+    const t = performance.now()
+    solidEdgePositions(union) // aristas = topología de la malla (antes ~4,8 s)
+    const bored = solidGeometry({ op: 'SUBTRACT', operands: [union, cyl(95, 217, 22.5)] }) // reutiliza la unión (antes la rehacía)
+    expect(bored.getAttribute('position').count).toBeGreaterThan(0)
+    expect(performance.now() - t).toBeLessThan(6000)
+  }, 60_000)
 })

@@ -7,6 +7,9 @@ import * as THREE from 'three'
  * Los atributos del vértice insertado se interpolan a lo largo de la arista (la superficie `surf`, sin interpolar).
  * Devuelve la misma geometría si no hay nada que cerrar.
  */
+/** Clave numérica de una celda (sin cadenas: armar claves de texto era lo más caro). */
+const cellKey = (i: number, j: number, k: number): number => ((i * 73856093) ^ (j * 19349663) ^ (k * 83492791)) | 0
+
 export function closeTJunctions(geom: THREE.BufferGeometry): THREE.BufferGeometry {
   const g = geom.index ? geom.toNonIndexed() : geom
   const pos = g.getAttribute('position') as THREE.BufferAttribute | undefined
@@ -21,7 +24,7 @@ export function closeTJunctions(geom: THREE.BufferGeometry): THREE.BufferGeometr
   const weld = size * 1e-6
   const ids = new Int32Array(n)
   const uniq: number[] = [] // índice de una copia representativa
-  const cells = new Map<string, number[]>()
+  const cells = new Map<number, number[]>()
   const wc = (v: number) => Math.floor(v / weld)
   for (let i = 0; i < n; i++) {
     const [x, y, z] = [pos.getX(i), pos.getY(i), pos.getZ(i)]
@@ -30,7 +33,7 @@ export function closeTJunctions(geom: THREE.BufferGeometry): THREE.BufferGeometr
     for (let dx = -1; dx <= 1 && id < 0; dx++)
       for (let dy = -1; dy <= 1 && id < 0; dy++)
         for (let dz = -1; dz <= 1 && id < 0; dz++)
-          for (const u of cells.get(`${cx + dx},${cy + dy},${cz + dz}`) ?? []) {
+          for (const u of cells.get(cellKey(cx + dx, cy + dy, cz + dz)) ?? []) {
             const r = uniq[u]
             if (Math.hypot(pos.getX(r) - x, pos.getY(r) - y, pos.getZ(r) - z) <= weld) {
               id = u
@@ -40,7 +43,7 @@ export function closeTJunctions(geom: THREE.BufferGeometry): THREE.BufferGeometr
     if (id < 0) {
       id = uniq.length
       uniq.push(i)
-      const k = `${cx},${cy},${cz}`
+      const k = cellKey(cx, cy, cz)
       const list = cells.get(k)
       if (list) list.push(id)
       else cells.set(k, [id])
@@ -84,8 +87,8 @@ export function closeTJunctions(geom: THREE.BufferGeometry): THREE.BufferGeometr
 
   // Grilla espacial de los extremos de aristas abiertas.
   const cell = size / 128
-  const grid = new Map<string, number[]>()
-  const ck = (x: number, y: number, z: number) => `${Math.floor(x / cell)},${Math.floor(y / cell)},${Math.floor(z / cell)}`
+  const grid = new Map<number, number[]>()
+  const ck = (x: number, y: number, z: number) => cellKey(Math.floor(x / cell), Math.floor(y / cell), Math.floor(z / cell))
   for (const id of candidates) {
     const [x, y, z] = P(id)
     const k = ck(x, y, z)
@@ -101,7 +104,7 @@ export function closeTJunctions(geom: THREE.BufferGeometry): THREE.BufferGeometr
     const d = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]]
     const len = Math.hypot(d[0], d[1], d[2])
     if (len < 4 * weld) return []
-    const seen = new Set<string>()
+    const seen = new Set<number>()
     const out: Array<{ id: number; t: number }> = []
     const steps = Math.ceil(len / (cell * 0.5)) + 1
     for (let s = 0; s <= steps; s++) {
@@ -113,7 +116,7 @@ export function closeTJunctions(geom: THREE.BufferGeometry): THREE.BufferGeometr
       for (let dx = -1; dx <= 1; dx++)
         for (let dy = -1; dy <= 1; dy++)
           for (let dz = -1; dz <= 1; dz++) {
-            const k = `${cx + dx},${cy + dy},${cz + dz}`
+            const k = cellKey(cx + dx, cy + dy, cz + dz)
             if (seen.has(k)) continue
             seen.add(k)
             for (const id of grid.get(k) ?? []) {

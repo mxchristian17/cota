@@ -1,6 +1,7 @@
 import { attdefText } from '../geom/text'
 import type { Vec3 } from '../math'
-import type { DrawingVars, Entity, EntityProps, EntityType, Layer, LineType, LinetypeDefData, RectangleProps } from '../document/types'
+import type { DrawingVars, Entity, EntityProps, EntityType, InsertProps, Layer, LineType, LinetypeDefData, RectangleProps } from '../document/types'
+import { transformEntity as transformInsertEntity } from '../editing/block'
 import { BYBLOCK, BYLAYER, CONTINUOUS, linetypeLabel, patternLength } from '../linetype/linetypes'
 import { hatchDxf, parseHatch } from './dxfHatch'
 import { dimDisplay } from '../dimension/dimGeometry'
@@ -337,6 +338,23 @@ export function importDxf(text: string): DxfImportResult {
   const dimStyleRecs: Rec[] = []
   /** Handle → nombre de BLOCK_RECORD (flechas de DIMSTYLE en R2000+). */
   const blockNames = new Map<string, string>()
+  /** Definiciones de la sección BLOCKS (punto base + contenido) e inserciones a expandir. */
+  const blocks = new Map<string, { base: Vec3; items: Array<{ spec?: DxfEntitySpec; insert?: Rec }> }>()
+  let block: { base: Vec3; items: Array<{ spec?: DxfEntitySpec; insert?: Rec }> } | null = null
+  const inserts: Rec[] = []
+  /** Entidad común (tipo de línea por objeto incluido) de un record; null si no se soporta. */
+  const specOf = (rec: Rec): DxfEntitySpec | null => {
+    const spec = rec.type === 'HATCH' ? hatchSpec(rec) : rec.type === 'ATTRIB' ? parseEntity({ type: 'TEXT', codes: rec.codes }) : parseEntity(rec)
+    if (!spec) return null
+    const lt = str(rec.codes, 6)
+    const lts = num(rec.codes, 48, 1)
+    return {
+      ...spec,
+      layerName: str(rec.codes, 8) ?? '0',
+      ...(lt && lt.toUpperCase() !== BYLAYER ? { lineType: lt.toUpperCase() } : {}),
+      ...(lts !== 1 && lts > 0 ? { ltScale: lts } : {}),
+    }
+  }
 
   for (let r = 0; r < records.length; r++) {
     const rec = records[r]
@@ -412,8 +430,32 @@ export function importDxf(text: string): DxfImportResult {
       continue
     }
 
+    if (section === 'BLOCKS') {
+      if (rec.type === 'BLOCK') {
+        const name = str(rec.codes, 2) ?? ''
+        block = { base: [num(rec.codes, 10), num(rec.codes, 20), num(rec.codes, 30)], items: [] }
+        // Los anónimos de cotas (*D), sombreados (*X) y espacios (*Model_Space, *Paper_Space) no se insertan a mano.
+        if (!name.startsWith('*') || /^\*[UT]/i.test(name)) blocks.set(name.toUpperCase(), block)
+      } else if (rec.type === 'ENDBLK') block = null
+      else if (block && rec.type === 'INSERT') block.items.push({ insert: rec })
+      else if (block && rec.type !== 'ATTDEF') {
+        const spec = specOf(rec)
+        if (spec) block.items.push({ spec })
+      }
+      continue
+    }
     if (section !== 'ENTITIES') continue
 
+    if (rec.type === 'INSERT') {
+      inserts.push(rec)
+      continue
+    }
+    if (rec.type === 'ATTRIB') {
+      // Valores de los atributos de la inserción anterior: ya vienen en coordenadas del dibujo, como textos.
+      const spec = specOf(rec)
+      if (spec) entities.push(spec)
+      continue
+    }
     const layerName = str(rec.codes, 8) ?? '0'
     if (rec.type === 'DIMENSION') {
       const dim = parseDimension(rec.codes)
@@ -433,6 +475,39 @@ export function importDxf(text: string): DxfImportResult {
       })
     else if (!['SEQEND', 'VERTEX'].includes(rec.type)) unsupported.add(rec.type)
   }
+
+  // Bloques: cada inserción se expande a su geometría en el dibujo (anidadas incluidas). Lo que está en la capa 0
+  // dentro del bloque toma la capa de la inserción, como en el CAD clásico.
+  const insertOf = (rec: Rec): InsertProps => {
+    const n: Vec3 = [num(rec.codes, 210, 0), num(rec.codes, 220, 0), num(rec.codes, 230, 1)]
+    return {
+      name: str(rec.codes, 2) ?? '',
+      position: [num(rec.codes, 10), num(rec.codes, 20), num(rec.codes, 30)],
+      scale: [num(rec.codes, 41, 1), num(rec.codes, 42, 1), num(rec.codes, 43, 1)],
+      rotation: (num(rec.codes, 50, 0) * Math.PI) / 180,
+      ...(Math.abs(n[2] - 1) > 1e-9 ? { normal: n } : {}),
+    }
+  }
+  const shift = (b: Vec3): InsertProps => ({ name: '', position: [-b[0], -b[1], -b[2]], scale: [1, 1, 1], rotation: 0 })
+  const expand = (rec: Rec, after: InsertProps[], layer: string, depth: number): void => {
+    const def = blocks.get((str(rec.codes, 2) ?? '').toUpperCase())
+    if (!def || depth > 8) {
+      if (!def) unsupported.add('INSERT')
+      return
+    }
+    const here = (str(rec.codes, 8) ?? '0') === '0' ? layer : (str(rec.codes, 8) ?? '0')
+    const chain = [shift(def.base), insertOf(rec), ...after]
+    for (const it of def.items) {
+      if (it.insert) {
+        expand(it.insert, chain, here, depth + 1)
+        continue
+      }
+      let e = { id: '', type: it.spec!.type, layer: '', props: it.spec!.props } as unknown as Entity
+      for (const t of chain) e = transformInsertEntity(e, t)
+      entities.push({ ...it.spec!, props: e.props as EntityProps, layerName: it.spec!.layerName === '0' ? here : it.spec!.layerName })
+    }
+  }
+  for (const rec of inserts) expand(rec, [], str(rec.codes, 8) ?? '0', 0)
 
   for (const r of dimStyleRecs) dimStyles.push(parseDimStyle(r.codes, blockNames))
   // Cada cota con las variables de su estilo (el documento las vuelve a resolver al agregar los estilos).

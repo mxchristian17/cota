@@ -336,3 +336,36 @@ describe('DXF: tipos de línea, anchos y HATCH', () => {
     for (const b of c.loops[0].bulges!) expect(b).toBeCloseTo(Math.tan(Math.PI / 8), 9)
   })
 })
+
+describe('importDxf ▸ bloques', () => {
+  const dxf = (pairs: Array<[number, string | number]>) => pairs.map(([c, v]) => `${c}\n${v}`).join('\n') + '\n'
+  it('expande las inserciones (punto base, rotación, escala, anidadas y capa 0 que flota)', () => {
+    const text = dxf([
+      [0, 'SECTION'], [2, 'BLOCKS'],
+      [0, 'BLOCK'], [2, 'Tuerca'], [10, 5], [20, 0], [30, 0],
+      [0, 'LINE'], [8, '0'], [10, 5], [20, 0], [30, 0], [11, 15], [21, 0], [31, 0],
+      [0, 'ENDBLK'],
+      [0, 'BLOCK'], [2, 'Grupo'], [10, 0], [20, 0], [30, 0],
+      [0, 'INSERT'], [8, '0'], [2, 'Tuerca'], [10, 0], [20, 0], [30, 0],
+      [0, 'CIRCLE'], [8, 'Fija'], [10, 0], [20, 0], [30, 0], [40, 2],
+      [0, 'ENDBLK'],
+      [0, 'ENDSEC'],
+      [0, 'SECTION'], [2, 'ENTITIES'],
+      [0, 'INSERT'], [8, 'Piezas'], [2, 'Grupo'], [10, 100], [20, 50], [30, 0], [41, 2], [42, 2], [43, 2], [50, 90],
+      [0, 'ENDSEC'], [0, 'EOF'],
+    ])
+    const r = importDxf(text)
+    const line = r.entities.find((e) => e.type === 'LINE')!
+    const { start, end } = line.props as unknown as { start: number[]; end: number[] }
+    // La línea del bloque va de 0 a 10 respecto de su base; escalada ×2 y girada 90° desde (100, 50).
+    expect(start[0]).toBeCloseTo(100, 9)
+    expect(start[1]).toBeCloseTo(50, 9)
+    expect(end[0]).toBeCloseTo(100, 9)
+    expect(end[1]).toBeCloseTo(70, 9)
+    expect(line.layerName).toBe('Piezas') // estaba en la capa 0 dentro del bloque
+    const c = r.entities.find((e) => e.type === 'CIRCLE')!
+    expect((c.props as unknown as { radius: number }).radius).toBeCloseTo(4, 9)
+    expect(c.layerName).toBe('Fija')
+    expect(r.unsupported).not.toContain('INSERT')
+  })
+})

@@ -535,9 +535,25 @@ function blendGeometry(props: EdgeBlendProps): THREE.BufferGeometry {
   return acc.geometry
 }
 
+/**
+ * Resultados intermedios del árbol (booleanas, empalmes, vaciados) por contenido: la operación siguiente (agujerear
+ * lo que se acaba de unir, cortarlo con SLICE) reutiliza lo ya calculado en vez de rehacer todo el árbol.
+ */
+const treeCache = new Map<string, THREE.BufferGeometry>()
+
 function evalTree(props: SolidProps): THREE.BufferGeometry {
   const leaf = leafGeometry(props)
   if (leaf) return tagSurfaces(leaf)
+  const key = JSON.stringify(props)
+  const hit = treeCache.get(key)
+  if (hit) return hit.clone() // quien la usa la prepara (atributos, BVH): la del caché queda intacta
+  const out = evalNode(props)
+  if (treeCache.size > 120) treeCache.clear()
+  treeCache.set(key, out.clone())
+  return out
+}
+
+function evalNode(props: SolidProps): THREE.BufferGeometry {
   if (props.op === 'FILLETEDGE' || props.op === 'CHAMFEREDGE') return blendGeometry(props)
   if (props.op === 'SHELL') {
     const outer = evalTree(props.solid)

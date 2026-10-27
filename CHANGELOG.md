@@ -4,6 +4,23 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-10-27
+
+### Added
+- **DWG files open in the browser, with no server**: OPEN and IMPORT read `.dwg` (2000 to 2018+ formats) with
+  [acad-ts](https://github.com/node-projects/acad-ts) (MIT), loaded only when the first DWG is opened. The optional
+  server is still used to save DWG, and as a fallback for files the browser cannot read. 3D solids stored as ACIS
+  data are not read yet.
+- Blocks in DXF and DWG files are imported: every insertion is expanded into its geometry (base point, rotation,
+  scale and nested blocks), objects on layer 0 inside a block take the layer of the insertion, and attribute values
+  come in as text.
+
+### Performance
+- Booleans reuse what was already computed: adding a hole to a part you just joined, or slicing it, no longer
+  recomputes the whole part (the bore of a finned cylinder went from 5 s to 1.6 s).
+- Edges and snaps of parts with many booleans are about 7 times faster (4.8 s to 0.7 s on a finned cylinder), and
+  the clean-up after each boolean only tests the zone where both parts meet.
+
 ## [1.5.1] — 2026-10-27
 
 ### Fixed

@@ -1,7 +1,7 @@
 {
   "name": "cota",
   "private": true,
-  "version": "1.5.1",
+  "version": "1.6.0",
   "type": "module",
   "description": "Free, open-source 2D and 3D CAD that runs in the browser",
   "license": "Apache-2.0",
@@ -40,6 +40,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@node-projects/acad-ts": "3.6.0",
     "occt-import-js": "^0.0.23",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

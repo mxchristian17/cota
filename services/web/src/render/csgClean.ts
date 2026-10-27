@@ -90,6 +90,14 @@ export function dropStrayTriangles(
   const eps = Math.max(res.boundingBox!.getSize(new THREE.Vector3()).length() * 1e-5, 1e-7)
   const ba = bvhOf(a)
   const bb = checkB ? bvhOf(b) : null
+  // Lejos de un operando no hace falta lanzar rayos (lo caro): fuera de la caja de B un triángulo viene de A tal
+  // cual; fuera de la de A, de B. Sólo se clasifica lo que cae en la zona donde se cruzan.
+  const boxOf = (g: THREE.BufferGeometry) => {
+    g.computeBoundingBox()
+    return g.boundingBox!.clone().expandByScalar(eps)
+  }
+  const boxA = boxOf(a)
+  const boxB = checkB ? boxOf(b) : null
   const vtx = (i: number) => (index ? index.getX(i) : i)
   const c = new THREE.Vector3()
   const keep: number[] = []
@@ -100,6 +108,17 @@ export function dropStrayTriangles(
       c.x += pos.getX(v) / 3
       c.y += pos.getY(v) / 3
       c.z += pos.getZ(v) / 3
+    }
+    if (boxB) {
+      const inA = boxA.containsPoint(c)
+      const inB = boxB.containsPoint(c)
+      if (!inA || !inB) {
+        // Unión: lo que queda afuera de una caja es de la otra pieza y se conserva. Resta: fuera de A sobra, fuera
+        // de B es A intacta. Intersección: fuera de cualquiera de las dos sobra.
+        const ok = op === 'union' ? true : op === 'subtract' ? inA : false
+        if (ok) keep.push(t)
+        continue
+      }
     }
     const sa = classify(ba, c, eps)
     let bad = op === 'subtract' || op === 'intersect' ? sa === 'out' : sa === 'in'

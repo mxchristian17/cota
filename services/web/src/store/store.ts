@@ -52,6 +52,7 @@ import { plotLayouts } from '../core/io/layoutPlot'
 import { fieldContextFor, resolveFieldTexts } from '../core/fields/context'
 import { exportObj, importObj, type ObjMesh } from '../core/io/obj'
 import { exportDxf, importDxf } from '../core/io/dxf'
+import { dwgToDxfText, dwgVersion } from '../core/io/dwg'
 import {
   ensurePermission,
   fsaSupported,
@@ -481,6 +482,24 @@ export const useStore = create<AppState>((set, get) => {
 
   // --- Importación de geometría (reutilizada por OBJ/DXF/DWG) ---
   /** Importa un DXF al dibujo actual; con `asDrawing` (OPEN de un .dxf/.dwg) además toma su `$CLAYER`. */
+  /**
+   * DWG → DXF: primero en el navegador (acad-ts, sin servidor); si el archivo no se puede leer ahí y hay un servidor
+   * con conversor, se le pide a él.
+   */
+  const readDwg = async (data: ArrayBuffer): Promise<string> => {
+    const version = dwgVersion(data)
+    if (!version) throw new Error('the file is not a DWG drawing.')
+    try {
+      return await dwgToDxfText(data)
+    } catch (local) {
+      try {
+        return await api.dwgToDxf(data)
+      } catch {
+        // Sin servidor (o sin conversor): el motivo útil es el del lector local.
+        throw new Error(`this DWG (${version}) could not be read: ${local instanceof Error ? local.message : String(local)}`)
+      }
+    }
+  }
   const importDxfText = (text: string, asDrawing = false): number => {
     const { currentLayer, layers, entities, dimStyles, linetypes, vars, unsupported } = importDxf(text)
     // Tipos de línea: los del LTYPE del archivo; al abrir un DXF también sus variables.
@@ -2226,19 +2245,12 @@ export const useStore = create<AppState>((set, get) => {
         }
         const reader = new FileReader()
         if (name.endsWith('.dwg')) {
-          // DWG: se convierte a DXF en el backend y luego se importa como DXF.
+          // DWG: se convierte a DXF (en el navegador; si no puede, en el servidor) y se importa como DXF.
           reader.onload = () => {
-            print('Converting DWG…')
-            api
-              .dwgToDxf(reader.result as ArrayBuffer)
+            print('Reading DWG…')
+            readDwg(reader.result as ArrayBuffer)
               .then((dxfText) => runImport(() => importDxfText(dxfText), (n) => `Imported ${n} entity(ies) from DWG.`))
-              .catch((err) =>
-                print(
-                  err instanceof ApiError && err.status === 501
-                    ? 'DWG converter not available on the server.'
-                    : `DWG import failed: ${err instanceof Error ? err.message : String(err)}`,
-                ),
-              )
+              .catch((err) => print(`DWG import failed: ${err instanceof Error ? err.message : String(err)}`))
           }
           reader.readAsArrayBuffer(file)
           return
@@ -2289,8 +2301,8 @@ export const useStore = create<AppState>((set, get) => {
         } else {
           let dxf: string
           if (lower.endsWith('.dwg')) {
-            print('Converting DWG…')
-            dxf = await api.dwgToDxf(await file.arrayBuffer())
+            print('Reading DWG…')
+            dxf = await readDwg(await file.arrayBuffer())
           } else dxf = await file.text()
           pushSnapshot()
           doc.reset()

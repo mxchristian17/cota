@@ -16,6 +16,7 @@ from the Help dialog.
 | [three-bvh-csg](https://github.com/gkjohnson/three-bvh-csg) | 0.0.16 | MIT |
 | [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) | 0.7 | MIT |
 | [Zustand](https://github.com/pmndrs/zustand) | 5.0 | MIT |
+| [acad-ts](https://github.com/node-projects/acad-ts) (TypeScript port of [ACadSharp](https://github.com/DomCR/ACadSharp)), loaded when a DWG is opened | 3.6.0 | MIT |
 
 ### OpenCascade for STEP/IGES (loaded on demand)
 

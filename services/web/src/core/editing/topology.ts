@@ -58,30 +58,50 @@ interface Piece {
 // Soldado de vértices
 // ---------------------------------------------------------------------------------------------
 
+/** Clave numérica de una celda de un hash espacial (sin armar cadenas: es lo que más tiempo se llevaba). */
+const cellKey = (i: number, j: number, k: number): number => ((i * 73856093) ^ (j * 19349663) ^ (k * 83492791)) | 0
+
+/** Hash espacial de índices de puntos en celdas de lado `size`. */
+function pointGrid(size: number) {
+  const map = new Map<number, number[]>()
+  const c = (v: number) => Math.floor(v / size)
+  return {
+    add(p: Vec3, id: number) {
+      const k = cellKey(c(p[0]), c(p[1]), c(p[2]))
+      const list = map.get(k)
+      if (list) list.push(id)
+      else map.set(k, [id])
+    },
+    /** Índices en la celda de `p` y sus 26 vecinas (puede repetir por colisiones de la clave). */
+    near(p: Vec3, visit: (id: number) => boolean | void): void {
+      const [ci, cj, ck] = [c(p[0]), c(p[1]), c(p[2])]
+      for (let di = -1; di <= 1; di++)
+        for (let dj = -1; dj <= 1; dj++)
+          for (let dk = -1; dk <= 1; dk++) {
+            const list = map.get(cellKey(ci + di, cj + dj, ck + dk))
+            if (list) for (const id of list) if (visit(id) === true) return
+          }
+    },
+  }
+}
+
 function weld(pos: ArrayLike<number>, tol: number): { verts: Vec3[]; idx: number[] } {
   const verts: Vec3[] = []
   const idx: number[] = []
-  const grid = new Map<string, number[]>()
-  const cell = (v: number): number => Math.floor(v / tol)
-  const near = (v: Vec3): number => {
-    const [ci, cj, ck] = [cell(v[0]), cell(v[1]), cell(v[2])]
-    for (let di = -1; di <= 1; di++)
-      for (let dj = -1; dj <= 1; dj++)
-        for (let dk = -1; dk <= 1; dk++) {
-          for (const q of grid.get(`${ci + di},${cj + dj},${ck + dk}`) ?? []) if (vdist(verts[q], v) <= tol) return q
-        }
-    return -1
-  }
+  const grid = pointGrid(tol)
   for (let p = 0; p + 2 < pos.length; p += 3) {
     const v: Vec3 = [pos[p], pos[p + 1], pos[p + 2]]
-    let id = near(v)
+    let id = -1
+    grid.near(v, (q) => {
+      if (vdist(verts[q], v) <= tol) {
+        id = q
+        return true
+      }
+    })
     if (id < 0) {
       id = verts.length
       verts.push(v)
-      const key = `${cell(v[0])},${cell(v[1])},${cell(v[2])}`
-      const list = grid.get(key)
-      if (list) list.push(id)
-      else grid.set(key, [id])
+      grid.add(v, id)
     }
     idx.push(id)
   }
@@ -127,19 +147,27 @@ function matchHalves(halves: Half[], nV: number): { pairs: [Half, Half][]; open:
 /** Parte cada media arista sin gemelo en los vértices (de otras sin gemelo) que caen sobre ella. */
 function splitTJunctions(open: Half[], verts: Vec3[], tol: number): Half[] {
   const cand = [...new Set(open.flatMap((h) => [h.a, h.b]))]
+  // Celdas del tamaño típico de una arista abierta: se recorren sólo las que atraviesa cada segmento.
+  const lens = open.map((h) => vdist(verts[h.a], verts[h.b])).sort((x, y) => x - y)
+  const size = Math.max(lens[Math.floor(lens.length / 2)] ?? tol, tol * 4)
+  const grid = pointGrid(size)
+  for (const v of cand) grid.add(verts[v], v)
   const out: Half[] = []
   for (const h of open) {
     const a = verts[h.a]
     const b = verts[h.b]
-    const lo = [Math.min(a[0], b[0]) - tol, Math.min(a[1], b[1]) - tol, Math.min(a[2], b[2]) - tol]
-    const hi = [Math.max(a[0], b[0]) + tol, Math.max(a[1], b[1]) + tol, Math.max(a[2], b[2]) + tol]
     const inner: { v: number; t: number }[] = []
-    for (const v of cand) {
-      if (v === h.a || v === h.b) continue
-      const p = verts[v]
-      if (p[0] < lo[0] || p[1] < lo[1] || p[2] < lo[2] || p[0] > hi[0] || p[1] > hi[1] || p[2] > hi[2]) continue
-      const c = closestOnSegment(p, a, b)
-      if (c.t > 0 && c.t < 1 && vdist(c.point, p) <= tol) inner.push({ v, t: c.t })
+    const seen = new Set<number>()
+    const steps = Math.ceil(vdist(a, b) / (size * 0.5)) + 1
+    for (let s = 0; s <= steps; s++) {
+      const f = s / steps
+      grid.near([a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f], (v) => {
+        if (v === h.a || v === h.b || seen.has(v)) return
+        seen.add(v)
+        const p = verts[v]
+        const c = closestOnSegment(p, a, b)
+        if (c.t > 0 && c.t < 1 && vdist(c.point, p) <= tol) inner.push({ v, t: c.t })
+      })
     }
     inner.sort((x, y) => x.t - y.t)
     let prev = h.a
@@ -156,11 +184,18 @@ function splitTJunctions(open: Half[], verts: Vec3[], tol: number): Half[] {
 function matchNear(open: Half[], verts: Vec3[], tol: number): [Half, Half][] {
   const used = new Set<Half>()
   const pairs: [Half, Half][] = []
+  const grid = pointGrid(tol)
+  open.forEach((g, i) => grid.add(verts[g.a], i))
   for (const h of open) {
     if (used.has(h)) continue
-    const twin = open.find(
-      (g) => g !== h && !used.has(g) && g.t !== h.t && vdist(verts[g.a], verts[h.b]) <= tol && vdist(verts[g.b], verts[h.a]) <= tol,
-    )
+    let twin: Half | null = null
+    grid.near(verts[h.b], (i) => {
+      const g = open[i]
+      if (g !== h && !used.has(g) && g.t !== h.t && vdist(verts[g.a], verts[h.b]) <= tol && vdist(verts[g.b], verts[h.a]) <= tol) {
+        twin = g
+        return true
+      }
+    })
     if (!twin) continue
     used.add(h)
     used.add(twin)
