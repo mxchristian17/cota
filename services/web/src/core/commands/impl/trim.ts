@@ -156,7 +156,7 @@ async function fence(ctx: CommandContext, s: TrimSession, op: Mode): Promise<voi
 async function crossing(ctx: CommandContext, s: TrimSession, op: Mode): Promise<void> {
   const a = await ctx.getPoint('Specify first corner: ')
   if (a.kind !== 'point') return
-  const b = await ctx.getPoint('Specify opposite corner: ', { base: a.point })
+  const b = await ctx.getPoint('Specify opposite corner: ', { base: a.point, corner: true })
   if (b.kind !== 'point') return
   const box = {
     minX: Math.min(a.point.x, b.point.x),

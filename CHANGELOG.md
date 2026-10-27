@@ -9,6 +9,8 @@ All notable changes to Cota are documented here. The project follows [Semantic V
   remounted instead of leaving a blank screen.
 - Solids show their tangent edges (where a flat face meets a fillet), in the model and in drawing views, as in
   classic CAD. Drawing views also include the outline of fully rounded parts.
+- While drawing a polyline, the segments already placed give object snaps (endpoint, midpoint, intersection…).
+- With ortho on, intersection snaps mark where the segment being drawn will cross nearby objects.
 - Default lighting follows the camera (two distant lights), so faces with different orientations never share
   the same shade.
 
@@ -25,6 +27,8 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 - Coordinates no longer carry floating-point noise (a line drawn to x = 1 stored 0.9999999999995453); ortho keeps
   the locked coordinate exact.
 - Object snaps and tracking no longer pick points from layers that are off or frozen.
+- STRETCH: ortho no longer flattens the crossing window, and the objects found stay highlighted until the
+  command ends (also ZOOM Window, MVIEW, TRIM fence windows and VIEW Window ignore ortho).
 - The browser's hand cursor no longer appears over the crosshair when hovering a grip.
 - VIEWBASE on a part with every edge rounded reported "No 3D solids to document".
 - Clicking empty space starts a selection window and a second click closes it (no need to drag); clicking a

@@ -64,7 +64,7 @@ function applyFactor(ctx: CommandContext, text: string): boolean {
 }
 
 async function zoomWindowFlow(ctx: CommandContext, first: Pt): Promise<void> {
-  const opp = await ctx.getPoint('Specify opposite corner: ', { base: first })
+  const opp = await ctx.getPoint('Specify opposite corner: ', { base: first, corner: true })
   if (opp.kind === 'point') {
     ctx.app.zoomWindow(first, opp.point)
     ctx.print('Zoom window.')

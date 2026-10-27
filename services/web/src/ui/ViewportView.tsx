@@ -134,6 +134,8 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
         osnap: s.osnap,
         osnapOverride: s.engine.osnapOverride(),
         snapBase: s.engine.snapBase(),
+        snapLive: s.engine.snapEntities(),
+        ortho: s.ortho,
         pointPrompt: s.engine.awaitingPoint,
         previewColor: pickPreviewColor(s.layerSvc.get(s.currentLayerId)?.color ?? '#ffffff', s.theme.background),
         otrack: s.otrack,

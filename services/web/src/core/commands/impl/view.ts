@@ -105,7 +105,7 @@ export const viewCommand: Command = {
         if (!name) return
         const a = await ctx.getPoint('Specify first corner: ', { base: null })
         if (a.kind !== 'point') return
-        const b = await ctx.getPoint('Specify opposite corner: ', { base: a.point })
+        const b = await ctx.getPoint('Specify opposite corner: ', { base: a.point, corner: true })
         if (b.kind !== 'point') return
         // La vista de la ventana se guarda sin cambiar la actual (como el CAD clásico).
         const view = ctx.app.windowViewState?.(a.point, b.point)

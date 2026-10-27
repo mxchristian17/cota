@@ -46,6 +46,7 @@ export const stretchCommand: Command = {
     if (c1.kind !== 'point') return
     const c2 = await ctx.getPoint('Specify opposite corner: ', {
       base: c1.point,
+      corner: true,
       preview: (c) => boxPreview(c1.point, c),
     })
     if (c2.kind !== 'point') return
@@ -65,6 +66,7 @@ export const stretchCommand: Command = {
       return
     }
     ctx.print(`${ids.length} object(s) found.`)
+    ctx.highlight(ids)
 
     const basePt = await ctx.getPoint('Specify base point: ')
     if (basePt.kind !== 'point') return

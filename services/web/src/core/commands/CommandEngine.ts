@@ -1,4 +1,5 @@
 import { byFence, inPolygon, rectPolygon, selectableEntities } from './selectionSets'
+import type { Entity } from '../document/types'
 import type { Deferred } from '../geom/tangency'
 import { angleDeg, type Pt } from '../math'
 import type { DocumentModel } from '../document/DocumentModel'
@@ -65,6 +66,9 @@ type Pending =
       /** Texto libre aceptado como keyword (p. ej. `1/50xp` en ZOOM). */
       textKeyword?: RegExp
       preview?: PreviewFn
+      /** Esquina de ventana: sin ortho. */
+      corner?: boolean
+      snapEntities?: Entity[]
       resolve: (r: PointResult) => void
     }
   | {
@@ -141,6 +145,10 @@ export class CommandEngine {
       getDistance: (prompt, opts) => this.requestDistance(prompt, opts),
       getAngle: (prompt, opts) => this.requestAngle(prompt, opts),
       getSelection: (prompt) => this.requestSelection(prompt),
+      highlight: (ids) => {
+        this.selectionUsed = true // se suelta al terminar el comando
+        this.deps.onSelectionChange(ids)
+      },
       getSelectionOrKeyword: (prompt, keywords) =>
         new Promise((resolve) => {
           this.selectionUsed = true
@@ -195,6 +203,12 @@ export class CommandEngine {
   /** Override de snap de un solo uso activo (o null). Lo consume la próxima captura. */
   osnapOverride(): OsnapKind | null {
     return this.osnapOverrideKind
+  }
+
+  /** Geometría en curso del comando que da snaps (ver `GetPointOptions.snapEntities`). */
+  snapEntities(): Entity[] | undefined {
+    const p = this.pending
+    return p?.type === 'point' && p.snapEntities?.length ? p.snapEntities : undefined
   }
 
   /** Punto base del prompt actual (rubber-band), para osnaps deferred (perpendicular/tangent). */
@@ -271,7 +285,7 @@ export class CommandEngine {
     this.osnapOverrideKind = null // el override se consume con la captura
     if (pending.type !== 'selection' && pending.type !== 'string') this.echo()
     if (pending.type === 'point') {
-      const point = !snapped && this.deps.isOrtho() && pending.base ? this.orthoConstrain(pending.base, p) : p
+      const point = !snapped && this.deps.isOrtho() && pending.base && !pending.corner ? this.orthoConstrain(pending.base, p) : p
       if (this.outsideLimits(point)) return
       this.lastPoint = point
       this.pending = null
@@ -322,7 +336,7 @@ export class CommandEngine {
     }
     if (!pending || pending.type === 'selection' || pending.type === 'string' || !pending.preview) return []
     let c = cursor
-    if (pending.type === 'point' && pending.base && this.deps.isOrtho()) {
+    if (pending.type === 'point' && pending.base && !pending.corner && this.deps.isOrtho()) {
       c = this.orthoConstrain(pending.base, cursor)
     }
     return pending.preview(c)
@@ -468,6 +482,8 @@ export class CommandEngine {
         enterKeyword: opts?.enterKeyword,
         textKeyword: opts?.textKeyword,
         preview: opts?.preview,
+        corner: opts?.corner,
+        snapEntities: opts?.snapEntities,
         resolve: (r) => {
           if (r.kind === 'point') this.runPoints++
           resolve(r)

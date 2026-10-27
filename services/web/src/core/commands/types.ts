@@ -47,6 +47,10 @@ export interface GetPointOptions {
   textKeyword?: RegExp
   /** Construye la previsualización (rubber-band) para la posición actual del cursor. */
   preview?: (cursor: Pt) => PreviewShape[]
+  /** Esquina opuesta de una ventana: sin ortho, que la dejaría en línea con la primera (como el CAD clásico). */
+  corner?: boolean
+  /** Geometría ya definida del comando que todavía no está en el dibujo (los tramos de una PLINE): da snaps. */
+  snapEntities?: Entity[]
 }
 
 export interface GetDistanceOptions {
@@ -246,6 +250,8 @@ export interface CommandContext {
   getAngle(prompt: string, opts: GetAngleOptions): Promise<AngleResult>
   /** Selección interactiva de objetos (click en viewport). Devuelve ids, o null si se cancela. */
   getSelection(prompt: string): Promise<string[] | null>
+  /** Resalta objetos hasta que termina el comando (los encontrados por una ventana de STRETCH, etc.). */
+  highlight(ids: string[]): void
   /** Selección (sin tomar la pre-selección) que también acepta opciones tecleadas. null si se cancela. */
   getSelectionOrKeyword(prompt: string, keywords: string[]): Promise<{ kind: 'selection'; ids: string[] } | { kind: 'keyword'; keyword: string } | null>
   /** Solicita texto libre por la línea de comandos (p. ej. nombre de archivo). null si se cancela. */

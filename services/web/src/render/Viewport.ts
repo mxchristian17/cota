@@ -9,6 +9,7 @@ import { entityOutline } from '../core/editing/bounds'
 import { computeSnap, type SnapResult, type SnapType } from '../core/snap/SnapService'
 import { computeTracking } from '../core/snap/tracking'
 import { singleOsnap, type OsnapConfig, type OsnapKind } from '../core/snap/osnap'
+import { segmentsOfEntity } from '../core/snap/segments'
 import { dimDisplay } from '../core/dimension/dimGeometry'
 import { isWorldUcs, ORTHO_UCS, orthoUcs, sameUcs, ucsZ, WORLD_UCS, type OrthoUcsName, type Ucs } from '../core/ucs'
 import { sysvars } from '../core/commands/sysvars'
@@ -30,6 +31,14 @@ import { entityDashes, linetypePaths, type DashResult } from '../core/linetype/d
 import { hatchFrame, hatchRegions, hatchRings, hatchStrokesCached, isSolidHatch, to3, type Ring } from '../core/hatch/geometry'
 import { isWide, polylineBand } from '../core/geom/plineWidth'
 import type { HatchEntity } from '../core/document/types'
+
+/** Distancia de `p` al segmento a→b. */
+function distToSegment(p: Pt, a: Pt, b: Pt): number {
+  const ab = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z }
+  const L = ab.x * ab.x + ab.y * ab.y + ab.z * ab.z
+  const t = L > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y + (p.z - a.z) * ab.z) / L)) : 0
+  return Math.hypot(p.x - a.x - ab.x * t, p.y - a.y - ab.y * t, p.z - a.z - ab.z * t)
+}
 
 export interface ViewportData {
   revision: number
@@ -70,6 +79,10 @@ export interface ViewportData {
    * viewports (trans-espacial). Un clic que captura un snap de una de ellas la toma como objeto.
    */
   snapExtras?: Entity[]
+  /** Geometría en curso del comando (tramos de una PLINE todavía sin guardar): sólo da snaps. */
+  snapLive?: Entity[]
+  /** ORTHO activo (los cruces de la recta de ortho con los objetos dan INT). */
+  ortho?: boolean
 }
 
 export interface RectPx {
@@ -265,6 +278,7 @@ export class Viewport {
   private readonly keyLight = new THREE.DirectionalLight(0xffffff, 2.2)
   private readonly fillLight = new THREE.DirectionalLight(0xffffff, 0.35)
   private snapListKey = ''
+  private snapLiveRef: Entity[] | undefined
   /** Escala de anotación con la que se dibujaron las cotas anotativas (cambia con la escala del viewport). */
   private lastAnnoScale: number | undefined = undefined
   private readonly lastPx: [number, number] = [0, 0]
@@ -1214,14 +1228,15 @@ export class Viewport {
     // Las capas apagadas o congeladas no dan snaps: la lista se rehace si cambian los datos o la visibilidad.
     const hidden = hiddenLayerIds(d.layers)
     const listKey = `${d.revision}|${[...hidden].join(',')}|${d.snapExtras?.length ?? 0}`
-    if (this.snapListKey !== listKey) {
+    if (this.snapListKey !== listKey || this.snapLiveRef !== d.snapLive) {
+      this.snapLiveRef = d.snapLive
       this.snapListKey = listKey
       this.snapList = null
       this.snapSpheres = null
     }
     if (!this.snapList) {
       const own = hidden.size ? this.entities().filter((e) => !hidden.has(e.layer)) : this.entities()
-      this.snapList = d.snapExtras?.length ? own.concat(d.snapExtras) : own
+      this.snapList = own.concat(d.snapExtras ?? [], d.snapLive ?? [])
     }
     const all = this.snapList
     // Culling espacial: solo las entidades cuya esfera proyectada cae cerca del cursor (clave para
@@ -1250,6 +1265,22 @@ export class Viewport {
       depth: (p) => this.controller.camera.position.distanceTo(new THREE.Vector3(p.x, p.y, p.z)),
     })
 
+    // INT/APPINT sobre el tramo en curso: con ORTHO la dirección del rubber-band queda fija y se marcan sus cruces
+    // con los objetos cercanos (las intersecciones "que se vienen" mientras se dibuja).
+    const os = override ? singleOsnap(override) : d.osnap
+    if (d.ortho && d.snapBase && (override || d.esnap) && (os.intersection || os.apparentIntersection)) {
+      const hit = this.orthoCrossing(raw, d.snapBase, near)
+      // Gana el marcador más cercano al cursor (p. ej. el cruce con un círculo antes que su centro).
+      const px = (p: Pt) => {
+        const pr = this.controller.project(new THREE.Vector3(p.x, p.y, p.z))
+        return pr ? Math.hypot(pr[0] - this.lastPx[0], pr[1] - this.lastPx[1]) : Infinity
+      }
+      if (hit && (result.type === null || result.type === 'grid' || px(hit) < px(result.point))) {
+        this.trackLines = []
+        return { point: hit, type: 'intersection' }
+      }
+    }
+
     // Object snap tracking: los osnaps directos ganan; el tracking sólo actúa cuando no hay captura
     // (o sólo hay grilla), como en el CAD clásico.
     this.trackLines = []
@@ -1268,6 +1299,76 @@ export class Viewport {
       }
     }
     return result
+  }
+
+  /**
+   * Cruce de la recta de ORTHO desde `base` (el eje de la UCS más cercano a la dirección del cursor) con los
+   * objetos, si cae a menos de 10 px del cursor. Rectas exactas; círculos y arcos, analíticos.
+   */
+  private orthoCrossing(raw: Pt, base: Pt, ents: Entity[]): Pt | null {
+    const asPt = (a: Vec3): Pt => ({ x: a[0], y: a[1], z: a[2] })
+    const [ux, uy] = [asPt(this.ucs.x), asPt(this.ucs.y)]
+    const d = { x: raw.x - base.x, y: raw.y - base.y, z: raw.z - base.z }
+    const dotv = (a: Pt, b: Pt) => a.x * b.x + a.y * b.y + a.z * b.z
+    const dir = Math.abs(dotv(d, ux)) >= Math.abs(dotv(d, uy)) ? ux : uy
+    const along = (t: number): Pt => ({ x: base.x + dir.x * t, y: base.y + dir.y * t, z: base.z + dir.z * t })
+    const cursorT = dotv(d, dir)
+    const cands: number[] = []
+    for (const e of ents) {
+      if ((e.type === 'CIRCLE' || e.type === 'ARC') && Math.abs(e.props.normal?.[2] ?? 1) > 1 - 1e-9 && Math.abs(dir.z) < 1e-9) {
+        // |base + t·dir − c|² = r² (en el plano XY).
+        const [cx, cy] = e.props.center
+        const fx = base.x - cx
+        const fy = base.y - cy
+        const b = fx * dir.x + fy * dir.y
+        const disc = b * b - (fx * fx + fy * fy - e.props.radius * e.props.radius)
+        if (disc < 0) continue
+        for (const t of [-b - Math.sqrt(disc), -b + Math.sqrt(disc)]) {
+          if (e.type === 'ARC') {
+            const p = along(t)
+            const segs = segmentsOfEntity(e)
+            const onArc = segs.some(([a, q]) => distToSegment(p, a, q) < e.props.radius * 0.02)
+            if (!onArc) continue
+          }
+          cands.push(t)
+        }
+        continue
+      }
+      for (const [a, q] of segmentsOfEntity(e)) {
+        // Recta base+t·dir contra el segmento a→q, en el plano de la UCS.
+        const ex = { x: q.x - a.x, y: q.y - a.y, z: q.z - a.z }
+        const n = { x: dir.y * ex.z - dir.z * ex.y, y: dir.z * ex.x - dir.x * ex.z, z: dir.x * ex.y - dir.y * ex.x }
+        const nn = dotv(n, n)
+        if (nn < 1e-18) continue // paralelos
+        const w = { x: a.x - base.x, y: a.y - base.y, z: a.z - base.z }
+        const c1 = { x: w.y * ex.z - w.z * ex.y, y: w.z * ex.x - w.x * ex.z, z: w.x * ex.y - w.y * ex.x }
+        const c2 = { x: w.y * dir.z - w.z * dir.y, y: w.z * dir.x - w.x * dir.z, z: w.x * dir.y - w.y * dir.x }
+        const t = dotv(c1, n) / nn
+        const s = dotv(c2, n) / nn
+        if (s < -1e-9 || s > 1 + 1e-9) continue
+        const p = along(t)
+        const pq = { x: a.x + ex.x * s, y: a.y + ex.y * s, z: a.z + ex.z * s }
+        if (Math.hypot(p.x - pq.x, p.y - pq.y, p.z - pq.z) > 1e-6 * Math.max(1, Math.hypot(ex.x, ex.y, ex.z))) continue // se cruzan en el espacio
+        cands.push(t)
+      }
+    }
+    let best: Pt | null = null
+    let bestPx = 10
+    const c0 = along(cursorT)
+    const cur = this.controller.project(new THREE.Vector3(c0.x, c0.y, c0.z))
+    if (!cur) return null
+    for (const t of cands) {
+      if (Math.abs(t) < 1e-9) continue // el propio punto base
+      const p = along(t)
+      const pr = this.controller.project(new THREE.Vector3(p.x, p.y, p.z))
+      if (!pr) continue
+      const dpx = Math.hypot(pr[0] - cur[0], pr[1] - cur[1])
+      if (dpx <= bestPx) {
+        bestPx = dpx
+        best = p
+      }
+    }
+    return best
   }
 
   /** Ejes (mundo) de las alineaciones de tracking: los ejes X/Y de la UCS del viewport. */

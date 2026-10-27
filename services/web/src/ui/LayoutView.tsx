@@ -47,6 +47,8 @@ function baseData(
     osnap: s.osnap,
     osnapOverride: s.engine.osnapOverride(),
     snapBase: s.engine.snapBase(),
+    snapLive: s.engine.snapEntities(),
+    ortho: s.ortho,
     pointPrompt: active && s.engine.awaitingPoint,
     previewColor: pickPreviewColor(s.layerSvc.get(s.currentLayerId)?.color ?? '#ffffff', PAPER_COLOR),
     otrack: s.otrack,

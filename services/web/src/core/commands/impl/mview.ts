@@ -47,7 +47,7 @@ export async function askBox(ctx: CommandContext, prompt = 'Specify first corner
 }
 
 async function askOpposite(ctx: CommandContext, a: Pt): Promise<PaperBox | null> {
-  const r = await ctx.getPoint('Specify opposite corner: ', { base: a, preview: (c) => boxPreview(a, c) })
+  const r = await ctx.getPoint('Specify opposite corner: ', { base: a, corner: true, preview: (c) => boxPreview(a, c) })
   if (r.kind !== 'point') return null
   const box = boxOf(a, r.point)
   if (box.maxX - box.minX < 1e-6 || box.maxY - box.minY < 1e-6) {

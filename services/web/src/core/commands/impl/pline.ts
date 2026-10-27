@@ -1,5 +1,5 @@
 import { toVec3, type Pt, type Vec3 } from '../../math'
-import type { ArcProps } from '../../document/types'
+import type { ArcProps, Entity } from '../../document/types'
 import {
   arcFrom3Points,
   arcFromStartCenterEnd,
@@ -74,6 +74,9 @@ export const plineCommand: Command = {
     }
 
     /** Tramos ya fijados (con sus curvas) + lo tentativo que se le agrega. */
+    // Los tramos ya definidos dan snaps mientras se dibuja (extremos, medios, intersecciones…), como el CAD clásico.
+    const drawnSoFar = (): Entity[] =>
+      verts.length < 2 ? [] : [{ id: '__pline-in-progress', type: 'POLYLINE', layer: ctx.currentLayerId(), props: { vertices: [...verts], bulges: normalizeBulges(verts, bulges), closed: false } }]
     const previewWith = (extra: Pt[]): PreviewShape[] => {
       const fixed = polylinePoints({ vertices: verts, bulges: [...bulges], closed: false }).map(asPt)
       return [{ kind: 'polyline', points: [...fixed, ...extra] }]
@@ -118,6 +121,7 @@ export const plineCommand: Command = {
           base: asPt(prev),
           keywords: ['Arc', 'Close', 'Halfwidth', 'Length', 'Undo', 'Width'],
           preview: (c) => previewWith([c]),
+          snapEntities: drawnSoFar(),
         })
         if (r.kind === 'cancel') {
           commit(false)
@@ -169,6 +173,7 @@ export const plineCommand: Command = {
         {
           base: asPt(prev),
           keywords,
+          snapEntities: drawnSoFar(),
           // Por defecto el arco sale **tangente** al tramo anterior (comportamiento del CAD clásico).
           preview: (c) =>
             lastDir ? previewArc(arcFromStartEndDirection(prev, toVec3(c), lastDir), c) : previewWith([c]),
