@@ -52,3 +52,23 @@ describe('DWG en el navegador (acad-ts)', () => {
     expect(dwgVersion(new TextEncoder().encode('0\nSECTION').buffer as ArrayBuffer)).toBeNull()
   })
 })
+
+describe('guardar DWG en el navegador', () => {
+  it('el DXF de Cota se escribe como DWG 2018 y se vuelve a leer igual', async () => {
+    const { exportDxf } = await import('./dxf')
+    const { dxfTextToDwg } = await import('./dwg')
+    const layers = [{ id: 'L1', name: 'Ejes', color: '#ff8000', visible: true, locked: false, frozen: false, printable: true, lineWeight: 0.25, lineType: 'CONTINUOUS' }]
+    const ents = [
+      { id: 'a', type: 'LINE', layer: 'L1', props: { start: [0, 0, 0], end: [120, 40, 0] } },
+      { id: 'b', type: 'CIRCLE', layer: 'L1', props: { center: [60, 20, 0], radius: 15, normal: [0, 0, 1] } },
+    ]
+    const dwg = await dxfTextToDwg(exportDxf(ents as never, layers as never, 'L1'))
+    expect(dwgVersion(dwg)).toBe('AC1032')
+    const r = importDxf(await dwgToDxfText(dwg))
+    expect(r.layers.find((l) => l.name === 'Ejes')?.color).toBe('#ff8000') // color verdadero: sin invertir rojo y azul
+    const line = r.entities.find((e) => e.type === 'LINE')!
+    expect((line.props as unknown as { end: number[] }).end.slice(0, 2)).toEqual([120, 40])
+    expect(line.layerName).toBe('Ejes')
+    expect((r.entities.find((e) => e.type === 'CIRCLE')!.props as unknown as { radius: number }).radius).toBe(15)
+  })
+})

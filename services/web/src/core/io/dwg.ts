@@ -17,3 +17,26 @@ export function dwgVersion(data: ArrayBuffer): string | null {
   const head = new TextDecoder('ascii').decode(new Uint8Array(data, 0, Math.min(6, data.byteLength)))
   return /^AC\d{4}$/.test(head) ? head : null
 }
+
+/**
+ * DXF → DWG en el navegador: el DXF que ya exporta Cota se lee con acad-ts y se escribe como DWG 2018 (AC1032), el
+ * formato que abren los programas actuales.
+ */
+export async function dxfTextToDwg(dxf: string): Promise<ArrayBuffer> {
+  const { ACadVersion, Color, DwgWriter, DxfReader } = await import('@node-projects/acad-ts')
+  const doc = DxfReader.readFromStream(new TextEncoder().encode(dxf))
+  doc.header!.version = ACadVersion.AC1032
+  // acad-ts 3.6 escribe el color verdadero como R-G-B y el formato (y su propio lector) lo esperan B-G-R: se invierte
+  // antes de escribir para que el DWG salga con los colores correctos.
+  type Colored = { color: InstanceType<typeof Color> }
+  const fix = (o: Colored) => {
+    const c = o.color
+    if (c?.isTrueColor) o.color = Color.fromTrueColor((c.b << 16) | (c.g << 8) | c.r)
+  }
+  for (const l of doc.layers ?? []) fix(l as unknown as Colored)
+  for (const br of doc.blockRecords ?? []) for (const e of br.entities) fix(e as unknown as Colored)
+  // Las tablas que el DWG exige (estilo de texto y de cota Standard…) aunque el DXF no las traiga.
+  doc.createDefaults()
+  const bytes = DwgWriter.writeToBuffer(doc)
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+}

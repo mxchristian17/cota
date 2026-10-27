@@ -4,6 +4,15 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-10-27
+
+### Added
+- **Save DWG in the browser**: EXPORT ▸ DWG writes a DWG 2018 file with no server (layers, colors, linetypes and the
+  geometry, through acad-ts). The optional server is only a fallback.
+
+### Fixed
+- True colors (not from the color index) keep red and blue in the right order in the DWG files Cota writes.
+
 ## [1.6.0] — 2026-10-27
 
 ### Added

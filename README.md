@@ -56,7 +56,7 @@ you can build.
 | **Drawing production** | Layouts and paper space, scaled viewports, base and projected views from the 3D model, profiles and flat shots, shaded views, title blocks with fields and attributes, page setup, plot and multi-page publish to vector PDF with lineweights |
 | **Interface** | 23 classic toolbars with icons (dockable on any edge or floating), menus for every command, command line with history and completion, clean screen, full screen; your setup is remembered |
 | **Organization** | Layers (color, linetype, lineweight, freeze, lock, plot), linetype library, layer tools, drawing properties |
-| **Files** | Native `.cota` (JSON), DWG opening in the browser (no server), DXF import and export, OBJ import and export, STL, STEP and IGES opening, PDF |
+| **Files** | Native `.cota` (JSON), DWG open and save in the browser (no server), DXF import and export, OBJ import and export, STL, STEP and IGES opening, PDF |
 | **App** | Installable (PWA): own window without the address bar, desktop shortcut, works offline |
 | **Optional server** | Accounts, documents stored in a database, DWG ↔ DXF conversion, natural-language modeling with your own LLM key |
 
@@ -118,9 +118,9 @@ You now have a plate with a hole. Continue with the [getting started guide](docs
 ## Built with
 
 TypeScript, React, Vite, [Three.js](https://threejs.org/), three-bvh-csg and Zustand in the browser;
-Python, FastAPI, SQLModel and Alembic for the optional server; DWG files are read in the browser with
-[acad-ts](https://github.com/node-projects/acad-ts) (MIT, a TypeScript port of ACadSharp), and saving DWG goes
-through [GNU LibreDWG](https://www.gnu.org/software/libredwg/) when it is installed on the server. See
+Python, FastAPI, SQLModel and Alembic for the optional server; DWG files are read and written in the browser
+with [acad-ts](https://github.com/node-projects/acad-ts) (MIT, a TypeScript port of ACadSharp); the server can use
+[GNU LibreDWG](https://www.gnu.org/software/libredwg/) as a fallback when it is installed. See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Contributing

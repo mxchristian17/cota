@@ -52,7 +52,7 @@ import { plotLayouts } from '../core/io/layoutPlot'
 import { fieldContextFor, resolveFieldTexts } from '../core/fields/context'
 import { exportObj, importObj, type ObjMesh } from '../core/io/obj'
 import { exportDxf, importDxf } from '../core/io/dxf'
-import { dwgToDxfText, dwgVersion } from '../core/io/dwg'
+import { dwgToDxfText, dwgVersion, dxfTextToDwg } from '../core/io/dwg'
 import {
   ensurePermission,
   fsaSupported,
@@ -2358,18 +2358,12 @@ export const useStore = create<AppState>((set, get) => {
         download(dxf, 'dxf', 'application/dxf')
         return
       }
-      // DWG: se genera el DXF y el backend lo convierte a DWG.
-      print('Converting to DWG…')
-      api
-        .dxfToDwg(dxf)
+      // DWG: el DXF se convierte en el navegador (acad-ts); si falla y hay servidor con conversor, lo hace él.
+      print('Writing DWG…')
+      dxfTextToDwg(dxf)
+        .catch(() => api.dxfToDwg(dxf))
         .then((bytes) => download(bytes, 'dwg', 'image/vnd.dwg'))
-        .catch((err) =>
-          print(
-            err instanceof ApiError && err.status === 501
-              ? 'DWG converter not available on the server.'
-              : `DWG export failed: ${err instanceof Error ? err.message : String(err)}`,
-          ),
-        )
+        .catch((err) => print(`DWG export failed: ${err instanceof Error ? err.message : String(err)}`))
     },
     computePreview: (cursor) => engine.computePreview(cursor),
     listCommands: () => engine.getCommands(),

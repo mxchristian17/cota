@@ -101,8 +101,8 @@ The web dev server proxies `/api` to `http://localhost:8000`.
 
 ## DWG support
 
-Opening DWG files does not need the server: the browser reads them with acad-ts (MIT), loaded only when the first
-`.dwg` is opened. The server is still used to **save** DWG, and as a fallback for files the browser cannot read.
+Opening and saving DWG files does not need the server: the browser reads and writes them with acad-ts (MIT), loaded
+only when the first `.dwg` is used. The server is only a fallback for files the browser cannot read or write.
 
 DWG is converted on the server with the `dwg2dxf` and `dxf2dwg` programs of
 [GNU LibreDWG](https://www.gnu.org/software/libredwg/). They are not bundled with Cota: install them in the API
