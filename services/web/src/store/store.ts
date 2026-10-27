@@ -77,6 +77,7 @@ import { shadeViewTriangles } from '../core/projection/shade'
 import { solidMesh, solidMeshWithSurfaces } from '../render/csg'
 import { parseStl } from '../core/io/stl'
 import { requestViewGen } from '../ui/ViewGenDialog'
+import { DRAWING_TEMPLATE_EXT, drawingFromTemplate, makeTemplate, parseTemplate as parseDrawingTemplate, readDefaultTemplate, writeDefaultTemplate, type DrawingTemplate } from '../core/io/drawingTemplate'
 import { ApiError, api, type DocumentSummary } from '../core/io/apiClient'
 import { moveLayerTo } from '../core/layers/order'
 
@@ -622,6 +623,21 @@ export const useStore = create<AppState>((set, get) => {
     const dotb = (b: number[]) => c[0] * b[0] + c[1] * b[1] + c[2] * b[2]
     return [dotb(basis.right), dotb(basis.up)]
   }
+  /** Dibujo nuevo desde una plantilla; sus preferencias (colores, osnaps, estilo…) pasan a ser las del usuario. */
+  const applyTemplate = (t: DrawingTemplate, full = true) => {
+    if (full) pushSnapshot()
+    doc.load(drawingFromTemplate(t, 'drawing1'))
+    if (t.prefs) {
+      set(prefsPatch(t.prefs))
+      saveConfig()
+    }
+    if (full) {
+      restoreModelUcs()
+      currentFile = null
+      set({ docId: null, docName: 'drawing1', docFolder: '', fsFilePath: null, currentLayerId: doc.currentLayer ?? doc.firstLayerId, selection: [], viewportLayout: doc.viewportLayout })
+      bump()
+    }
+  }
   /** Firma del modelo (para saber si una vista de dibujo quedó desactualizada). */
   const modelSignature = (): string => {
     const text = JSON.stringify(doc.modelEntities.map((e) => [e.id, e.type, e.layer, e.props])) + JSON.stringify(doc.blocks.filter((b) => !b.name.startsWith('*')))
@@ -859,6 +875,40 @@ export const useStore = create<AppState>((set, get) => {
     preselection: () => [...get().selection],
     screen: (patch) => get().setScreen(patch),
     viewGenDialog: (initial) => requestViewGen(initial),
+    template: async (action) => {
+      const name = get().docName || 'drawing'
+      if (action === 'status') return readDefaultTemplate() ? 'New drawings start from your default template.' : 'New drawings start from the built-in settings.'
+      if (action === 'clear') {
+        writeDefaultTemplate(null)
+        return 'Default template cleared: new drawings start from the built-in settings.'
+      }
+      const current = () => makeTemplate(doc.toJSON(), collectPrefs() as unknown as Record<string, unknown>)
+      if (action === 'default') {
+        return writeDefaultTemplate(current()) ? 'The current settings are now the default template for new drawings.' : 'The browser does not allow saving the template.'
+      }
+      if (action === 'save') {
+        const blob = new Blob([JSON.stringify(current(), null, 1)], { type: 'application/json' })
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = `${name}${DRAWING_TEMPLATE_EXT}`
+        a.click()
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+        return `Template saved as "${a.download}".`
+      }
+      // Open: un dibujo nuevo desde un archivo de plantilla.
+      const file = await new Promise<File | null>((resolve) => {
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.accept = `${DRAWING_TEMPLATE_EXT},.json`
+        input.onchange = () => resolve(input.files?.[0] ?? null)
+        input.click()
+      })
+      if (!file) return 'No template opened.'
+      const t = parseDrawingTemplate(await file.text())
+      if (!t) return `"${file.name}" is not a drawing template.`
+      applyTemplate(t)
+      return `New drawing from the template "${file.name}". Use TEMPLATE ▸ Default to start every new drawing from it.`
+    },
     flatshotDialog: () =>
       new Promise<FlatshotOptions | null>((resolve) => {
         flatshotResolve?.(null)
@@ -2456,7 +2506,9 @@ export const useStore = create<AppState>((set, get) => {
     // --- documentos ---
     newDocument: () => {
       pushSnapshot()
-      doc.reset()
+      const t = readDefaultTemplate()
+      if (t) applyTemplate(t, false)
+      else doc.reset()
       restoreModelUcs()
       currentFile = null // el próximo SAVE crea un archivo nuevo en la carpeta local
       set({

@@ -598,6 +598,13 @@ export class DocumentModel {
     return this.data.units
   }
 
+  /** Unidades del dibujo (UNITS): no escala lo dibujado, como el CAD clásico. */
+  setUnits(units: string): void {
+    if (this.data.units === units) return
+    this.data.units = units
+    this._rev++
+  }
+
   get meta(): DocumentData['meta'] {
     return this.data.meta
   }

@@ -333,3 +333,19 @@ test.describe('Cota VIEWGEN', () => {
     expect(right.x).toBeLessThan(front.x)
   })
 })
+
+test.describe('Cota units and default template', () => {
+  test('UNITS sets the drawing units; TEMPLATE Default makes NEW start from the current settings; Clear forgets it', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    await typeCmd(page, 'UNITS', 'Centimeters')
+    expect(await store(page, 'return s.doc.units')).toBe('cm')
+    await typeCmd(page, '-LAYER', 'M', 'Ejes', '', 'LINE', '#0,0', '#10,0', '')
+    await typeCmd(page, 'TEMPLATE', 'Default')
+    await expect(page.locator('.cmd-output')).toContainText('now the default template')
+    await typeCmd(page, 'NEW')
+    expect(await store(page, 'return [s.doc.units, s.doc.layers.map((l) => l.name).includes("Ejes"), s.doc.entities.length]')).toEqual(['cm', true, 0])
+    await typeCmd(page, 'TEMPLATE', 'Clear', 'NEW')
+    expect(await store(page, 'return [s.doc.units, s.doc.layers.map((l) => l.name).includes("Ejes")]')).toEqual(['mm', false])
+  })
+})

@@ -4,6 +4,17 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-10-27
+
+### Added
+- UNITS: drawing units in millimeters, centimeters, meters, inches or feet (what is drawn keeps its size; scales
+  and linetypes follow the unit).
+- Drawing templates (TEMPLATE): save the current settings as a `.cotatpl` file — units, layers, linetypes,
+  dimension styles, variables and the layouts with their title block, plus your preferences (interface colors,
+  object snaps, visual style, palettes and toolbars) — open one to start a new drawing from it, or make the current
+  settings the default so every new drawing starts from them (stored in the browser; Clear goes back to the
+  built-in settings).
+
 ## [1.3.0] — 2026-10-27
 
 ### Added

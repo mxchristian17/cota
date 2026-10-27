@@ -73,6 +73,7 @@ import { dashToolbarCommand, fullscreenCommand, gridCommand, layerCommand, prope
 import { promptCommand } from './impl/ai'
 import { clipboardCommands } from './impl/clipboard'
 import { sliceCommand } from './impl/slice'
+import { templateCommand, unitsCommand } from './impl/units'
 import {
   dimAlignedCommand,
   dimAngularCommand,
@@ -123,6 +124,8 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   engine.register(copyCommand)
   for (const c of clipboardCommands) engine.register(c)
   engine.register(sliceCommand)
+  engine.register(unitsCommand)
+  engine.register(templateCommand)
   engine.register(scaleCommand)
   engine.register(rotateCommand)
   engine.register(mirrorCommand)

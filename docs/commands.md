@@ -17,6 +17,8 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | `PLOT` | `PRINT` | Export the drawing (or the active layout sheet at 1:1) to a vector PDF |
 | `PUBLISH` | — | Publish layouts to a multi-page PDF [All/Current or layout names] |
 | `DWGPROPS` | — | Drawing properties: title, subject, author, keywords and custom properties (used by fields) |
+| `UNITS` | `UN` | Set the drawing units: millimeters, centimeters, meters, inches or feet |
+| `TEMPLATE` | — | Drawing template: save it, open one, make the current settings the default for new drawings, or clear it |
 | `LOGIN` | — | Sign in to save and load drawings |
 
 ## Edit menu

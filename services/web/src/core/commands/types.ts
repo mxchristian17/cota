@@ -189,6 +189,8 @@ export interface AppHooks {
   updateDrawingViews?(ids: string[] | null, force?: boolean): number
   /** FLATSHOT: diálogo de opciones (null = Cancel). */
   flatshotDialog?(): Promise<FlatshotOptions | null>
+  /** Plantilla de dibujo (TEMPLATE): guardar, abrir, predeterminada y olvidarla. */
+  template?(action: 'save' | 'open' | 'default' | 'clear' | 'status'): Promise<string>
   /** Diálogo de VIEWGEN: esquema de vistas de Monge para elegir cuáles generar. */
   viewGenDialog?(initial: ViewGenChoice): Promise<ViewGenChoice | null>
   /** FLATSHOT: lo 3D visible proyectado según la vista actual (líneas, arcos y círculos 2D). */

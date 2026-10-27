@@ -13,7 +13,7 @@
 export const CATEGORIES: { label: string; names: string[] }[] = [
   {
     label: 'File',
-    names: ['NEW', 'OPEN', 'OPENFOLDER', 'SAVE', 'CLOUD', '§Import / export', 'IMPORT', 'EXPORT', '§Print', 'PAGESETUP', 'PLOT', 'PUBLISH', '§Drawing', 'DWGPROPS', 'LOGIN'],
+    names: ['NEW', 'OPEN', 'OPENFOLDER', 'SAVE', 'CLOUD', '§Import / export', 'IMPORT', 'EXPORT', '§Print', 'PAGESETUP', 'PLOT', 'PUBLISH', '§Drawing', 'DWGPROPS', 'UNITS', 'TEMPLATE', 'LOGIN'],
   },
   { label: 'Edit', names: ['UNDO', 'REDO', '§Clipboard', 'CUTCLIP', 'COPYCLIP', 'COPYBASE', 'PASTECLIP', 'PASTEORIG', '§Selection', 'SELECTALL', 'SELECT', 'SELECTSIMILAR', 'ERASE'] },
   {
