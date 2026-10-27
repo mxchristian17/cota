@@ -158,3 +158,16 @@ These are read when building or running the dev server.
 Everything a user saves to the server is in the database: back up the PostgreSQL volume (`db_data`), for
 example with `docker compose exec db pg_dump -U cota cota > cota.sql`. Drawings saved as files are already on
 the users' disks.
+
+## Visit statistics (optional)
+
+Builds send no statistics unless you configure them at build time:
+
+| Variable | Value | Behavior |
+| --- | --- | --- |
+| `VITE_ANALYTICS_GOATCOUNTER` | `https://<code>.goatcounter.com/count` | One request per visit, no cookies, no third-party script |
+| `VITE_ANALYTICS_GA4` | `G-XXXXXXXXXX` | Google Analytics 4, loaded only after the visitor accepts a notice |
+
+On GitHub Pages, set them as repository variables `ANALYTICS_GOATCOUNTER` or `ANALYTICS_GA4` (Settings ▸ Secrets and
+variables ▸ Actions ▸ Variables); the Pages workflow passes them to the build. Only visits are counted: drawings,
+commands and anything typed are never sent, and visitors with "Do Not Track" are not counted.

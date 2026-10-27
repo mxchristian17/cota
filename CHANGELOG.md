@@ -4,6 +4,14 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-10-27
+
+### Added
+- Optional visit statistics for a public deployment, off unless the build configures them: GoatCounter (one
+  request per visit, no cookies and no third-party script) or Google Analytics 4 (nothing from Google loads until
+  the visitor accepts). "Do Not Track" is honored, and drawings or commands are never sent. Builds you make yourself
+  send nothing. See `docs/self-hosting.md`.
+
 ## [1.7.0] — 2026-10-27
 
 ### Added

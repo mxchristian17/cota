@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import { installGlobalErrorHandlers } from './core/errors'
+import { startAnalytics } from './analytics'
 import { ErrorBanner, ErrorGuard } from './ui/ErrorBanner'
 import './styles.css'
 
@@ -15,6 +16,9 @@ createRoot(container).render(
     <ErrorBanner />
   </>,
 )
+
+// Estadísticas de visitas: sólo en la demo pública, si su build las configura (ver analytics.ts).
+if (import.meta.env.PROD) window.addEventListener('load', () => startAnalytics())
 
 // App instalable: el service worker guarda la app en el equipo para abrirla sin conexión. Sólo en el
 // build (en desarrollo serviría archivos viejos).
