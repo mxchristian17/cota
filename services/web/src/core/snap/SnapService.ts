@@ -1,7 +1,7 @@
 import { fromVec3, pt, toVec3, type Pt, type Vec3 } from '../math'
 import type { ArcProps, CircleProps, EllipseProps, Entity } from '../document/types'
 import { ucsToWorld, worldToUcs, type Ucs } from '../ucs'
-import { solidCenters, solidQuadrants } from '../editing/solid'
+import { solidArcCenters, solidCenters, solidQuadrants } from '../editing/solid'
 import { ellipseMinorVec, ellipseParamSweep, ellipsePointAt, ellipsePoints, ellipseQuadrants, isEllipseArc } from '../geom/ellipse'
 import {
   arcBasis,
@@ -72,6 +72,8 @@ export interface SnapSettings {
   project: Projector
   /** Distancia del punto a la cámara (para elegir el objeto más cercano en apparent intersection). */
   depth?: (p: Pt) => number
+  /** El snap se pidió tipeado para este punto (CEN, TAN…), no por los osnaps activos. */
+  explicitOsnap?: boolean
 }
 
 /** Tipos de candidato de object snap (todos menos la grilla y el tracking). */
@@ -507,6 +509,8 @@ export function computeSnap(cursor: Pt, entities: Entity[], s: SnapSettings): Sn
       if (e.type === 'SOLID3D') {
         for (const c of solidCenters(e.props)) add(fromVec3(c), 'center') // centros de cilindro/cono/esfera
         for (const q of solidQuadrants(e.props)) add(fromVec3(q), 'quadrant') // cuadrantes de bordes curvos
+        // Centros de los empalmes: sólo con CEN tipeado (por defecto, los puntos de tangencia ya son extremos).
+        if (s.explicitOsnap) for (const c of solidArcCenters(e.props)) add(fromVec3(c), 'center')
       }
 
       if (e.type === 'CIRCLE') round(fullCircle(e.props), true)

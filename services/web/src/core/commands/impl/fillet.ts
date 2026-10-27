@@ -1,6 +1,6 @@
 import type { Command, CommandContext } from '../types'
 import type { Pt } from '../../math'
-import { fromVec3 } from '../../math'
+import { fromVec3, toVec3 } from '../../math'
 import type { PreviewShape } from '../../preview'
 import { EditLog } from '../../editing/editLog'
 import { cornerEdit, cutVertices, filletCorner, filletVertex, type Corner, type CornerError, type CornerResult, type VertexRule } from '../../editing/fillet'
@@ -9,6 +9,7 @@ import { pickCurve, type CurvePick } from '../../editing/pickCurve'
 import { askKeyword, askNumber, fmt } from '../ask'
 import { CHAMFEREDGE_TOOL, FILLETEDGE_TOOL, runEdgeBlend, type EdgeTool } from './filletEdge'
 import { sysvars } from '../sysvars'
+import { nearestEdge, solidTopology } from '../../editing/topology'
 
 /** Lo que distingue a FILLET de CHAMFER dentro del diálogo común. */
 interface CornerTool {
@@ -134,7 +135,8 @@ async function runCorner(ctx: CommandContext, tool: CornerTool): Promise<void> {
       done = await polyline(ctx, tool, log)
     } else {
       // Picar un sólido redirige a FILLETEDGE/CHAMFEREDGE, como el CAD clásico.
-      if (r.pick?.id && ctx.doc.getEntity(r.pick.id)?.type === 'SOLID3D') return runEdgeBlend(ctx, tool.edges, r)
+      // (Un punto tipeado que cae sobre una línea 2D sigue siendo esa línea.)
+      if (onSolidEdge(ctx, r) && (r.pick?.id || !pickCurve(ctx.doc, r.point, r.pick))) return runEdgeBlend(ctx, tool.edges, r)
       const a = pickCurve(ctx.doc, r.point, r.pick)
       const err = a ? (tool.check?.(a) ?? null) : 'No object found.'
       if (err || !a) {
@@ -182,6 +184,17 @@ const FILLET_TOOL: CornerTool = {
  * FILLET: redondea la esquina entre dos curvas 2D con un arco tangente de radio FILLETRAD
  * (shift-select = esquina viva), con Polyline, Trim/No trim, Multiple y Undo como el CAD clásico.
  */
+/** ¿El punto toma una arista de un sólido? Picado sobre el sólido o tipeado sobre una arista (como FILLETEDGE). */
+function onSolidEdge(ctx: CommandContext, r: { point: Pt; pick?: { id?: string | null } }): boolean {
+  if (r.pick?.id) return ctx.doc.getEntity(r.pick.id)?.type === 'SOLID3D'
+  const p = toVec3(r.point)
+  return ctx.doc.entities.some((e) => {
+    if (e.type !== 'SOLID3D') return false
+    const topo = solidTopology(e.props)
+    return !!topo && !!nearestEdge(topo, p, topo.diag * 0.05)
+  })
+}
+
 export const filletCommand: Command = {
   name: 'FILLET',
   planar: true,

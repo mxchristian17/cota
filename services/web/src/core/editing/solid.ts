@@ -1,6 +1,9 @@
 import type { Vec3 } from '../math'
 import type { BoxProps, EdgeBlendProps, RevolveProps, SolidLeaf, SolidProps, TorusProps } from '../document/types'
 import { isFullRevolve, openProfile, revolveAngle, revolveFrame, revolvePoint } from './revolve'
+import { nearestEdge, solidTopology } from './topology'
+import { vdist, vdot, vsub } from '../geom/vec3'
+import { cleanMeshNumber, cleanNumber } from '../geom/clean'
 
 /** Devuelve las hojas (extrusión/primitivas) de un árbol de sólido. */
 export function solidLeaves(p: SolidProps): SolidLeaf[] {
@@ -366,7 +369,129 @@ function quads(x: number, y: number, z: number, r: number): Vec3[] {
 
 /** Vértices "endpoint" 3D del sólido (esquinas poligonales; sin puntos de facetado curvo). */
 export function solidVertices(p: SolidProps): Vec3[] {
-  return solidLeaves(p).flatMap(leafVertices)
+  if (isLeaf(p)) return leafVertices(p)
+  // Booleanas, empalmes y chaflanes: los vértices del sólido resultante (sin la esquina que el chaflán quitó).
+  const shape = resultShape(p)
+  if (!shape) return solidLeaves(p).flatMap(leafVertices)
+  const seen = new Set<string>()
+  const out: Vec3[] = []
+  for (const e of shape.edges) {
+    if (e.closed) continue
+    for (const v of [e.pts[0], e.pts[e.pts.length - 1]]) {
+      const k = v.join(',')
+      if (!seen.has(k)) {
+        seen.add(k)
+        out.push(v)
+      }
+    }
+  }
+  return out
+}
+
+/** Aristas del sólido como polilíneas para los snaps (nearest, intersection): las del resultado, no las de las primitivas. */
+export function solidSnapWireframe(p: SolidProps): Vec3[][] {
+  if (isLeaf(p)) return leafWireframe(p)
+  const shape = resultShape(p)
+  return shape ? shape.edges.map((e) => (e.closed ? [...e.pts, e.pts[0]] : e.pts)) : solidWireframe(p)
+}
+
+/** Centros de los arcos de las aristas del resultado (empalmes): para CEN tipeado, como el CAD clásico. */
+export function solidArcCenters(p: SolidProps): Vec3[] {
+  if (isLeaf(p)) return []
+  const out: Vec3[] = []
+  const shape = resultShape(p)
+  for (const e of shape?.edges ?? []) {
+    if (e.kind === 'line' || e.pts.length < 3) continue
+    const c = circumcenter(e.pts[0], e.pts[Math.floor(e.pts.length / 2)], e.pts[e.pts.length - 1])
+    if (!c) continue
+    // Sólo arcos de circunferencia (todos los puntos a la misma distancia del centro).
+    const r = Math.hypot(e.pts[0][0] - c[0], e.pts[0][1] - c[1], e.pts[0][2] - c[2])
+    const chord = Math.hypot(e.pts[0][0] - e.pts[e.pts.length - 1][0], e.pts[0][1] - e.pts[e.pts.length - 1][1], e.pts[0][2] - e.pts[e.pts.length - 1][2])
+    if (r > chord * 5) continue // casi recta: no es un arco de empalme
+    if (e.pts.every((q) => Math.abs(Math.hypot(q[0] - c[0], q[1] - c[1], q[2] - c[2]) - r) <= r * 2e-2)) out.push(shape!.exact(c))
+  }
+  return out
+}
+
+/**
+ * Aristas del sólido resultante (topología derivada de la malla), con las coordenadas limpias: un vértice que coincide
+ * con uno exacto de las primitivas toma ese valor; el resto se redondea dentro del error de float32.
+ */
+function resultShape(p: SolidProps): { edges: { pts: Vec3[]; closed: boolean; kind: string }[]; exact: (v: Vec3) => Vec3 } | null {
+  const topo = solidTopology(p)
+  if (!topo) return null
+  const exact = exactPoints(p)
+  // La malla (float32, CSG) deja los vértices de un empalme a centésimas del punto teórico: se toma el exacto.
+  const tol = Math.max(topo.diag * 2e-3, 1e-9)
+  const clean = (v: Vec3): Vec3 => {
+    let best: Vec3 | null = null
+    let bd = tol
+    for (const x of exact) {
+      const d = vdist(x, v)
+      if (d <= bd) {
+        bd = d
+        best = x
+      }
+    }
+    return best ?? (v.map(cleanMeshNumber) as Vec3)
+  }
+  return { edges: topo.edges.map((e) => ({ pts: e.pts.map(clean), closed: e.closed, kind: e.kind })), exact: clean }
+}
+
+/**
+ * Puntos teóricos del sólido: vértices de las primitivas y, por cada arista recta empalmada o achaflanada, los
+ * puntos donde el empalme/chaflán toca las caras y los centros del empalme en sus extremos. Se generan para los dos
+ * sentidos posibles de cada cara (convexa o cóncava); los que no coinciden con un vértice del resultado no se usan.
+ */
+/** Sin el ruido de las cuentas (tan 45° = 0.9999999999999999). */
+const exactish = (v: Vec3): Vec3 => v.map(cleanNumber) as Vec3
+
+function exactPoints(p: SolidProps): Vec3[] {
+  if (isLeaf(p)) return leafVertices(p)
+  if (p.op === 'SHELL') return exactPoints(p.solid)
+  if (!isEdgeBlend(p)) return p.operands.flatMap(exactPoints)
+  const base = exactPoints(p.solid)
+  const topo = solidTopology(p.solid)
+  if (!topo) return base
+  const out = [...base]
+  const near = (v: Vec3): Vec3 => base.find((x) => vdist(x, v) <= topo.diag * 1e-6) ?? v
+  for (const ref of p.edges) {
+    const hit = nearestEdge(topo, ref.at, topo.diag * 0.05)
+    const e = hit ? topo.edges[hit.edge] : null
+    if (!e || e.kind !== 'line') continue
+    const A = near(e.pts[0])
+    const B = near(e.pts[e.pts.length - 1])
+    const dir = vnorm(vsub(B, A))
+    const [n1, n2] = [e.n1[0], e.n2[0]]
+    const d1 = vnorm(vcross(dir, n1))
+    const d2 = vnorm(vcross(dir, n2))
+    const half = Math.acos(Math.max(-1, Math.min(1, vdot(n1, n2)))) / 2
+    const [t1, t2] = p.op === 'FILLETEDGE' ? [p.radius * Math.tan(half), p.radius * Math.tan(half)] : [p.d1, p.d2]
+    for (const E of [A, B]) {
+      for (const s of [1, -1]) {
+        for (const [d, n, t] of [[d1, n1, t1], [d2, n2, t2], [d1, n1, t2], [d2, n2, t1]] as [Vec3, Vec3, number][]) {
+          const T = vadd(E, vscale(d, s * t))
+          out.push(exactish(T))
+          if (p.op === 'FILLETEDGE') out.push(exactish(vsub(T, vscale(n, p.radius))), exactish(vadd(T, vscale(n, p.radius))))
+        }
+      }
+    }
+  }
+  return out
+}
+
+function circumcenter(a: Vec3, b: Vec3, c: Vec3): Vec3 | null {
+  const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+  const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]]
+  const n = [ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0]]
+  const nn = n[0] * n[0] + n[1] * n[1] + n[2] * n[2]
+  if (nn < 1e-18) return null
+  const ab2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2]
+  const ac2 = ac[0] * ac[0] + ac[1] * ac[1] + ac[2] * ac[2]
+  // c = a + ((|ab|² ac − |ac|² ab) × n) / (2|n|²)
+  const t = [ab2 * ac[0] - ac2 * ab[0], ab2 * ac[1] - ac2 * ab[1], ab2 * ac[2] - ac2 * ab[2]]
+  const x = [t[1] * n[2] - t[2] * n[1], t[2] * n[0] - t[0] * n[2], t[0] * n[1] - t[1] * n[0]]
+  return [a[0] + x[0] / (2 * nn), a[1] + x[1] / (2 * nn), a[2] + x[2] / (2 * nn)]
 }
 
 /** Centros de las primitivas curvas (base/tapa del cilindro, base del cono, centro de esfera). */

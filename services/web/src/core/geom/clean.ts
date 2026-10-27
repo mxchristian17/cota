@@ -29,3 +29,13 @@ export function cleanNumbersDeep(o: unknown, depth = 0): number {
   }
   return n
 }
+
+/**
+ * Coordenada que viene de una malla (float32, ~7 cifras): se lleva al número de 6 decimales más cercano si está
+ * dentro del error de float32. Así un vértice de un sólido da 34 y no 33.9999981.
+ */
+export function cleanMeshNumber(v: number): number {
+  if (!Number.isFinite(v)) return v
+  const r = Math.round(v * GRID) / GRID
+  return Math.abs(r - v) <= 1e-6 * Math.max(1, Math.abs(v)) ? r + 0 : v
+}

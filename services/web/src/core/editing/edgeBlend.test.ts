@@ -6,6 +6,7 @@ import { makeEngine } from '../../test/engineHarness'
 import { applyField, entityFields } from './props'
 import { blendProfile } from './edgeBlend'
 import { edgeMidpoint, solidTopology } from './topology'
+import { solidArcCenters, solidVertices } from './solid'
 
 /** Volumen de la malla evaluada del sólido (teorema de la divergencia). */
 function volume(p: SolidProps): number {
@@ -150,5 +151,24 @@ describe('comandos FILLETEDGE y CHAMFEREDGE', () => {
     expect(entityFields(solid).find((f) => f.key === 'radius')?.value).toBe(3)
     applyField(solid, 'radius', 1.5)
     expect(p.radius).toBe(1.5)
+  })
+})
+
+describe('snaps del sólido resultante', () => {
+  it('tras un chaflán, los extremos son los vértices nuevos y la esquina quitada ya no da snap', () => {
+    const cut = { op: 'CHAMFEREDGE', solid: box, edges: [{ at: [5, 0, 10] }], d1: 2, d2: 2 } as unknown as SolidProps
+    const keys = solidVertices(cut).map((v) => v.join(','))
+    expect(keys).toEqual(expect.arrayContaining(['0,0,8', '10,0,8', '0,2,10', '10,2,10']))
+    expect(keys).not.toContain('0,0,10')
+    expect(keys).not.toContain('10,0,10')
+  })
+
+  it('tras un empalme, los puntos de tangencia son extremos y el centro sólo sale con CEN', () => {
+    const round = { op: 'FILLETEDGE', solid: box, edges: [{ at: [5, 0, 10] }], radius: 2 } as unknown as SolidProps
+    const keys = solidVertices(round).map((v) => v.join(','))
+    expect(keys).toEqual(expect.arrayContaining(['0,0,8', '0,2,10', '10,0,8', '10,2,10']))
+    // Sin el error de la malla (antes 10,1.9887…,9.9992…): coordenadas exactas.
+    for (const v of solidVertices(round)) for (const x of v) expect(Number(x.toFixed(6))).toBe(x)
+    expect(solidArcCenters(round).map((v) => v.join(','))).toEqual(expect.arrayContaining(['0,2,8', '10,2,8']))
   })
 })

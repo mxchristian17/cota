@@ -11,6 +11,10 @@ All notable changes to Cota are documented here. The project follows [Semantic V
   classic CAD. Drawing views also include the outline of fully rounded parts.
 - While drawing a polyline, the segments already placed give object snaps (endpoint, midpoint, intersection…).
 - With ortho on, intersection snaps mark where the segment being drawn will cross nearby objects.
+- FILLET and CHAMFER on a solid edge (clicked or typed) work like FILLETEDGE and CHAMFEREDGE.
+- After a fillet or chamfer, object snaps use the vertices of the resulting solid: the removed corner no longer
+  snaps, the tangent points of a fillet are endpoints and its centers are available with a typed CEN. Their
+  coordinates are exact (the tessellation error is removed).
 - Default lighting follows the camera (two distant lights), so faces with different orientations never share
   the same shade.
 

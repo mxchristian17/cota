@@ -1258,6 +1258,7 @@ export class Viewport {
       esnap: override ? true : d.esnap,
       ucs: d.ucs,
       osnap: override ? singleOsnap(override) : d.osnap,
+      explicitOsnap: !!override,
       base: d.snapBase,
       cursorPx: this.lastPx,
       pixelThreshold: 10,

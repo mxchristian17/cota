@@ -3,7 +3,7 @@ import type { Entity } from '../document/types'
 import { arcEndpoints, tessellateArc } from '../geom/arc'
 import { ellipseEndpoints } from '../geom/ellipse'
 import { polylinePoints } from '../geom/polyline'
-import { solidVertices, solidWireframe } from '../editing/solid'
+import { solidSnapWireframe, solidVertices } from '../editing/solid'
 import { attdefText, textSnapPoints } from '../geom/text'
 import { meshVertices, meshWireframe } from '../editing/mesh'
 import { dimDisplay } from '../dimension/dimGeometry'
@@ -70,7 +70,7 @@ export function segmentsOfEntity(e: Entity): [Pt, Pt][] {
     const v = e.props.controlPoints.map(fromVec3)
     for (let i = 0; i < v.length - 1; i++) segs.push([v[i], v[i + 1]])
   } else if (e.type === 'SOLID3D') {
-    for (const poly of solidWireframe(e.props)) {
+    for (const poly of solidSnapWireframe(e.props)) {
       const v = poly.map(fromVec3)
       for (let i = 0; i < v.length - 1; i++) segs.push([v[i], v[i + 1]])
     }

@@ -125,3 +125,15 @@ test.describe('Cota INT on the segment being drawn', () => {
     expect(ends[1]).toEqual([21, 3, 0])
   })
 })
+
+test.describe('Cota CHAMFER on a solid', () => {
+  test('picking a solid edge in CHAMFER works like CHAMFEREDGE', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    await typeCmd(page, 'BOX', '#0,0', '#40,40', '40')
+    await typeCmd(page, 'CHAMFER', '#20,0,40', '')
+    await expect(page.locator('.cmd-output')).toContainText('1 edge(s) selected for chamfer.')
+    await typeCmd(page, '')
+    expect(await store(page, 'const l = s.doc.entities; return l[l.length - 1].props.op')).toBe('CHAMFEREDGE')
+  })
+})
