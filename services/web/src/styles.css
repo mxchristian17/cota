@@ -1944,3 +1944,17 @@ div.lt-row {
   margin: 10px 0 4px;
   font-size: 12px;
 }
+
+/* OPTIONS: pestañas como el diálogo de opciones del CAD clásico. */
+.options-modal { width: min(620px, calc(100vw - 32px)); }
+.options-tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--border, #3c3c3c); overflow-x: auto; }
+.options-tab {
+  background: transparent; border: 1px solid transparent; border-bottom: none; color: inherit; opacity: 0.75;
+  padding: 6px 12px; cursor: pointer; white-space: nowrap; border-radius: 4px 4px 0 0; font: inherit;
+}
+.options-tab:hover { opacity: 1; }
+.options-tab.active { opacity: 1; border-color: var(--border, #3c3c3c); background: var(--panel, #252526); margin-bottom: -1px; }
+.options-body { min-height: 320px; max-height: min(60vh, 520px); overflow-y: auto; }
+.options-note { margin: 2px 0 6px; opacity: 0.75; font-size: 12px; }
+.options-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.open-empty { padding: 4px 16px 12px; }

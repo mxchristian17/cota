@@ -103,6 +103,7 @@ test.describe('Cota: FILLET y CHAMFER 2D', () => {
     expect(lines.some((l) => pts(l).some((p) => near(p, 10, 0)) && pts(l).some((p) => near(p, 0, 10)))).toBe(true)
     await typeCmd(page, 'F', 'R', '7', '')
     await typeCmd(page, 'OPTIONS')
+    await page.getByTestId('options-tab-editing').click()
     await expect(page.getByTestId('sysvar-FILLETRAD')).toHaveValue('7')
     await expect(page.getByTestId('sysvar-CHAMMODE')).toHaveValue('Angle')
   })

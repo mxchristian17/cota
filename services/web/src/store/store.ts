@@ -2544,6 +2544,9 @@ export const useStore = create<AppState>((set, get) => {
       // Fecha de guardado (campo SaveDate). Sin `touch`: guardar no "modifica" el dibujo.
       doc.meta.modified = new Date().toISOString()
       doc.setCurrentLayer(get().currentLayerId) // CLAYER: la capa de trabajo viaja con el dibujo
+      // Carpeta recordada que el navegador volvió a dejar en "preguntar" (pestaña nueva): SAVE es un gesto, se
+      // pide el permiso acá en vez de descargar el archivo como si no hubiera carpeta.
+      if (!workspaceDir && get().fsPending) await get().reconnectWorkspace()
       // Sin carpeta ni cuenta: se descarga el .cota (el navegador lo deja en Descargas).
       if (!workspaceDir && !get().token) {
         const file = `${docName || 'drawing'}${DRAWING_EXT}`
@@ -2599,6 +2602,9 @@ export const useStore = create<AppState>((set, get) => {
       }
     },
     openDocumentsDialog: async () => {
+      // Carpeta recordada que el navegador volvió a dejar en "preguntar" (pestaña nueva): OPEN es un gesto del
+      // usuario, así que se pide el permiso acá mismo.
+      if (!workspaceDir && get().fsPending) await get().reconnectWorkspace()
       // Con carpeta local, el diálogo lista los archivos reales de esa carpeta.
       if (workspaceDir) {
         if (!(await ensurePermission(workspaceDir))) {
@@ -2612,11 +2618,17 @@ export const useStore = create<AppState>((set, get) => {
         }
         return
       }
+      // Sin carpeta: sin servidor (la demo) o sin sesión, el diálogo explica las opciones en vez de fallar.
+      if (!CLOUD_ENABLED || !get().token) {
+        set({ docList: [], fsList: [], openOpen: true })
+        return
+      }
       try {
         const list = await api.listDocuments()
         set({ docList: list, fsList: [], openOpen: true })
-      } catch (err) {
-        print(err instanceof ApiError ? err.message : 'Could not list documents')
+      } catch {
+        print('The server is not available: open a file from this device or choose a working folder.')
+        set({ docList: [], fsList: [], openOpen: true })
       }
     },
 

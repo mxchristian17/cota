@@ -326,6 +326,7 @@ test.describe('Cota Layout: hoja y viewports flotantes', () => {
 
     // Plantilla predeterminada: A4 vertical incluida → el "+" nace en A4 con rótulo.
     await typeCmd(page, 'OPTIONS')
+    await page.getByTestId('options-tab-files').click()
     await page.getByTestId('default-template').selectOption('builtin:A4P')
     await page.keyboard.press('Escape') // Esc cierra el diálogo
     await expect(page.getByTestId('options-dialog')).toHaveCount(0)
@@ -341,6 +342,7 @@ test.describe('Cota Layout: hoja y viewports flotantes', () => {
 
     // La plantilla guardada como predeterminada: NEW → Layout1 nace con ese rótulo.
     await typeCmd(page, 'OPTIONS')
+    await page.getByTestId('options-tab-files').click()
     await page.getByTestId('default-template').selectOption('library:Mi hoja')
     await page.getByTestId('options-dialog').click({ position: { x: 5, y: 5 } })
     await page.evaluate(() => (window as unknown as { __cotaStore: { getState: () => { newDocument: () => void } } }).__cotaStore.getState().newDocument())

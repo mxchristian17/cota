@@ -10,6 +10,11 @@ export function OpenDialog() {
   const fsList = useStore((s) => s.fsList)
   const openLocalDrawing = useStore((s) => s.openLocalDrawing)
   const openFromDevice = useStore((s) => s.openFromDevice)
+  const token = useStore((s) => s.token)
+  const fsPending = useStore((s) => s.fsPending)
+  const reconnect = useStore((s) => s.reconnectWorkspace)
+  const pickFolder = useStore((s) => s.pickWorkspaceFolder)
+  const openDialog = useStore((s) => s.openDocumentsDialog)
 
   if (!open) return null
 
@@ -22,8 +27,8 @@ export function OpenDialog() {
     </div>
   )
 
-  // Modo carpeta local: se listan los archivos reales, agrupados por subcarpeta.
-  if (fsFolderName) {
+  // Modo carpeta local (con el permiso vigente): se listan los archivos reales, agrupados por subcarpeta.
+  if (fsFolderName && !fsPending) {
     const groups = new Map<string, typeof fsList>()
     for (const f of fsList) {
       if (!groups.has(f.folder)) groups.set(f.folder, [])
@@ -79,7 +84,26 @@ export function OpenDialog() {
           </button>
         </div>
         {deviceButton}
-        {docList.length === 0 ? (
+        {!token ? (
+          <div className="open-empty" data-testid="open-no-folder">
+            <p className="muted">
+              {fsPending && fsFolderName
+                ? `The browser needs your permission again to use the folder "${fsFolderName}".`
+                : 'Choose a folder on this computer to open and save drawings there, or open a single file from this device.'}
+            </p>
+            <div className="theme-presets">
+              {fsPending && fsFolderName ? (
+                <button className="btn" onClick={() => void reconnect().then(() => openDialog())} data-testid="open-reconnect">
+                  Allow access to 📁 {fsFolderName}
+                </button>
+              ) : (
+                <button className="btn" onClick={() => void pickFolder().then(() => openDialog())} data-testid="open-pick-folder">
+                  Choose working folder…
+                </button>
+              )}
+            </div>
+          </div>
+        ) : docList.length === 0 ? (
           <p className="muted">No saved drawings yet.</p>
         ) : (
           (() => {

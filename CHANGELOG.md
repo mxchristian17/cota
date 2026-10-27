@@ -4,6 +4,19 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [1.10.0] — 2026-10-27
+
+### Added
+- OPTIONS is organized in tabs, like the classic CAD options dialog: **Display** (color scheme, crosshair, UCS
+  icon, mouse wheel zoom), **Open and Save** (autosave, layout and drawing templates), **Drafting** (object snaps,
+  dynamic UCS and UCS behavior), **Editing** (fillet and chamfer, trim and extend, offset gaps, PEDIT) and **User
+  Preferences** (block attributes, drawing units). It opens on the last tab you used.
+
+### Fixed
+- OPEN and SAVE in a new browser tab with a remembered working folder: the browser asks again for permission to
+  use the folder, instead of OPEN failing with "Request failed" and SAVE downloading the drawing. If permission is
+  not given, OPEN explains it and offers to allow access, choose another folder or open a file from the device.
+
 ## [1.9.0] — 2026-10-27
 
 ### Changed
