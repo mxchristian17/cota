@@ -7,7 +7,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | Command | Aliases | What it does |
 | --- | --- | --- |
 | `NEW` | — | Start a new empty drawing |
-| `OPEN` | — | Open a drawing: from the working folder / cloud list, or from the device (.cota, .dxf, .dwg) |
+| `OPEN` | — | Open a drawing: from the working folder / cloud list, or from the device (.cota, .dxf, .dwg, .stl, .obj, .step, .iges) |
 | `OPENFOLDER` | `FOLDER`, `WORKSPACE` | Choose a system folder to open and save drawings as files |
 | `SAVE` | `QSAVE`, `SAVEAS` | Save the current drawing: working folder, your account, or a downloaded .cota file |
 | `CLOUD` | `CLOUDSTORAGE` | Store drawings in your account again (detach the local folder) |

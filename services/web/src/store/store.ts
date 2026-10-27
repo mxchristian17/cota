@@ -75,6 +75,7 @@ import { DEFAULT_FLATSHOT, flatshotItems, type FlatshotOptions } from '../core/p
 import { alignDrawingViews, isDrawingView, isShaded, showsHidden, viewBlockEntities } from '../core/drawing/views'
 import { shadeViewTriangles } from '../core/projection/shade'
 import { solidMesh, solidMeshWithSurfaces } from '../render/csg'
+import { parseStl } from '../core/io/stl'
 import { ApiError, api, type DocumentSummary } from '../core/io/apiClient'
 import { moveLayerTo } from '../core/layers/order'
 
@@ -443,6 +444,20 @@ setCrosshairVars(DEFAULT_THEME)
 
 /** Clave del handle de la carpeta de trabajo en IndexedDB. */
 const WORKSPACE_KEY = 'workspaceDir'
+
+/** Modelos 3D que OPEN abre como un dibujo nuevo (cada cuerpo, una malla). */
+const MODEL_EXTS = ['.stl', '.obj', '.step', '.stp', '.iges', '.igs']
+
+async function readModelFile(file: File, lower: string): Promise<Array<Pick<ObjMesh, 'vertices' | 'faces'>>> {
+  if (lower.endsWith('.stl')) return [parseStl(await file.arrayBuffer())]
+  if (lower.endsWith('.obj')) {
+    const meshes = importObj(await file.text())
+    if (!meshes.length) throw new Error('the OBJ file has no faces')
+    return meshes
+  }
+  const { readCadFile } = await import('../core/io/occt')
+  return readCadFile(await file.arrayBuffer(), lower.endsWith('.step') || lower.endsWith('.stp') ? 'step' : 'iges')
+}
 
 export const useStore = create<AppState>((set, get) => {
   const doc = DocumentModel.createDefault()
@@ -2166,7 +2181,7 @@ export const useStore = create<AppState>((set, get) => {
     openFromDevice: () => {
       const input = document.createElement('input')
       input.type = 'file'
-      input.accept = `${DRAWING_EXTS.join(',')},.dxf,.dwg`
+      input.accept = `${DRAWING_EXTS.join(',')},.dxf,.dwg,${MODEL_EXTS.join(',')}`
       input.onchange = () => {
         const file = input.files?.[0]
         if (file) void get().openDeviceFile(file)
@@ -2187,6 +2202,16 @@ export const useStore = create<AppState>((set, get) => {
           set({ ...detached, currentLayerId: doc.currentLayer, viewportLayout: doc.viewportLayout })
           restoreModelUcs()
           print(`Opened "${file.name}" from the device.`)
+        } else if (MODEL_EXTS.some((x) => lower.endsWith(x))) {
+          // Modelos 3D (STL, OBJ, STEP, IGES): un dibujo nuevo con cada cuerpo como malla.
+          const meshes = await readModelFile(file, lower)
+          pushSnapshot()
+          doc.reset()
+          for (const m of meshes) doc.addEntity({ type: 'MESH3D', layer: doc.currentLayer, props: { vertices: m.vertices, faces: m.faces } })
+          currentFile = null
+          set({ ...detached, viewportLayout: doc.viewportLayout })
+          restoreModelUcs()
+          print(`Opened "${file.name}" from the device (${meshes.length} mesh(es)).`)
         } else {
           let dxf: string
           if (lower.endsWith('.dwg')) {
@@ -2205,7 +2230,7 @@ export const useStore = create<AppState>((set, get) => {
         get().activeViewport?.zoomExtents()
       } catch (err) {
         if (err instanceof ApiError && err.status === 501) print('DWG converter not available on the server.')
-        else print(`"${file.name}" could not be read (invalid file?).`)
+        else print(`"${file.name}" could not be read (${err instanceof Error && err.message ? err.message : 'invalid file?'}).`)
       }
     },
     exportModel: (format) => {

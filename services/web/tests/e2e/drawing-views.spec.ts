@@ -174,3 +174,26 @@ test.describe('Cota context menu and clipboard', () => {
     expect(await store(page, 'const l = s.doc.entities; return l[l.length - 1].props.start')).toEqual([0, 20, 0])
   })
 })
+
+test.describe('Cota OPEN 3D models', () => {
+  test('OPEN reads an STL as a new drawing; an invalid STEP shows a message and the app keeps working', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    const stl = 'solid t\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 10 0 0\nvertex 0 10 0\nendloop\nendfacet\nendsolid t\n'
+    await page.evaluate((text) => {
+      const key = Object.keys(window).find((k) => /^__\w+Store$/.test(k))!
+      const s = (window as unknown as Record<string, { getState: () => { openDeviceFile: (f: File) => Promise<void> } }>)[key].getState()
+      return s.openDeviceFile(new File([text], 'part.stl'))
+    }, stl)
+    await expect(page.locator('.cmd-output')).toContainText('Opened "part.stl" from the device (1 mesh(es)).')
+    expect(await store(page, 'return s.doc.entities.map((e) => e.type)')).toEqual(['MESH3D'])
+    await page.evaluate(() => {
+      const key = Object.keys(window).find((k) => /^__\w+Store$/.test(k))!
+      const s = (window as unknown as Record<string, { getState: () => { openDeviceFile: (f: File) => Promise<void> } }>)[key].getState()
+      return s.openDeviceFile(new File(['not a step file'], 'bad.step'))
+    })
+    await expect(page.locator('.cmd-output')).toContainText('"bad.step" could not be read (The STEP file could not be read.)', { timeout: 30_000 })
+    await typeCmd(page, 'LINE', '#0,0', '#5,5', '')
+    await expect(page.locator('.cmd-output')).toContainText('Command: LINE')
+  })
+})

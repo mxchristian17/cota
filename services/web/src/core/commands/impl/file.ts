@@ -20,7 +20,7 @@ const hasList = (ctx: Parameters<Command['run']>[0]): boolean => !!ctx.app.works
 export const openCommand: Command = {
   name: 'OPEN',
   aliases: [],
-  description: 'Open a drawing: from the working folder / cloud list, or from the device (.cota, .dxf, .dwg)',
+  description: 'Open a drawing: from the working folder / cloud list, or from the device (.cota, .dxf, .dwg, .stl, .obj, .step, .iges)',
   async run(ctx) {
     if (!hasList(ctx)) ctx.app.openFromDevice()
     else ctx.app.openDialog()

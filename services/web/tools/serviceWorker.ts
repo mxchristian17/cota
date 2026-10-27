@@ -14,7 +14,8 @@ export function serviceWorker(publicDir = 'public'): Plugin {
     apply: 'build',
     enforce: 'post',
     generateBundle(_options, bundle) {
-      const built = Object.keys(bundle).filter((f) => !f.endsWith('.map') && f !== 'index.html')
+      // OpenCascade (STEP/IGES, ~8 MB) no se precarga: se baja sólo cuando alguien abre uno de esos archivos.
+      const built = Object.keys(bundle).filter((f) => !f.endsWith('.map') && f !== 'index.html' && !/occt/i.test(f))
       let fromPublic: string[] = []
       try {
         fromPublic = readdirSync(join(process.cwd(), publicDir))

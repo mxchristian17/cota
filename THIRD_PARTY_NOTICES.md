@@ -11,11 +11,20 @@ from the Help dialog.
 
 | Package | Version | License |
 | --- | --- | --- |
-| [React](https://react.dev) / React DOM / Scheduler | 18.3 | MIT |
+| [React](https://react.dev) / React DOM / Scheduler | 19.3 | MIT |
 | [three.js](https://threejs.org) | 0.169 | MIT |
 | [three-bvh-csg](https://github.com/gkjohnson/three-bvh-csg) | 0.0.16 | MIT |
 | [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) | 0.7 | MIT |
 | [Zustand](https://github.com/pmndrs/zustand) | 5.0 | MIT |
+
+### OpenCascade for STEP/IGES (loaded on demand)
+
+Opening a STEP or IGES file loads [occt-import-js](https://github.com/kovacsv/occt-import-js) 0.0.23, a WebAssembly
+build of [Open CASCADE Technology](https://dev.opencascade.org), as a separate, unmodified module
+(`occt-import-js-*.js` and `occt-import-js-*.wasm` in the build). Both are licensed under the GNU Lesser General
+Public License 2.1 (OCCT with its LGPL exception); their license texts ship in the package
+(`node_modules/occt-import-js/dist/license.*.txt`). The module is not part of the rest of the app and can be
+replaced with any compatible build of the same version.
 
 ### Hershey Simplex stroke font
 

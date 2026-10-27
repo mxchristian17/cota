@@ -40,6 +40,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "occt-import-js": "^0.0.23",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "three": "^0.169.0",

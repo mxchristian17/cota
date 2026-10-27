@@ -25,6 +25,8 @@ All notable changes to Cota are documented here. The project follows [Semantic V
   and Taper angle (circles become frustums; polygons keep every side at the same offset).
 - Locked layers are shown faded (as LAYLOCKFADECTL 50): visible and snappable, but not selectable.
 - The layer lineweight is chosen from the standard list (Default, 0.05 … 2.11 mm) and is used when plotting.
+- OPEN reads 3D models as a new drawing: STL (ASCII and binary), OBJ, STEP and IGES (through OpenCascade, loaded
+  only when one of these files is opened). DXF and DWG as before (DWG needs the optional server).
 - Default lighting follows the camera (two distant lights), so faces with different orientations never share
   the same shade.
 
