@@ -977,6 +977,7 @@ export const useStore = create<AppState>((set, get) => {
     onChange: () => bump(),
     onOpenHelp: () => set({ helpOpen: true }),
     onBeforeCommand: (name) => {
+      get().viewports.forEach((vp) => vp.cancelPendingBox()) // un comando cierra la ventana de selección abierta
       if (name === 'UNDO' || name === 'REDO') {
         capturedBefore = null
         return
@@ -1440,6 +1441,7 @@ export const useStore = create<AppState>((set, get) => {
     isSelectMode: () => engine.isSelecting || (!engine.hasPending && !engine.busy),
     // ESC: cancela el comando/prompt en curso y, además, deselecciona (como el CAD clásico).
     cancel: () => {
+      get().viewports.forEach((vp) => vp.cancelPendingBox()) // Esc cierra la ventana de selección abierta con un clic
       engine.cancel()
       get().viewports.forEach((vp) => vp.clearTracking()) // ESC también suelta los puntos de tracking
       if (get().selection.length > 0) set({ selection: [] })

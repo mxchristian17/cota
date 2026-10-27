@@ -110,3 +110,20 @@ test.describe('Cota editing', () => {
   })
 })
 
+
+test('ventana con dos clics (como el CAD clásico): un clic en vacío la abre y el siguiente la cierra', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByTestId('command-input')).toBeVisible()
+  await page.evaluate(() => (window as any)[Object.keys(window).find((k) => /^__\w+Store$/.test(k))!].getState().setPropsPalette({ minimized: false }))
+  const input = page.getByTestId('command-input')
+  for (const s of ['RECTANGLE', '-10,-10', '#10,10']) { await input.fill(s); await input.press('Enter') }
+  await expect(page.locator('.cmd-prompt')).toHaveText('Command:')
+  await page.waitForTimeout(400)
+  const box = (await page.locator('canvas').first().boundingBox())!
+  const cx = box.x + box.width / 2
+  const cy = box.y + box.height / 2
+  const s = box.height / 200
+  await page.mouse.click(cx - 40 * s, cy - 40 * s) // vacío: abre la ventana
+  await page.mouse.click(cx + 40 * s, cy + 40 * s) // esquina opuesta: selecciona lo que encierra
+  await expect(page.getByTestId('properties')).toContainText('RECTANGLE')
+})

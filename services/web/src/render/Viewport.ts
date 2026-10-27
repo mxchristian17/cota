@@ -266,6 +266,8 @@ export class Viewport {
   private lastAnnoScale: number | undefined = undefined
   private readonly lastPx: [number, number] = [0, 0]
   private boxStartPx: [number, number] | null = null
+  /** Ventana de selección abierta por un clic en vacío: espera el clic de la esquina opuesta. */
+  private boxPending = false
   private curPx: [number, number] = [0, 0]
   private draggingBox = false
   private boxActive = false
@@ -869,11 +871,21 @@ export class Viewport {
         this.gripArmed = true
         return
       }
+      if (this.boxPending) return // el clic que cierra la ventana se resuelve al soltar
       this.boxStartPx = this.pxOf(e.clientX, e.clientY)
       this.curPx = this.boxStartPx
       this.draggingBox = true
       this.boxActive = false
     }
+  }
+
+  /** Cierra sin seleccionar la ventana abierta con un clic (Esc). */
+  cancelPendingBox(): void {
+    if (!this.boxPending) return
+    this.boxPending = false
+    this.boxActive = false
+    this.boxStartPx = null
+    this.boxEl.style.display = 'none'
   }
 
   private onPointerUp = (e: PointerEvent): void => {
@@ -905,6 +917,18 @@ export class Viewport {
       // El cursor se salió del grip: cae al comportamiento normal de click.
     }
     if (e.button === 0) {
+      const start = this.boxStartPx
+      const cur0 = this.pxOf(e.clientX, e.clientY)
+      // Clic simple en vacío en modo selección: abre la ventana (la otra esquina va con el próximo clic).
+      if (!this.boxPending && !this.boxActive && start && this.cb.isSelectMode?.() && !this.pickAt(e.clientX, e.clientY)) {
+        this.boxPending = true
+        this.boxActive = true
+        this.draggingBox = true
+        this.curPx = cur0
+        this.updateBox()
+        return
+      }
+      if (this.boxPending) this.boxPending = false
       if (this.boxActive && this.boxStartPx) {
         const cur = this.pxOf(e.clientX, e.clientY)
         this.cb.onBoxSelect?.(
@@ -1075,6 +1099,19 @@ export class Viewport {
   pickAt(clientX: number, clientY: number): string | null {
     this.raycaster.params.Line = { threshold: 6 * this.controller.worldPerPx() }
     this.raycaster.params.Points = { threshold: 5 * this.controller.worldPerPx() }
+    // El pick ve las dos caras de cada triángulo (una booleana puede dejar caras invertidas) y usa esferas
+    // envolventes al día (un sólido recalculado conserva la geometría con otra forma): si no, a veces un clic
+    // sobre un sólido no lo tomaba y había que seleccionarlo con una ventana.
+    const sides = new Map<THREE.Material, THREE.Side>()
+    this.entityGroup.traverse((o) => {
+      const m = o as THREE.Mesh
+      if (!m.isMesh) return
+      m.geometry.computeBoundingSphere()
+      for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+        if (!sides.has(mat)) sides.set(mat, mat.side)
+        mat.side = THREE.DoubleSide
+      }
+    })
     const cast = (x: number, y: number) => {
       const [nx, ny] = this.ndc(x, y)
       this.raycaster.setFromCamera(new THREE.Vector2(nx, ny), this.controller.camera)
@@ -1088,6 +1125,7 @@ export class Viewport {
       if (hits.length) break
       hits = cast(clientX + dx, clientY + dy)
     }
+    sides.forEach((side, mat) => (mat.side = side))
     const found: { id: string; h: THREE.Intersection }[] = []
     for (const h of hits) {
       // Geometría fusionada (batch): resolver el id por el rango del triángulo/segmento impactado.
