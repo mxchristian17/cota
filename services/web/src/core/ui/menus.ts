@@ -46,7 +46,7 @@ export const CATEGORIES: { label: string; names: string[] }[] = [
     names: [
       'DIM', 'QDIM', 'AUTODIM', '§Linear', 'DIMLINEAR', 'DIMALIGNED', 'DIMARC', 'DIMORDINATE', '§Radial and angular', 'DIMRADIUS', 'DIMJOGGED',
       'DIMDIAMETER', 'DIMANGULAR', '§Baseline and continue', 'DIMBASELINE', 'DIMCONTINUE', 'DIMSPACE', 'DIMBREAK',
-      '§Leaders and marks', 'MLEADER', 'QLEADER', 'LEADER', 'MLEADEREDIT', 'MLEADERALIGN', 'DIMCENTER', 'CENTERLINE', 'DIMINSPECT', 'DIMJOGLINE',
+      '§Leaders and marks', 'MLEADER', 'QLEADER', 'LEADER', 'MLEADEREDIT', 'MLEADERALIGN', 'DIMCENTER', 'CENTERLINE', 'THREAD', 'DIMINSPECT', 'DIMJOGLINE',
       '§Edit', 'DIMEDIT', 'DIMTEDIT', 'DIMOVERRIDE', 'DIMREASSOCIATE', 'DIMDISASSOCIATE', 'DIMREGEN', '§Style', 'DIMSTYLE',
     ],
   },

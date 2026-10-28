@@ -82,6 +82,8 @@ import { selectableEntities } from '../core/commands/selectionSets'
 import { DEFAULT_FLATSHOT, flatshotItems, type FlatshotOptions } from '../core/projection/flatshot'
 import { alignDrawingViews, isDrawingView, isShaded, showsHidden, viewBlockEntities } from '../core/drawing/views'
 import { shadeViewTriangles } from '../core/projection/shade'
+import { solidThreads, threadViewItems } from '../core/thread/geometry'
+import { solidTopology } from '../core/editing/topology'
 import { solidMesh, solidMeshWithSurfaces } from '../render/csg'
 import { parseStl } from '../core/io/stl'
 import { requestViewGen } from '../ui/ViewGenDialog'
@@ -638,7 +640,7 @@ export const useStore = create<AppState>((set, get) => {
     return { right, up, out }
   }
   /** Mallas (y círculos exactos) de lo 3D visible del modelo, o de los objetos `ids`. */
-  const modelMeshes = (ids: string[] | null): { meshes: Mesh[]; hints: CircleHint[]; colors: string[] } => {
+  const modelMeshes = (ids: string[] | null): { meshes: Mesh[]; hints: CircleHint[]; colors: string[]; threaded: SolidProps[] } => {
     const shown = new Map(doc.layers.map((l) => [l.id, layerShown(l)]))
     const colorOf = new Map(doc.layers.map((l) => [l.id, l.color]))
     const colors: string[] = []
@@ -646,6 +648,7 @@ export const useStore = create<AppState>((set, get) => {
     const src = pick ? doc.modelEntities.filter((e) => pick.has(e.id)) : doc.modelEntities
     const meshes: Mesh[] = []
     const hints: CircleHint[] = []
+    const threaded: SolidProps[] = []
     for (const e of expandEntities(src, doc.blocks, { skipLayers: frozenLayerIds(doc.layers) })) {
       if (shown.get(e.layer) === false) continue
       if (e.type === 'SOLID3D') {
@@ -655,17 +658,21 @@ export const useStore = create<AppState>((set, get) => {
           colors.push(colorOf.get(e.layer) ?? '#c0c0c0')
         }
         hints.push(...solidCircleHints(e.props))
+        if (solidThreads(e.props).length) threaded.push(e.props)
       } else if (e.type === 'MESH3D') {
         meshes.push({ vertices: e.props.vertices, faces: e.props.faces })
         colors.push(colorOf.get(e.layer) ?? '#c0c0c0')
       }
     }
-    return { meshes, hints, colors }
+    return { meshes, hints, colors, threaded }
   }
   /** Proyección 2D (líneas ocultas) de lo 3D visible del modelo, o de los objetos `ids`. */
   const projectModel = (ids: string[] | null, basis: ProjBasis, opts: { showObscured: boolean; tangential: boolean }): ProjItem[] => {
-    const { meshes, hints } = modelMeshes(ids)
-    return meshes.length ? flatshotItems(meshes, hints, basis, opts) : []
+    const { meshes, hints, threaded } = modelMeshes(ids)
+    if (!meshes.length) return []
+    // Roscas (THREAD): las líneas finas ISO 6410 de cada vista; las ocultas sólo si la vista las muestra.
+    const threads = threaded.flatMap((p) => threadViewItems(p, basis, solidTopology(p), 0)).filter((it) => opts.showObscured || !it.hidden)
+    return [...flatshotItems(meshes, hints, basis, opts), ...threads]
   }
   /** Centro 3D (caja envolvente) de lo que se documenta, proyectado a la vista: el origen común de las vistas. */
   const viewOrigin = (ids: string[] | null, basis: ProjBasis): [number, number] | null => {

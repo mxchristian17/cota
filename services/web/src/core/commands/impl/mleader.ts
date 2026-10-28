@@ -16,7 +16,8 @@ import { dimNormal } from './dim'
 const toPt = (v: Vec3): Pt => ({ x: v[0], y: v[1], z: v[2] })
 const dist = (a: Vec3, b: Vec3): number => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
 
-function preview(p: DimensionProps): PreviewShape[] {
+/** Previsualización de un multileader (líneas, flecha y texto como trazos). */
+export function mleaderPreview(p: DimensionProps): PreviewShape[] {
   const d = dimDisplay(p)
   const segs: Array<[Vec3, Vec3]> = [...d.lines]
   for (const st of d.textStrokes) for (let i = 0; i + 1 < st.length; i++) segs.push([st[i], st[i + 1]])
@@ -92,7 +93,7 @@ export const mleaderCommand: Command = {
       landing = first
       const a = await ctx.getPoint('Specify leader arrowhead location: ', {
         base: toPt(landing),
-        preview: (c) => preview({ ...base, points: [toVec3(c)], textPos: landing, textOverride: text || null }),
+        preview: (c) => mleaderPreview({ ...base, points: [toVec3(c)], textPos: landing, textOverride: text || null }),
       })
       if (a.kind !== 'point') return
       leader.push(toVec3(a.point))
@@ -106,7 +107,7 @@ export const mleaderCommand: Command = {
       }
       const l = await ctx.getPoint('Specify leader landing location: ', {
         base: toPt(leader[leader.length - 1]),
-        preview: (c) => preview({ ...base, points: leader, leaderSizes: [leader.length], textPos: toVec3(c), textOverride: text || null }),
+        preview: (c) => mleaderPreview({ ...base, points: leader, leaderSizes: [leader.length], textPos: toVec3(c), textOverride: text || null }),
       })
       if (l.kind !== 'point') return
       landing = toVec3(l.point)
@@ -155,7 +156,7 @@ export const mleaderEditCommand: Command = {
       for (;;) {
         const r = await ctx.getPoint('Specify leader arrowhead location: ', {
           base: toPt(p.textPos),
-          preview: (c) => preview({ ...p, points: [...p.points, toVec3(c)], leaderSizes: [...sizes, 1] }),
+          preview: (c) => mleaderPreview({ ...p, points: [...p.points, toVec3(c)], leaderSizes: [...sizes, 1] }),
         })
         if (r.kind !== 'point') break
         p.points = [...p.points, toVec3(r.point)]
@@ -237,7 +238,7 @@ export const qleaderCommand: Command = {
       const prev = pts[pts.length - 1]
       const r = await ctx.getPoint('Specify next point: ', {
         base: toPt(prev),
-        preview: (c) => preview({ ...base, points: pts, leaderSizes: [pts.length], textPos: toVec3(c) }),
+        preview: (c) => mleaderPreview({ ...base, points: pts, leaderSizes: [pts.length], textPos: toVec3(c) }),
       })
       if (r.kind !== 'point') break
       pts.push(toVec3(r.point))

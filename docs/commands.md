@@ -189,6 +189,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | `MLEADERALIGN` | `MLA` | Align multileaders along a direction from a base multileader (current spacing) |
 | `DIMCENTER` | `DCE`, `CENTERMARK`, `CM` | Center mark (and center lines with DIMCEN < 0) of an arc or circle |
 | `CENTERLINE` | — | Associative center line between two lines |
+| `THREAD` | `COSMETICTHREAD` | Cosmetic thread (ISO/IRAM): 3/4 arc on a circle or thread texture on a cylindrical face, nearest standard size and optional leader |
 | `DIMINSPECT` | — | Add or remove inspection information (label, value, inspection rate) on dimensions |
 | `DIMJOGLINE` | `DJL` | Add or remove a jog line on a linear or aligned dimension |
 | `DIMEDIT` | `DED`, `DIMED` | Edit dimension text and extension lines: Home, New text, Rotate text, Oblique extension lines |

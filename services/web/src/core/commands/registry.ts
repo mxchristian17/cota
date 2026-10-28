@@ -67,6 +67,7 @@ import { attdefCommand, attdispCommand, atteditCommand, attsyncCommand, eattedit
 import { distCommand } from './impl/dist'
 import { groupCliCommand, groupCommand, hideObjectsCommand, isolateObjectsCommand, pickstyleCommand, qselectCommand, ungroupCommand, unisolateObjectsCommand } from './impl/group'
 import { purgeCommand } from './impl/purge'
+import { threadCommand } from './impl/thread'
 import { colorCommand, lweightCommand } from './impl/objectprops'
 import { areaCommand, idCommand, listCommand, masspropCommand, polarAngCommand } from './impl/inquiry'
 import { exportCommand, importCommand } from './impl/io'
@@ -157,6 +158,7 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   for (const c of [groupCommand, ungroupCommand, groupCliCommand, qselectCommand, isolateObjectsCommand, hideObjectsCommand, unisolateObjectsCommand]) engine.register(c)
   registerVariable(engine, pickstyleCommand)
   engine.register(purgeCommand)
+  engine.register(threadCommand)
   engine.register(colorCommand)
   engine.register(lweightCommand)
   engine.register(blockCommand)

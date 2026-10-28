@@ -4,6 +4,21 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.5.0] — 2026-10-28
+
+### Added
+- **THREAD**: cosmetic threads drawn as ISO 6410 / IRAM recommend. On a circle, pick the side as with OFFSET:
+  inside for a shaft (the circle is the major diameter and a thin 3/4 arc marks the root) or outside for a tapped
+  hole (the circle is the drill and the thin arc marks the major diameter), with the open quarter at the upper right.
+  On a cylindrical face of a solid the side comes from the face itself (shaft or hole) and the face shows a helical
+  thread texture with the real pitch, which follows the solid when it is moved, rotated, mirrored, scaled or arrayed.
+  The command lists the nearest size of each series (ISO metric coarse and fine, Whitworth BSW, BSP G and ISO
+  trapezoidal; for holes it matches the minor diameter) and can add a leader with the standard designation
+  (`M10`, `M10x1,25`, `W 3/8"`, `G 1/2`, `Tr 20x4`), whose text can be overridden in Properties. Running it again
+  on a thread adds the leader only if it has none.
+- Drawing views show the threads of solids: thin root lines in side views (hidden for holes) and the thin 3/4 arc in
+  end views; THREAD on that arc in a layout adds the leader on the sheet.
+
 ## [2.4.0] — 2026-10-28
 
 ### Added

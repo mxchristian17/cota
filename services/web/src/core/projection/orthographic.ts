@@ -374,8 +374,8 @@ type P2 = [number, number]
 
 /** Lo que FLATSHOT dibuja: líneas, arcos (antihorarios de `a0` a `a1`, radianes) y círculos. */
 export type ProjItem =
-  | { kind: 'line'; a: P2; b: P2; hidden: boolean }
-  | { kind: 'arc'; c: P2; r: number; a0: number; a1: number; hidden: boolean; src?: P2[] }
+  | { kind: 'line'; a: P2; b: P2; hidden: boolean; thin?: boolean }
+  | { kind: 'arc'; c: P2; r: number; a0: number; a1: number; hidden: boolean; src?: P2[]; thin?: boolean; thread?: import('../thread/tables').ThreadInfo }
   | { kind: 'circle'; c: P2; r: number; hidden: boolean; src?: P2[] }
 
 const d2 = (a: P2, b: P2): number => Math.hypot(a[0] - b[0], a[1] - b[1])

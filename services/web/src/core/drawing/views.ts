@@ -148,6 +148,9 @@ export function parseScale(text: string): number | null {
  * inserción: si todas las vistas de una pieza usan la proyección del MISMO punto 3D (su centro), las vistas
  * alineadas quedan en correspondencia exacta (Monge). Sin él, el centro del recuadro de la vista.
  */
+/** Grosor de las líneas finas de rosca en las vistas (mm). */
+const THIN_LW = 0.18
+
 export function viewBlockEntities(
   items: ProjItem[],
   layers: { visible: string; hidden: string },
@@ -181,9 +184,11 @@ export function viewBlockEntities(
   const lines: Entity[] = items.map((it, i) => {
     const id = `v${i + 1}`
     const layer = it.hidden ? layers.hidden : layers.visible
-    if (it.kind === 'line') return { id, type: 'LINE', layer, props: { start: at(it.a), end: at(it.b) } }
+    // Las líneas finas de las roscas (ISO 6410) llevan su grosor; el arco de 3/4, también su designativo.
+    const thin = it.kind !== 'circle' && it.thin ? { lineWeight: THIN_LW } : {}
+    if (it.kind === 'line') return { id, type: 'LINE', layer, props: { start: at(it.a), end: at(it.b) }, ...thin }
     if (it.kind === 'circle') return { id, type: 'CIRCLE', layer, props: { center: at(it.c), radius: it.r, normal: [0, 0, 1] } }
-    return { id, type: 'ARC', layer, props: { center: at(it.c), radius: it.r, startAngle: it.a0, endAngle: it.a1, normal: [0, 0, 1] } }
+    return { id, type: 'ARC', layer, props: { center: at(it.c), radius: it.r, startAngle: it.a0, endAngle: it.a1, normal: [0, 0, 1], ...(it.thread ? { thread: it.thread } : {}) }, ...thin }
   })
   // El sombreado va primero (se pinta debajo de las líneas), corrido al mismo centro.
   const entities: Entity[] = shade && shade.tris.length ? [{ id: 'shade', type: 'SHADE', layer: layers.visible, props: mapShade(shade, (v) => [v[0] - cx, v[1] - cy, v[2]]) }, ...lines] : lines

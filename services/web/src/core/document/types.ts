@@ -79,6 +79,8 @@ export interface ArcProps {
   /** Ángulo final en radianes (el arco va de start a end en sentido antihorario del plano). */
   endAngle: number
   normal: Vec3
+  /** Arco de 3/4 de una rosca (THREAD): fondo de un eje o nominal de un agujero. */
+  thread?: import('../thread/tables').ThreadInfo
 }
 
 /** Elipse en un plano arbitrario (estilo DXF): centro, semieje mayor (vector), relación menor/mayor
@@ -363,7 +365,18 @@ export interface ChamferEdgeProps {
 export type EdgeBlendProps = FilletEdgeProps | ChamferEdgeProps
 
 /** Árbol paramétrico de un sólido: hojas (extrusión/primitivas) combinadas por booleanas, vaciado (SHELL) o redondeo/chaflán de aristas. */
-export type SolidProps = SolidLeaf | BooleanProps | ShellProps | EdgeBlendProps
+export type SolidProps = (SolidLeaf | BooleanProps | ShellProps | EdgeBlendProps) & { threads?: SolidThread[] }
+
+/**
+ * Rosca de una cara cilíndrica (THREAD): eje de `a` a `b` (el tramo roscado) y `rim`, un punto de la cara
+ * (el radio). Sólo puntos, así cualquier transformación del sólido la lleva consigo.
+ */
+export interface SolidThread {
+  a: Vec3
+  b: Vec3
+  rim: Vec3
+  info: import('../thread/tables').ThreadInfo
+}
 
 /** Malla poligonal no paramétrica (p. ej. importada de OBJ): vértices + caras por índices. */
 export interface MeshProps {

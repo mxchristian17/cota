@@ -4,6 +4,7 @@ import { isFullRevolve, openProfile, revolveAngle, revolveFrame, revolvePoint } 
 import { nearestEdge, solidTopology } from './topology'
 import { vdist, vdot, vsub } from '../geom/vec3'
 import { cleanMeshNumber, cleanNumber } from '../geom/clean'
+import { mapAllThreads } from '../thread/geometry'
 
 /** Devuelve las hojas (extrusión/primitivas) de un árbol de sólido. */
 export function solidLeaves(p: SolidProps): SolidLeaf[] {
@@ -153,6 +154,7 @@ export function translateLeaf(leaf: SolidLeaf, dx: number, dy: number, dz: numbe
 export function translateSolid(p: SolidProps, dx: number, dy: number, dz = 0): void {
   for (const leaf of solidLeaves(p)) translateLeaf(leaf, dx, dy, dz)
   for (const n of edgeBlendNodes(p)) mapEdgePoints(n, (v) => add(v, dx, dy, dz))
+  mapAllThreads(p, (v) => add(v, dx, dy, dz))
 }
 
 /** Escala un punto respecto de `c` por factor `f`. */
@@ -212,13 +214,18 @@ function scaleLeaf(leaf: SolidLeaf, c: Vec3, f: number): void {
 
 /** Escala (in-place) un árbol de sólido respecto de `c` por factor `f` (incluye SHELL). */
 export function scaleSolid(p: SolidProps, c: Vec3, f: number): void {
+  mapAllThreads(p, (v) => sp(v, c, f))
+  scaleTree(p, c, f)
+}
+
+function scaleTree(p: SolidProps, c: Vec3, f: number): void {
   if (p.op === 'SHELL') {
-    scaleSolid(p.solid, c, f)
+    scaleTree(p.solid, c, f)
     p.thickness *= f
     return
   }
   if (isEdgeBlend(p)) {
-    scaleSolid(p.solid, c, f)
+    scaleTree(p.solid, c, f)
     mapEdgePoints(p, (v) => sp(v, c, f))
     scaleEdgeBlend(p, f)
     return

@@ -7,6 +7,7 @@ import { arcEndpoints, arcIsClockwise, arcQuadrants, normAngle } from '../geom/a
 import { mapEdgePoints, solidProfiles, sweepStartRef } from './solid'
 import { viewportRing } from '../layout/viewport'
 import { rotationAbout, transformEntity } from './rigid'
+import { mapOwnThreads } from '../thread/geometry'
 
 /** Offsets (dx,dy) de un array rectangular, excluyendo la celda original (0,0). */
 export function rectangularOffsets(rows: number, cols: number, dRow: number, dCol: number): { dx: number; dy: number }[] {
@@ -98,6 +99,7 @@ function entityPoints(e: Entity): Vec3[] {
 }
 
 function rotateSolid(p: SolidProps, cx: number, cy: number, cos: number, sin: number): void {
+  mapOwnThreads(p, (v) => rot(v, cx, cy, cos, sin))
   switch (p.op) {
     case 'EXTRUDE':
       p.profile = p.profile.map((v) => rot(v, cx, cy, cos, sin))

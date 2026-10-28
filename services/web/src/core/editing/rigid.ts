@@ -8,6 +8,7 @@ import { ucsZ, type Ucs } from '../ucs'
 import { linearDir } from '../dimension/dimGeometry'
 import { sweepStartRef } from './solid'
 import { insertXDir } from './block'
+import { mapOwnThreads } from '../thread/geometry'
 
 /**
  * Transformaciones rígidas (rotación + traslación) de entidades y sólidos en 3D. Son la base
@@ -102,6 +103,12 @@ const tp = (r: Rigid, p: Vec3) => rigidPoint(r, p)
 
 /** Transforma un árbol de sólido. null si alguna hoja no se puede representar transformada. */
 export function transformSolid(p: SolidProps, r: Rigid): SolidProps | null {
+  const q = transformNode(p, r)
+  if (q) mapOwnThreads(q, (v) => tp(r, v))
+  return q
+}
+
+function transformNode(p: SolidProps, r: Rigid): SolidProps | null {
   const q = structuredClone(p) as SolidProps
   const dir = (v: Vec3 | undefined, def: Vec3): Vec3 => vnorm(rigidDir(r, v ?? def))
   switch (q.op) {

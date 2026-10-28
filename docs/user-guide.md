@@ -206,7 +206,7 @@ The dimension commands are in the **Dimension** menu and on the dimension toolba
 | Smart | `DIM` (picks the right type from what you click), `QDIM` (many at once) |
 | Automatic | `AUTODIM`: dimensions a whole part — overall sizes, steps, hole positions, diameters and radii — in baseline or chain style. In a layout it dimensions every drawing view without repeating what an aligned view already shows |
 | Leaders | `MLEADER`, `QLEADER`, `LEADER`, with `MLEADERSTYLE`, `MLEADEREDIT`, `MLEADERALIGN` |
-| Annotation | `DIMCENTER`, `CENTERLINE`, `DIMINSPECT`, `DIMBREAK`, `DIMSPACE`, `DIMJOGLINE` |
+| Annotation | `DIMCENTER`, `CENTERLINE`, `THREAD`, `DIMINSPECT`, `DIMBREAK`, `DIMSPACE`, `DIMJOGLINE` |
 | Editing | `DIMEDIT`, `DIMTEDIT`, `DIMOVERRIDE`, `DIMREASSOCIATE`, `DIMDISASSOCIATE`, `DIMREGEN`, and right-click on a dimension |
 
 `DIMSTYLE` manages dimension styles (text, arrows, lines, units, tolerances, fit). Dimensions are

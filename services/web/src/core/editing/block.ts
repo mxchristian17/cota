@@ -6,6 +6,7 @@ import type { AttDisp, AttdefProps, AttributeValue, BlockDef, EdgeRef, Entity, I
 import { attdefText } from '../geom/text'
 import { arcBasis, arcEndpoints, arcFromAngles, arcIsClockwise } from '../geom/arc'
 import { sweepStartRef } from './solid'
+import { mapOwnThreads } from '../thread/geometry'
 
 /**
  * Bloques: transformación de la geometría de una definición al mundo según un INSERT
@@ -96,6 +97,12 @@ function dirBy(P: (v: Vec3) => Vec3, d: Vec3): Vec3 {
 }
 
 function transformSolid(p: SolidProps, P: (v: Vec3) => Vec3, sr: number, sz: number, plan = true, flip = false): SolidProps {
+  const q = transformNode(p, P, sr, sz, plan, flip)
+  mapOwnThreads(q, P)
+  return q
+}
+
+function transformNode(p: SolidProps, P: (v: Vec3) => Vec3, sr: number, sz: number, plan: boolean, flip: boolean): SolidProps {
   // Ejes: los que el sólido guarda se llevan por `P`; fuera de planta también el +Z implícito.
   const ax = (a: Vec3 | undefined): Vec3 | undefined => (a ? dirBy(P, a) : plan ? undefined : dirBy(P, [0, 0, 1]))
   const withAxis = (a: Vec3 | undefined) => {

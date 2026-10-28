@@ -9,6 +9,7 @@ import { mapEdgePoints, sweepStartRef } from './solid'
 import { arcEndpoints, arcFromAngles, arcIsClockwise, normAngle } from '../geom/arc'
 import { planeAngle } from './rigid'
 import { insertXDir } from './block'
+import { mapOwnThreads } from '../thread/geometry'
 
 /**
  * ROTATE / MIRROR.
@@ -113,6 +114,7 @@ export function axisAligned(ax: MirrorAxis): boolean {
 
 /** Refleja un árbol de sólido in-place. Devuelve false si alguna hoja no admite reflexión exacta. */
 export function mirrorSolid(p: SolidProps, ax: MirrorAxis): boolean {
+  mapOwnThreads(p, (v) => mirrorPoint(v, ax))
   switch (p.op) {
     case 'EXTRUDE':
       p.profile = p.profile.map((v) => mirrorPoint(v, ax))

@@ -1,3 +1,4 @@
+import { solidThreads, threadHelixSegments } from '../core/thread/geometry'
 import { hiddenLayerIds, layerEditable, layerVisible } from '../core/layers/visibility'
 import type { Deferred } from '../core/geom/tangency'
 import * as THREE from 'three'
@@ -1937,6 +1938,16 @@ export class Viewport {
             for (let i = 0; i < pa.length; i++) b.pos.push(pa[i])
             b.n += pa.length / 3
           }
+          if (e.type === 'SOLID3D' && solidThreads(e.props).length) {
+            // Textura de rosca (THREAD): hélices de paso real sobre las caras roscadas, más oscuras que la pieza.
+            const b = getLine(lineB, `${ro}|${threadHex(colorHex)}`)
+            b.ranges.push({ s: b.n, id: e.id })
+            for (const t of solidThreads(e.props)) {
+              const seg = threadHelixSegments(t)
+              for (let i = 0; i < seg.length; i++) b.pos.push(seg[i])
+              b.n += seg.length / 3
+            }
+          }
           if (e.type === 'MESH3D') g.dispose() // temporal (solidGeometry está cacheada → no se libera)
           continue
         }
@@ -2787,4 +2798,12 @@ export class Viewport {
       this.container.removeChild(this.renderer.domElement)
     }
   }
+}
+
+/** Color de la textura de rosca: el de la pieza, oscurecido. */
+function threadHex(hex: string): string {
+  const n = parseInt(hex.replace('#', '').slice(0, 6), 16)
+  if (!Number.isFinite(n)) return '#555555'
+  const k = (v: number) => Math.round(v * 0.45).toString(16).padStart(2, '0')
+  return `#${k((n >> 16) & 255)}${k((n >> 8) & 255)}${k(n & 255)}`
 }

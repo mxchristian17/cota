@@ -7,6 +7,17 @@ import { VIEW_NAMES, VISUAL_STYLES, type ViewName, type VisualStyle } from '../v
 import { STANDARD_SCALES, standardScale } from '../layout/scale'
 import { viewAngles, viewNameOf } from '../layout/viewport'
 import { arcIsClockwise, arcLength, normAngle, sweepOf } from '../geom/arc'
+import { solidThreads } from '../thread/geometry'
+import type { ThreadInfo } from '../thread/tables'
+
+/** Fila de solo lectura con las roscas (THREAD) del objeto; el texto de la cota se cambia en la cota. */
+const threadField = (list: ThreadInfo[]): PropField => ({
+  key: '_thread',
+  label: list.length > 1 ? 'Threads' : 'Thread',
+  kind: 'text',
+  value: list.map((t) => `${t.designation} (${t.internal ? 'internal' : 'external'})`).join(', '),
+  readOnly: true,
+})
 
 /**
  * Propiedades editables de una entidad (paleta de Propiedades tipo CAD clásico). Cada campo declara su
@@ -134,6 +145,7 @@ export function entityFields(e: Entity): PropField[] {
         { key: 'includedDeg', label: 'Total angle°', kind: 'number', value: sweepOf(a) * R2D },
         { key: '_len', label: 'Arc length', kind: 'number', value: arcLength(a), readOnly: true },
         { key: '_dir', label: 'Direction', kind: 'text', value: cw ? 'clockwise' : 'counterclockwise', readOnly: true },
+        ...(a.thread ? [threadField([a.thread])] : []),
       ]
     }
     case 'ELLIPSE':
@@ -183,8 +195,10 @@ export function entityFields(e: Entity): PropField[] {
         { key: 'dim.DIMDEC', label: 'Precision', kind: 'number', value: e.props.style.DIMDEC },
         { key: 'textOverride', label: 'Text override', kind: 'text', value: e.props.textOverride ?? '' },
       ]
-    case 'SOLID3D':
-      return solidFields(e)
+    case 'SOLID3D': {
+      const th = solidThreads(e.props)
+      return th.length ? [...solidFields(e), threadField(th.map((t) => t.info))] : solidFields(e)
+    }
     case 'MESH3D':
       return [
         { key: '_verts', label: 'Vertices', kind: 'number', value: e.props.vertices.length, readOnly: true },
