@@ -1,4 +1,6 @@
 :root {
+  --scroll-thumb: rgba(150, 150, 150, 0.32);
+  --scroll-thumb-hover: rgba(170, 170, 170, 0.6);
   --icon-accent: #4ea1ff;
   --bg: #1e1e1e;
   --panel: #252526;
@@ -1975,4 +1977,36 @@ div.lt-row {
 @media (max-width: 640px) {
   .plot-body { grid-template-columns: 1fr; }
   .plot-preview { min-height: 220px; }
+}
+
+/* Barras de desplazamiento finas y discretas en toda la interfaz (historial de comandos, paneles, diálogos y listas):
+   pista transparente, pulgar redondeado semitransparente que se marca al pasar el mouse, sin flechas. En Chromium y
+   Safari con ::-webkit-scrollbar (si se fijara scrollbar-width/color, Chromium ignoraría estos estilos); Firefox, que no
+   los tiene, usa "thin" con los mismos colores. Las barras de herramientas tienen la suya, más fina todavía. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--scroll-thumb);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background-clip: padding-box;
+  min-height: 24px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scroll-thumb-hover);
+}
+::-webkit-scrollbar-button {
+  display: none;
+}
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) transparent;
+  }
 }

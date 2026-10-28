@@ -401,6 +401,15 @@ export class DocumentModel {
 
   // --- UCS -----------------------------------------------------------------------------
 
+  /** Vistas guardadas con el dibujo (se anotan al guardar; no cuentan como un cambio). */
+  get savedViews(): DocumentData['viewState'] | null {
+    return this.data.viewState ?? null
+  }
+  setSavedViews(v: DocumentData['viewState'] | null): void {
+    if (v) this.data.viewState = structuredClone(v)
+    else delete this.data.viewState
+  }
+
   /** UCS actual del modelo guardada en el dibujo (null = World). */
   get modelUcs(): DocumentData['modelUcs'] | null {
     return this.data.modelUcs ?? null

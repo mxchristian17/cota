@@ -844,6 +844,8 @@ export interface DocumentData {
   layIso?: Array<{ id: string; visible: boolean; locked: boolean }>
   /** UCS actual del modelo; ausente = World. */
   modelUcs?: { origin: Vec3; xAxis: Vec3; yAxis: Vec3 }
+  /** Vistas al guardar (como el CAD clásico guarda la vista de cada viewport); ausente = vista en planta a extensiones. */
+  viewState?: SavedViews
   /** Tipos de línea cargados; `.cota` previos: se cargan los que usen sus capas. */
   linetypes?: LinetypeDefData[]
   /** Variables de tipo de línea y de sombreado guardadas en el dibujo, como en el DWG. */
@@ -862,4 +864,22 @@ export interface DocumentData {
     /** Propiedades personalizadas (DWGPROPS), disponibles como campos. */
     custom?: Record<string, string>
   }
+}
+
+/** Cámara guardada de un panel o del papel de un layout. */
+export interface SavedCamera {
+  target: Vec3
+  az: number
+  el: number
+  radius: number
+  mode?: 'ortho' | 'persp'
+  up?: Vec3
+}
+
+/** Vistas del dibujo guardadas con él: cada panel del modelo (cámara y UCS), el activo, el papel de cada layout. */
+export interface SavedViews {
+  panes: Array<{ cam: SavedCamera; ucs?: { origin: Vec3; xAxis: Vec3; yAxis: Vec3 } }>
+  active?: number
+  paper?: Record<string, SavedCamera>
+  visualStyle?: string
 }

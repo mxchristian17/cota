@@ -4,6 +4,17 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-10-28
+
+### Added
+- **Views are saved with the drawing**: the view (camera and UCS) of each model viewport, the active viewport, the
+  view of each layout sheet and the visual style. Opening the drawing again shows it as it was saved. Drawings saved
+  before open in plan view, zoomed to their extents, instead of keeping the view of the previous drawing.
+
+### Changed
+- Thinner, rounded scrollbars throughout the interface (command history, panels, dialogs and lists), more visible
+  on hover.
+
 ## [2.0.0] — 2026-10-28
 
 ### Changed (breaking)

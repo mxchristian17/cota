@@ -84,6 +84,9 @@ picks another base, `Copy` leaves copies until you exit, `eXit` or <kbd>Esc</kbd
 
 <kbd>Esc</kbd> cancels the whole command (the command line shows `*Cancel*`).
 
+**Saved views:** saving a drawing also saves the view of each viewport (and of each layout sheet) and the
+active viewport; opening it again restores them.
+
 ## Drawing aids
 
 | Aid | Key | What it does |

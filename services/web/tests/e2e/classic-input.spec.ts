@@ -148,4 +148,31 @@ test.describe('Cota: command line like classic CAD', () => {
     expect(b[0]).toBeCloseTo(0, 6)
     expect(b[1]).toBeCloseTo(50, 6)
   })
+
+  test('saving keeps the view of each viewport, the UCS and the active one; opening the file restores them', async ({ page }) => {
+    const { cmd } = await open(page)
+    await cmd('BOX', '0,0', '@40,30', '20', 'VPORTS', '2')
+    await expect.poll(() => st<number>(page, "return s.viewports.filter((v) => v.kind === 'model').length")).toBe(2)
+    // Panel 2 en isométrica y con zoom propio; panel 1 en planta con una UCS girada; activo el 2.
+    await st(page, "const [a, b] = s.viewports.filter((v) => v.kind === 'model'); s.setActiveViewport(b); s.setView('SEISO'); b.zoomExtents(); s.setActiveViewport(a)")
+    await cmd('UCS', 'Z', '30')
+    await st(page, "const [, b] = s.viewports.filter((v) => v.kind === 'model'); s.setActiveViewport(b)")
+    const before = await st<{ az: number; el: number; radius: number }[]>(page, "return s.viewports.filter((v) => v.kind === 'model').map((v) => v.getCamera())")
+    const [download] = await Promise.all([page.waitForEvent('download'), cmd('SAVE', 'vistas')])
+    const text = (await import('node:fs')).readFileSync(await download.path(), 'utf8')
+    expect(JSON.parse(text).viewState.panes).toHaveLength(2)
+    await page.reload()
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    await page.evaluate((t) => (window as any).__cotaStore.getState().openDeviceFile(new File([t], 'vistas.cota')), text)
+    await expect.poll(() => st<number>(page, "return s.viewports.filter((v) => v.kind === 'model').length")).toBe(2)
+    const after = await st<{ az: number; el: number; radius: number }[]>(page, "return s.viewports.filter((v) => v.kind === 'model').map((v) => v.getCamera())")
+    for (let i = 0; i < 2; i++) {
+      expect(after[i].az).toBeCloseTo(before[i].az, 6)
+      expect(after[i].el).toBeCloseTo(before[i].el, 6)
+      expect(after[i].radius).toBeCloseTo(before[i].radius, 6)
+    }
+    expect(await st(page, "const m = s.viewports.filter((v) => v.kind === 'model'); return m.indexOf(s.activeViewport)")).toBe(1)
+    const ucs = await st<number[]>(page, "return s.viewports.filter((v) => v.kind === 'model')[0].getUcs().x")
+    expect(ucs[0]).toBeCloseTo(Math.cos(Math.PI / 6), 6)
+  })
 })

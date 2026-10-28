@@ -566,6 +566,8 @@ export class Viewport {
    * vista como en el CAD clásico. Lo asigna el store al registrar el viewport.
    */
   onViewRecorded: ((before: CameraState, ucs: Ucs) => void) | null = null
+  /** Panel al que corresponde ("<paneles>-<índice>" del modelo, "paper:<layout>"): su vista se guarda con el dibujo. */
+  paneKey: string | null = null
 
   /** Guarda la vista actual en el historial (antes de cambiarla), sin repetir la última. */
   recordView(): void {

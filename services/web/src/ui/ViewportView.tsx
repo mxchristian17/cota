@@ -1,9 +1,9 @@
 import { openContextMenu } from './DimContextMenu'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Viewport, type CameraState } from '../render/Viewport'
+import { Viewport } from '../render/Viewport'
 import { useStore } from '../store/store'
 import { VPORT_VIEWS, type CameraMode, type ViewName } from '../core/view'
-import { isWorldUcs, normalizeUcs, WORLD_UCS, type Ucs } from '../core/ucs'
+import { isWorldUcs, normalizeUcs, WORLD_UCS } from '../core/ucs'
 import { pickPreviewColor } from '../core/preview'
 import { MODEL_TAB } from '../core/document/DocumentModel'
 import { fieldContextFor } from '../core/fields/context'
@@ -11,9 +11,8 @@ import { DRAWING_EXT } from '../core/io/paths'
 import { focusCommandLine } from './focus'
 import { ViewNet } from './ViewNet'
 import { LayoutView } from './LayoutView'
+import { paneKeyOf, paneState } from '../render/viewMemory'
 
-/** Cámara y UCS de cada panel del modelo: al ir a un layout los paneles se desmontan. */
-const paneState = new Map<string, { cam: CameraState; ucs: Ucs }>()
 
 function containerStyle(layout: number): CSSProperties {
   const two = { gridTemplateColumns: '1fr 1fr' }
@@ -119,6 +118,7 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
       },
     })
     vpRef.current = vp
+    vp.paneKey = paneKey
     registerViewport(vp)
     vp.setProvider(() => {
       const s = useStore.getState()
@@ -232,7 +232,7 @@ export function ViewportView() {
   return (
     <div className="viewport" style={{ display: 'grid', ...containerStyle(layout) }}>
       {views.map((v, i) => (
-        <ViewportPane key={`${layout}-${i}`} paneKey={`${layout}-${i}`} view={v} style={paneStyle(layout, i)} />
+        <ViewportPane key={paneKeyOf(layout, i)} paneKey={paneKeyOf(layout, i)} view={v} style={paneStyle(layout, i)} />
       ))}
     </div>
   )

@@ -15,9 +15,9 @@ import { unitToMm } from '../core/layout/scale'
 import { fieldContextFor } from '../core/fields/context'
 import { DRAWING_EXT } from '../core/io/paths'
 import { focusCommandLine } from './focus'
+import { paperCams } from '../render/viewMemory'
 
 /** Cámara del papel por layout: se conserva al cambiar de pestaña. */
-const paperCams = new Map<string, CameraState>()
 
 type Rect = { left: number; top: number; width: number; height: number }
 type Floats = MutableRefObject<Map<string, Viewport>>
@@ -326,6 +326,7 @@ export function LayoutView({ layoutId }: { layoutId: string }) {
       'paper',
     )
     paperRef.current = paper
+    paper.paneKey = `paper:${layoutId}`
     st().registerViewport(paper)
     // Desde el papel, los snaps también toman el modelo visto por los viewports (trans-espacial).
     let extras: { rev: number; list: Entity[] } | null = null

@@ -18,6 +18,8 @@ import { DEFAULT_OSNAP, normalizeOsnap, type OsnapConfig, type OsnapKind } from 
 import type { Pt, Vec3 } from '../core/math'
 import type { PreviewShape } from '../core/preview'
 import { isWorldUcs, normalizeUcs, sameUcs, ucsToDef, WORLD_UCS, type Ucs } from '../core/ucs'
+import { paneKeyOf, paneState, paperCams } from '../render/viewMemory'
+import type { SavedViews } from '../core/document/types'
 import { DEFAULT_PALETTE, normalizePalette, type PaletteState } from '../core/ui/palette'
 import { dockToolbar, normalizeToolbar, normalizeToolbars, type ToolbarSide, type ToolbarState, type ToolbarStates } from '../core/ui/toolbar'
 import { DEFAULT_TOOLBARS, findToolbar } from '../core/ui/toolbars'
@@ -791,6 +793,72 @@ export const useStore = create<AppState>((set, get) => {
   /** UCS anteriores para `UCS Previous` y bandera para no apilar la que se restaura. */
   const ucsHistory: Ucs[] = []
   let restoringPrevious = false
+  /** Panel que hay que activar cuando se monte (al abrir un dibujo con otra cantidad de paneles). */
+  let pendingActivePane: string | null = null
+  /**
+   * Vistas que viajan con el dibujo al guardarlo: cámara y UCS de cada panel del modelo (los montados, en vivo; los
+   * que están desmontados porque se está en un layout, los recordados), el panel activo, la vista del papel de cada
+   * layout y el estilo visual.
+   */
+  const collectViews = (): SavedViews => {
+    const n = doc.viewportLayout
+    const live = (key: string) => get().viewports.find((v) => v.paneKey === key)
+    const panes: SavedViews['panes'] = []
+    for (let i = 0; i < n; i++) {
+      const key = paneKeyOf(n, i)
+      const vp = live(key)
+      const st = vp ? { cam: vp.getCamera(), ucs: vp.getUcs() } : paneState.get(key)
+      if (!st) break
+      panes.push({ cam: structuredClone(st.cam), ...(isWorldUcs(st.ucs) ? {} : { ucs: ucsToDef(st.ucs) }) })
+    }
+    const activeKey = get().activeViewport?.paneKey ?? ''
+    const active = Math.max(0, panes.findIndex((_, i) => paneKeyOf(n, i) === activeKey))
+    const paper: Record<string, SavedViews['panes'][number]['cam']> = {}
+    for (const l of doc.layouts) {
+      const vp = live(`paper:${l.id}`)
+      const cam = vp ? vp.getCamera() : paperCams.get(l.id)
+      if (cam) paper[l.id] = structuredClone(cam)
+    }
+    return { panes, active, paper, visualStyle: get().visualStyle }
+  }
+  /** Al abrir un dibujo: sus vistas guardadas (o, si no trae, planta a extensiones) en los paneles y el papel. */
+  const applyViews = () => {
+    const v = doc.savedViews
+    paneState.clear()
+    paperCams.clear()
+    const n = doc.viewportLayout
+    if (v) {
+      v.panes.forEach((p, i) => paneState.set(paneKeyOf(n, i), { cam: p.cam, ucs: p.ucs ? normalizeUcs(p.ucs) : { ...WORLD_UCS } }))
+      for (const [id, cam] of Object.entries(v.paper ?? {})) paperCams.set(id, cam)
+      if (v.visualStyle && VISUAL_STYLES.includes(v.visualStyle as VisualStyle)) set({ visualStyle: v.visualStyle as VisualStyle })
+    }
+    // Los paneles ya montados (la misma cantidad de paneles y la misma pestaña) no se vuelven a crear: se fijan acá.
+    for (const vp of get().viewports) {
+      const key = vp.paneKey ?? ''
+      if (vp.kind === 'model') {
+        const st = paneState.get(key)
+        if (v?.visualStyle) vp.setVisualStyle(get().visualStyle)
+        if (st) {
+          vp.setCamera(st.cam)
+          vp.setUcs(st.ucs)
+        } else {
+          if (!vp.isPlanView()) vp.setView('TOP')
+          vp.zoomExtents()
+        }
+      } else if (vp.kind === 'paper' && key.startsWith('paper:')) {
+        const cam = paperCams.get(key.slice(6))
+        if (cam) vp.setCamera(cam)
+      }
+    }
+    // El panel activo; si todavía no existe (cambió la cantidad de paneles), se activa cuando se monte.
+    pendingActivePane = v && doc.activeTab === MODEL_TAB ? paneKeyOf(n, v.active ?? 0) : null
+    const act = pendingActivePane ? get().viewports.find((x) => x.paneKey === pendingActivePane) : undefined
+    if (act) {
+      pendingActivePane = null
+      set({ activeViewport: act, ucs: act.getUcs() })
+    }
+    if (!v) restoreModelUcs() // la vista en planta no le cambia la UCS que trae el dibujo
+  }
   /** Al abrir/crear un dibujo, los paneles del modelo toman la UCS guardada en él. */
   const restoreModelUcs = () => {
     const u = normalizeUcs(doc.modelUcs ?? WORLD_UCS)
@@ -1455,6 +1523,11 @@ export const useStore = create<AppState>((set, get) => {
     registerViewport: (vp) => {
       vp.onViewRecorded = (cam, ucs) => recordViewUndo(vp, cam, ucs)
       set((s) => ({ viewports: [...s.viewports, vp], activeViewport: s.activeViewport ?? vp }))
+      if (pendingActivePane && vp.paneKey === pendingActivePane) {
+        pendingActivePane = null
+        // Después de que el panel tome su cámara y su UCS guardadas (se fijan apenas se registra).
+        setTimeout(() => set({ activeViewport: vp, ucs: vp.getUcs() }), 0)
+      }
     },
     unregisterViewport: (vp) =>
       set((s) => {
@@ -2454,6 +2527,7 @@ export const useStore = create<AppState>((set, get) => {
           currentFile = null
           set({ ...detached, currentLayerId: doc.currentLayer, viewportLayout: doc.viewportLayout })
           restoreModelUcs()
+          applyViews()
           print(`Opened "${file.name}" from the device.`)
         } else if (MODEL_EXTS.some((x) => lower.endsWith(x))) {
           // Modelos 3D (STL, OBJ, STEP, IGES): un dibujo nuevo con cada cuerpo como malla.
@@ -2725,6 +2799,7 @@ export const useStore = create<AppState>((set, get) => {
       const { docId, docName, docFolder } = get()
       // Fecha de guardado (campo SaveDate). Sin `touch`: guardar no "modifica" el dibujo.
       doc.meta.modified = new Date().toISOString()
+      doc.setSavedViews(collectViews()) // la vista de cada panel y del papel viaja con el dibujo
       doc.setCurrentLayer(get().currentLayerId) // CLAYER: la capa de trabajo viaja con el dibujo
       // Carpeta recordada que el navegador volvió a dejar en "preguntar" (pestaña nueva): SAVE es un gesto, se
       // pide el permiso acá en vez de descargar el archivo como si no hubiera carpeta.
@@ -2875,6 +2950,7 @@ export const useStore = create<AppState>((set, get) => {
         } else {
           doc.load(JSON.parse(text) as DocumentData)
           restoreModelUcs()
+          applyViews()
           currentFile = handle
           set({
             docId: null,
@@ -2899,6 +2975,7 @@ export const useStore = create<AppState>((set, get) => {
         const payload = await api.getDocument(id)
         doc.load(payload.data)
         restoreModelUcs()
+        applyViews()
         set({
           docId: payload.id,
           docName: payload.name,
