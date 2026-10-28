@@ -28,12 +28,31 @@ function toLineType(name: string | undefined): LineType {
   return up && up !== BYLAYER && up !== BYBLOCK ? up : CONTINUOUS
 }
 
-/** Grupos 6/48 del objeto (tipo de línea y su escala), sólo si no son ByLayer/1. */
+/** Grupos 6/48/62/420/370 del objeto (tipo de línea, escala, color y grosor), sólo si no son ByLayer/1. */
 function commonCodes(e: Entity): string {
   let out = ''
   const lt = e.lineType?.toUpperCase()
   if (lt && lt !== BYLAYER && !lt.startsWith(BYLAYER + ':')) out += p(6, linetypeLabel(lt) === 'ByBlock' ? 'ByBlock' : lt)
   if (e.ltScale !== undefined && e.ltScale !== 1) out += p(48, e.ltScale)
+  if (e.color?.startsWith('#')) {
+    const aci = hexToAci(e.color)
+    out += p(62, aci)
+    if (aciToHex(aci).toLowerCase() !== e.color.toLowerCase()) out += p(420, hexToTruecolor(e.color))
+  }
+  if (e.lineWeight !== undefined && e.lineWeight >= 0) out += p(370, e.lineWeight === 0 ? -3 : Math.round(e.lineWeight * 100))
+  return out
+}
+
+/** Color y grosor propios de un record (62/420, 370); ByLayer/ByBlock/Default de color quedan sin color propio. */
+function ownColorWeight(codes: Rec['codes']): Pick<DxfEntitySpec, 'color' | 'lineWeight'> {
+  const out: Pick<DxfEntitySpec, 'color' | 'lineWeight'> = {}
+  const tc = codes.find(([c]) => c === 420)
+  const aci = num(codes, 62, 256)
+  if (tc) out.color = truecolorToHex(Number(tc[1]))
+  else if (aci >= 1 && aci <= 255) out.color = aciToHex(aci)
+  const lw = num(codes, 370, -1)
+  if (lw === -3) out.lineWeight = 0
+  else if (lw >= 0) out.lineWeight = lw / 100
   return out
 }
 
@@ -284,6 +303,9 @@ export interface DxfEntitySpec {
   /** Tipo de línea del objeto (código 6; ausente = ByLayer) y su escala (48). */
   lineType?: string
   ltScale?: number
+  /** Color propio (62/420; ausente = ByLayer) y grosor en mm (370; ausente = ByLayer). */
+  color?: string
+  lineWeight?: number
 }
 
 export interface DxfImportResult {
@@ -379,6 +401,7 @@ export function importDxf(text: string): DxfImportResult {
       layerName: str(rec.codes, 8) ?? '0',
       ...(lt && lt.toUpperCase() !== BYLAYER ? { lineType: lt.toUpperCase() } : {}),
       ...(lts !== 1 && lts > 0 ? { ltScale: lts } : {}),
+      ...ownColorWeight(rec.codes),
     }
   }
 
@@ -498,6 +521,7 @@ export function importDxf(text: string): DxfImportResult {
         layerName,
         ...(lt && lt.toUpperCase() !== BYLAYER ? { lineType: lt.toUpperCase() } : {}),
         ...(lts !== 1 && lts > 0 ? { ltScale: lts } : {}),
+        ...ownColorWeight(rec.codes),
       })
     else if (!['SEQEND', 'VERTEX'].includes(rec.type)) unsupported.add(rec.type)
   }

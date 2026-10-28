@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { useStore } from '../store/store'
 import type { DimensionEntity, Entity } from '../core/document/types'
 import { entityFields, typeLabel, type PropField } from '../core/editing/props'
+import { LINEWEIGHTS, lineweightLabel } from '../core/document/objectProps'
+import { ColorSelect } from './ColorSelect'
 import { DIM_TABS, DIM_VAR_INFO, type DimTab } from '../core/dimension/style'
 import { formatDim } from '../core/dimension/dimGeometry'
 import { DimVarInput } from './DimVarInput'
@@ -21,8 +23,24 @@ function CommonProps({ ents }: { ents: Entity[] }) {
   const lts = (e: Entity) => e.ltScale ?? 1
   const ltSame = ents.every((e) => lt(e) === lt(ents[0])) ? lt(ents[0]) : undefined
   const scSame = ents.every((e) => lts(e) === lts(ents[0])) ? lts(ents[0]) : undefined
+  const col = (e: Entity) => e.color ?? 'BYLAYER'
+  const colSame = ents.every((e) => col(e) === col(ents[0])) ? col(ents[0]) : undefined
+  const lw = (e: Entity) => String(e.lineWeight ?? -1)
+  const lwSame = ents.every((e) => lw(e) === lw(ents[0])) ? lw(ents[0]) : undefined
   return (
     <>
+      <ColorSelect value={colSame} onPick={(v) => setCommon(ids, 'color', v)} testId="prop-color" className="field prop-value" label="Color" />
+      <label className="prop-row">
+        <span className="prop-key">Lineweight</span>
+        <select className="field prop-value" value={lwSame ?? ''} onChange={(e) => setCommon(ids, 'lineWeight', Number(e.target.value))} data-testid="prop-lineweight">
+          {lwSame === undefined && <option value="">*VARIES*</option>}
+          {[-1, ...LINEWEIGHTS].map((v) => (
+            <option key={v} value={String(v)}>
+              {lineweightLabel(v)}
+            </option>
+          ))}
+        </select>
+      </label>
       <label className="prop-row">
         <span className="prop-key">Linetype</span>
         <select

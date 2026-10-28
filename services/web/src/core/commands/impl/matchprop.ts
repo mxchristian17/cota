@@ -3,8 +3,8 @@ import type { Entity } from '../../document/types'
 import type { Command } from '../types'
 
 /** Propiedades que copia `MATCHPROP` (sus *Property Settings*). */
-export type MatchSetting = 'Layer' | 'Linetype' | 'LtScale' | 'Text' | 'Dimension' | 'Hatch' | 'Polyline'
-const ALL: MatchSetting[] = ['Layer', 'Linetype', 'LtScale', 'Text', 'Dimension', 'Hatch', 'Polyline']
+export type MatchSetting = 'Color' | 'Layer' | 'Linetype' | 'LtScale' | 'Lineweight' | 'Text' | 'Dimension' | 'Hatch' | 'Polyline'
+const ALL: MatchSetting[] = ['Color', 'Layer', 'Linetype', 'LtScale', 'Lineweight', 'Text', 'Dimension', 'Hatch', 'Polyline']
 
 /** Ajustes activos de la sesión (en el CAD clásico se recuerdan entre usos del comando). */
 const active = new Set<MatchSetting>(ALL)
@@ -29,6 +29,17 @@ export function matchProperties(doc: DocumentModel, src: Entity, dst: Entity, se
   if (on.has('Linetype') && dst.lineType !== src.lineType) {
     if (src.lineType === undefined) delete dst.lineType
     else dst.lineType = src.lineType
+    changed = true
+  }
+  // Color y grosor propios (ausentes = ByLayer).
+  if (on.has('Color') && dst.color !== src.color) {
+    if (src.color === undefined) delete dst.color
+    else dst.color = src.color
+    changed = true
+  }
+  if (on.has('Lineweight') && dst.lineWeight !== src.lineWeight) {
+    if (src.lineWeight === undefined) delete dst.lineWeight
+    else dst.lineWeight = src.lineWeight
     changed = true
   }
   if (on.has('LtScale') && dst.ltScale !== src.ltScale) {

@@ -104,7 +104,9 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | `LAYTHW` | — | Thaw all layers |
 | `LAYLCK` | — | Lock the layer of the selected object |
 | `LAYULK` | — | Unlock the layer of the selected object |
+| `COLOR` | `COL`, `COLOUR`, `-COLOR`, `CECOLOR` | Color of new objects (CECOLOR): ByLayer, index 1-255, name, #rrggbb or r,g,b |
 | `LINETYPE` | `LT`, `LTYPE`, `DDLTYPE` | Linetype Manager: load linetypes, set the current one and the scale factors |
+| `LWEIGHT` | `LW`, `LINEWEIGHT`, `-LWEIGHT`, `CELWEIGHT` | Lineweight of new objects (CELWEIGHT): ByLayer, Default or a width in mm [?] |
 | `DIMSTYLE` | `D`, `DST`, `DDIM`, `DIMSTY` | Dimension Style Manager: create, modify, override and set the current dimension style |
 | `MLEADERSTYLE` | `MLS` | Multileader style: multileaders use the leader arrow (DIMLDRBLK), arrow size and text of the dimension style |
 | `LIMITS` | — | Set the drawing limits (lower left, upper right) and turn the limits check ON/OFF |

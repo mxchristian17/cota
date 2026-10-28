@@ -67,7 +67,7 @@ function hiddenLineOps(
       const pts = [toPaper(s.a[0], s.a[1]), toPaper(s.b[0], s.b[1])]
       if (!clip || overlaps(boxOf(pts), clip)) body += polyStroke(pts, PAPER)
     }
-    if (body) out += strokeStyleOps(layerMap.get(it.e.layer), style) + body
+    if (body) out += strokeStyleOps(layerMap.get(it.e.layer), style, it.e) + body
   })
   return out
 }
@@ -222,7 +222,7 @@ export function viewportContent(
         body += textTm(ln, [o[0] * MM_TO_PT, o[1] * MM_TO_PT], toPt(u), toPt(v))
       })
     }
-    if (body) out += strokeStyleOps(layer, style) + body
+    if (body) out += strokeStyleOps(layer, style, e) + body
   }
   if (solids.length) {
     const t0 = dot(vp.target, right)

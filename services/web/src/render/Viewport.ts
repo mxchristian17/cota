@@ -1867,7 +1867,7 @@ export class Viewport {
     const bgHex = '#' + this.bgColor.getHexString()
     // Grosor de capa (mm; 0 = Default, 0.25 mm) sólo en los layouts.
     const lwUnits = this.data?.lwUnitsPerMm
-    const lwKey = (l: Layer | undefined): string => (lwUnits ? `|${l?.lineWeight || 0.25}` : '')
+    const lwKey = (l: Layer | undefined, own?: number): string => (lwUnits ? `|${(own !== undefined && own >= 0 ? own : l?.lineWeight) || 0.25}` : '')
     this.wideLines = []
 
     this.unpickable = new Set(entities.filter((e) => !layerEditable(layerMap.get(e.layer))).map((e) => e.id))
@@ -1876,7 +1876,7 @@ export class Viewport {
         const layer = layerMap.get(e.layer)
         if (!layerVisible(layer)) continue
         const selected = selection.has(e.id)
-        const colorHex = this.layerHex(layer)
+        const colorHex = this.layerHex(layer, e.color)
 
         // Individuales: seleccionadas (resaltado), anotaciones y polilíneas anchas.
         if ((selected && e.type !== 'SHADE') || e.type === 'DIMENSION' || e.type === 'TEXT' || e.type === 'ATTDEF') {
@@ -1932,7 +1932,7 @@ export class Viewport {
               pa = eg.getAttribute('position').array as ArrayLike<number>
               eg.dispose()
             }
-            const b = getLine(edgeB, `${ro}|${style === 'shadedEdges' ? '#111111' : colorHex}${lwKey(layer)}`)
+            const b = getLine(edgeB, `${ro}|${style === 'shadedEdges' ? '#111111' : colorHex}${lwKey(layer, e.lineWeight)}`)
             b.ranges.push({ s: b.n, id: e.id })
             for (let i = 0; i < pa.length; i++) b.pos.push(pa[i])
             b.n += pa.length / 3
@@ -1969,7 +1969,7 @@ export class Viewport {
         const dashes = ltCtx ? entityDashes(e, entityPattern(e, layerOf, ltCtx), ltCtx.plinegen) : null
         if (dashes) {
           // Tipo de línea: los trazos al lote visible; el recorrido entero, invisible, para el pick.
-          const b = getLine(lineB, `${ro}|${colorHex}${lwKey(layer)}`)
+          const b = getLine(lineB, `${ro}|${colorHex}${lwKey(layer, e.lineWeight)}`)
           b.ranges.push({ s: b.n, id: e.id })
           for (const d of dashes.dashes) for (let i = 0; i + 1 < d.length; i++) {
             b.pos.push(d[i][0], d[i][1], d[i][2], d[i + 1][0], d[i + 1][1], d[i + 1][2])
@@ -1986,7 +1986,7 @@ export class Viewport {
         }
         const verts = this.entityLinePoints(e)
         if (!verts || verts.length < 2) continue
-        const b = getLine(lineB, `${ro}|${colorHex}${lwKey(layer)}`)
+        const b = getLine(lineB, `${ro}|${colorHex}${lwKey(layer, e.lineWeight)}`)
         b.ranges.push({ s: b.n, id: e.id })
         for (let i = 0; i + 1 < verts.length; i++) {
           const a = verts[i]
@@ -2194,8 +2194,9 @@ export class Viewport {
    * Color con que se ve una capa: el color 7 según el fondo; las congeladas en grises (#222 a #CCC según la
    * luminosidad de su color) y las bloqueadas atenuadas (como LAYLOCKFADECTL 50). Las dos se ven y dan snaps.
    */
-  private layerHex(layer: Layer | undefined): string {
-    const hex = this.ink(layer?.color ?? '#ffffff')
+  private layerHex(layer: Layer | undefined, own?: string): string {
+    // Color propio del objeto, o el de su capa (ByLayer); congeladas y bloqueadas se atenúan igual.
+    const hex = this.ink((own?.startsWith('#') ? own : undefined) ?? layer?.color ?? '#ffffff')
     if (!layer?.frozen && !layer?.locked) return hex
     const color = new THREE.Color(hex)
     if (layer.frozen) {
@@ -2237,7 +2238,7 @@ export class Viewport {
       const topo = solidTopology(e.props)
       if (!topo) continue
       const { verts, normals, triFace, links } = topo
-      const hex = sel.has(e.id) ? '#' + new THREE.Color(HIGHLIGHT).getHexString() : style === 'shadedEdges' ? '#111111' : this.layerHex(layer)
+      const hex = sel.has(e.id) ? '#' + new THREE.Color(HIGHLIGHT).getHexString() : style === 'shadedEdges' ? '#111111' : this.layerHex(layer, e.color)
       let out = byColor.get(hex)
       if (!out) byColor.set(hex, (out = []))
       for (const [ta, tb, a, b] of links) {
@@ -2274,7 +2275,7 @@ export class Viewport {
       const layer = layerMap.get(e.layer)
       if (!layerVisible(layer)) return
       const selected = selection.has(e.id)
-      const color = new THREE.Color(selected ? HIGHLIGHT : this.layerHex(layer))
+      const color = new THREE.Color(selected ? HIGHLIGHT : this.layerHex(layer, e.color))
       if (e.type === 'SOLID3D') {
         this.entityGroup.add(this.buildSolid(e, color, selected))
         return

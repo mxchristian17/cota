@@ -29,7 +29,7 @@ export const CATEGORIES: { label: string; names: string[] }[] = [
     label: 'Format',
     names: [
       'LAYER', '§Layer tools', 'LAYMCUR', 'LAYISO', 'LAYUNISO', 'LAYOFF', 'LAYON', 'LAYFRZ', 'LAYTHW', 'LAYLCK', 'LAYULK',
-      '§Styles', 'LINETYPE', 'DIMSTYLE', 'MLEADERSTYLE', '§Drawing', 'LIMITS',
+      '§Styles', 'COLOR', 'LINETYPE', 'LWEIGHT', 'DIMSTYLE', 'MLEADERSTYLE', '§Drawing', 'LIMITS',
     ],
   },
   { label: 'Tools', names: ['@toolbars', 'TOOLBAR', 'OPTIONS', 'OSNAP', 'GRID', '§UCS', 'UCS', '§Inquiry', 'DIST', 'ID', 'AREA', 'LIST', 'MASSPROP', '§Groups', 'GROUP', 'UNGROUP', '§Isolate', 'ISOLATEOBJECTS', 'HIDEOBJECTS', 'UNISOLATEOBJECTS', '§Other', 'PROMPT', 'ATTSYNC'] },

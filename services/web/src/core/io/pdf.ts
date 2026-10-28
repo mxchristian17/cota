@@ -150,9 +150,11 @@ export function plotColor(hex: string, style: PlotStyle): [number, number, numbe
  * Operadores de color y ancho de una capa (lineweight en mm absolutos del papel). Los tipos de línea no
  * usan el patrón de trazo del PDF: los trazos se generan como geometría, igual que en pantalla.
  */
-export function strokeStyleOps(layer: Layer | undefined, style: PlotStyleOpts = DEFAULT_STYLE): string {
-  const [r, g, b] = plotColor(layer?.color ?? '#000000', style.plotStyle)
-  const lwMm = style.lineWeights ? layer?.lineWeight || DEFAULT_LW_MM : THIN_LW_MM
+export function strokeStyleOps(layer: Layer | undefined, style: PlotStyleOpts = DEFAULT_STYLE, own?: Pick<Entity, 'color' | 'lineWeight'>): string {
+  // Color y grosor propios del objeto, o los de su capa (ByLayer).
+  const [r, g, b] = plotColor((own?.color?.startsWith('#') ? own.color : undefined) ?? layer?.color ?? '#000000', style.plotStyle)
+  const lw0 = own?.lineWeight !== undefined && own.lineWeight >= 0 ? own.lineWeight : layer?.lineWeight
+  const lwMm = style.lineWeights ? lw0 || DEFAULT_LW_MM : THIN_LW_MM
   const lw = Math.max(0.1, lwMm * MM_TO_PT)
   return `${f(r)} ${f(g)} ${f(b)} RG\n${f(r)} ${f(g)} ${f(b)} rg\n${f(lw)} w\n[] 0 d\n`
 }
@@ -311,7 +313,7 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
   for (const e of entities) {
     const layer = layerMap.get(e.layer)
     if (!layerShown(layer) || (layer && !layer.printable)) continue
-    out += strokeStyleOps(layer, style)
+    out += strokeStyleOps(layer, style, e)
     if (e.type === 'SHADE') {
       out += shadeOps(e.props, toPage, style?.plotStyle ?? 'color')
       continue

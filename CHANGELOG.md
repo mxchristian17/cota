@@ -4,6 +4,15 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-10-28
+
+### Added
+- **Color and lineweight per object**, ByLayer by default as in classic CAD: set them for the selection in
+  Properties or in the Properties toolbar (color list with ByLayer, the named colors and Select Color…; lineweight
+  list), and for new objects with **COLOR** (`CECOLOR`: index 1–255, name, `#rrggbb` or `r,g,b`) and **LWEIGHT**
+  (`CELWEIGHT`: ByLayer, Default or mm). They are drawn, plotted, copied with the object, matched by MATCHPROP and
+  saved in DXF (codes 62/420/370) and DWG.
+
 ## [2.3.0] — 2026-10-28
 
 ### Added

@@ -5,6 +5,8 @@ import { ICONS } from './icons'
 import { clampToolbar, dockedOn, dockSideAt, insertIndex, type ToolbarSide } from '../core/ui/toolbar'
 import { itemTitle, TOOLBAR_BY_ID, TOOLBARS, type ToolbarCombo, type ToolbarDef } from '../core/ui/toolbars'
 import { BYBLOCK, BYLAYER, linetypeLabel } from '../core/linetype/linetypes'
+import { LINEWEIGHTS, lineweightLabel } from '../core/document/objectProps'
+import { ColorSelect } from './ColorSelect'
 
 /**
  * Barras de herramientas clásicas: acopladas a un borde del área de dibujo (varias por borde) o flotantes con
@@ -58,8 +60,51 @@ function Combo({ combo, testId }: { combo: ToolbarCombo; testId: string }) {
       </select>
     )
   }
-  // Tipo de línea: con objetos seleccionados, el de ellos; si no, el de los objetos nuevos (CELTYPE).
+  // Tipo de línea, color y grosor: con objetos seleccionados, los de ellos; si no, los de los objetos nuevos
+  // (CELTYPE, CECOLOR, CELWEIGHT), como el control de propiedades del CAD clásico.
   const ents = selection.map((id) => doc.getEntity(id)).filter((e): e is NonNullable<typeof e> => !!e)
+  if (combo === 'color') {
+    const c = (v?: string) => v ?? 'BYLAYER'
+    const value = ents.length ? (ents.every((e) => c(e.color) === c(ents[0].color)) ? c(ents[0].color) : undefined) : c(doc.vars.CECOLOR)
+    return (
+      <ColorSelect
+        className="field tb-combo"
+        title={ents.length ? 'Color of the selected objects' : 'Color of new objects (CECOLOR)'}
+        value={value}
+        testId={testId}
+        onPick={(v) => {
+          if (ents.length) setCommon(selection, 'color', v)
+          else setDrawingVar('CECOLOR', v === 'BYLAYER' ? undefined : v)
+          done()
+        }}
+      />
+    )
+  }
+  if (combo === 'lineweight') {
+    const w = (v?: number) => String(v ?? -1)
+    const value = ents.length ? (ents.every((e) => w(e.lineWeight) === w(ents[0].lineWeight)) ? w(ents[0].lineWeight) : '') : w(doc.vars.CELWEIGHT)
+    return (
+      <select
+        className="field tb-combo"
+        title={ents.length ? 'Lineweight of the selected objects' : 'Lineweight of new objects (CELWEIGHT)'}
+        value={value}
+        data-testid={testId}
+        onChange={(e) => {
+          const v = Number(e.target.value)
+          if (ents.length) setCommon(selection, 'lineWeight', v)
+          else setDrawingVar('CELWEIGHT', v >= 0 ? v : undefined)
+          done()
+        }}
+      >
+        {value === '' && <option value="">*VARIES*</option>}
+        {[-1, ...LINEWEIGHTS].map((v) => (
+          <option key={v} value={String(v)}>
+            {lineweightLabel(v)}
+          </option>
+        ))}
+      </select>
+    )
+  }
   const lt = (v?: string) => (v ?? BYLAYER).toUpperCase()
   const value = ents.length ? (ents.every((e) => lt(e.lineType) === lt(ents[0].lineType)) ? lt(ents[0].lineType) : '') : lt(doc.vars.CELTYPE)
   return (

@@ -150,7 +150,7 @@ export class DocumentModel {
   }
 
   /** Variables del dibujo con sus valores iniciales del CAD clásico. */
-  get vars(): Required<Omit<DrawingVars, 'HPORIGIN'>> & Pick<DrawingVars, 'HPORIGIN'> {
+  get vars(): Required<Omit<DrawingVars, 'HPORIGIN' | 'CECOLOR' | 'CELWEIGHT'>> & Pick<DrawingVars, 'HPORIGIN' | 'CECOLOR' | 'CELWEIGHT'> {
     const v = this.data.vars ?? {}
     const inch = /^(in|inch|inches|ft|feet)$/i.test(this.data.units)
     return {
@@ -172,6 +172,8 @@ export class DocumentModel {
       HPSPACE: v.HPSPACE ?? 1,
       HPDOUBLE: v.HPDOUBLE ?? 0,
       HPORIGIN: v.HPORIGIN,
+      CECOLOR: v.CECOLOR,
+      CELWEIGHT: v.CELWEIGHT,
     }
   }
 
@@ -889,6 +891,11 @@ export class DocumentModel {
     else if (entity.ltScale === 1) delete entity.ltScale
     if (entity.lineType === undefined) delete entity.lineType
     if (entity.ltScale === undefined) delete entity.ltScale
+    // Color y grosor: los objetos nuevos toman CECOLOR/CELWEIGHT; 'BYLAYER' y -1 explícitos (copias, importación) no.
+    if (input.color === undefined && v?.CECOLOR) entity.color = v.CECOLOR
+    else if (entity.color === undefined || entity.color.toUpperCase() === BYLAYER) delete entity.color
+    if (input.lineWeight === undefined && v?.CELWEIGHT !== undefined && v.CELWEIGHT >= 0) entity.lineWeight = v.CELWEIGHT
+    else if (entity.lineWeight === undefined || entity.lineWeight < 0) delete entity.lineWeight
     this.entities.push(entity)
     this._rev++
     return entity

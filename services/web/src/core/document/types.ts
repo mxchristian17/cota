@@ -574,6 +574,10 @@ export type EntityProps =
 export interface EntityCommon {
   lineType?: string
   ltScale?: number
+  /** Color propio `#rrggbb`; ausente = ByLayer. En un `EntityInput`, `'BYLAYER'` explícito evita tomar CECOLOR. */
+  color?: string
+  /** Grosor propio en mm (0 = Default); ausente = ByLayer. En un `EntityInput`, -1 explícito evita tomar CELWEIGHT. */
+  lineWeight?: number
   /** Firma de tamaño de sólidos y mallas: esfera envolvente y clave del contenido. */
   size?: import('../render/lod').SizeSig
 }
@@ -787,6 +791,10 @@ export interface LinetypeDefData {
 export interface DrawingVars {
   LTSCALE?: number
   CELTYPE?: string
+  /** Color de los objetos nuevos (`#rrggbb`); ausente = ByLayer. */
+  CECOLOR?: string
+  /** Grosor de los objetos nuevos en mm (0 = Default); ausente = ByLayer. */
+  CELWEIGHT?: number
   CELTSCALE?: number
   PSLTSCALE?: 0 | 1
   MSLTSCALE?: 0 | 1

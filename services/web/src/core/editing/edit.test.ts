@@ -82,7 +82,7 @@ describe('cloneEntityInput', () => {
   it('copia tipo, layer y props (deep copy)', () => {
     const e: LineEntity = { id: 'e1', type: 'LINE', layer: '5', props: { start: [0, 0, 0], end: [1, 1, 0] } }
     const input = cloneEntityInput(e)
-    expect(input).toEqual({ type: 'LINE', layer: '5', lineType: 'BYLAYER', ltScale: 1, props: { start: [0, 0, 0], end: [1, 1, 0] } })
+    expect(input).toEqual({ type: 'LINE', layer: '5', lineType: 'BYLAYER', ltScale: 1, color: 'BYLAYER', lineWeight: -1, props: { start: [0, 0, 0], end: [1, 1, 0] } })
     // deep copy: mutar el original no afecta la copia
     e.props.start[0] = 99
     expect((input.props as LineEntity['props']).start[0]).toBe(0)

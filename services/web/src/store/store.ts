@@ -276,7 +276,7 @@ export interface AppState {
   /** Variable del dibujo (LTSCALE, CELTYPE, CELTSCALE…), un paso de undo. */
   setDrawingVar: <K extends keyof DrawingVars>(name: K, value: DrawingVars[K]) => void
   /** Tipo de línea o su escala en varios objetos (paleta de Propiedades). */
-  setEntitiesCommon: (ids: string[], key: 'lineType' | 'ltScale', value: string | number) => void
+  setEntitiesCommon: (ids: string[], key: 'lineType' | 'ltScale' | 'color' | 'lineWeight', value: string | number) => void
   /** Menú del clic derecho en el modo Realtime de ZOOM/PAN. */
   realtimeMenu: { x: number; y: number } | null
   setRealtimeMenu: (m: { x: number; y: number } | null) => void
@@ -563,7 +563,7 @@ export const useStore = create<AppState>((set, get) => {
     }
     for (const e of entities) {
       const layerId = idByName.get(e.layerName.toLowerCase()) ?? doc.firstLayerId
-      const added = doc.addEntity({ type: e.type, layer: layerId, props: e.props, lineType: e.lineType ?? 'BYLAYER', ltScale: e.ltScale ?? 1 })
+      const added = doc.addEntity({ type: e.type, layer: layerId, props: e.props, lineType: e.lineType ?? 'BYLAYER', ltScale: e.ltScale ?? 1, color: e.color ?? 'BYLAYER', lineWeight: e.lineWeight ?? -1 })
       if (added.lineType && added.lineType !== 'BYBLOCK') doc.loadLinetype(added.lineType)
       if (added.type === 'DIMENSION' && doc.dimStyleDef(added.props.styleName ?? '')) doc.restyleDimension(added.props, added.props.styleName, undefined)
     }
@@ -2001,7 +2001,16 @@ export const useStore = create<AppState>((set, get) => {
       if (!ents.length) return
       pushSnapshot()
       for (const e of ents) {
-        if (key === 'ltScale') {
+        if (key === 'color') {
+          // 'BYLAYER' (o vacío) vuelve al color de la capa.
+          const c = String(value)
+          if (!c || c.toUpperCase() === 'BYLAYER') delete e.color
+          else e.color = c.toLowerCase()
+        } else if (key === 'lineWeight') {
+          const v = Number(value)
+          if (!(v >= 0)) delete e.lineWeight
+          else e.lineWeight = v
+        } else if (key === 'ltScale') {
           const v = Number(value)
           if (!(v > 0)) continue
           if (v === 1) delete e.ltScale

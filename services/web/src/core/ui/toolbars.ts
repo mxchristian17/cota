@@ -10,7 +10,7 @@ import { DEFAULT_TOOLBAR, type ToolbarSide, type ToolbarState, type ToolbarState
  */
 
 /** Listas desplegables de las barras. */
-export type ToolbarCombo = 'layer' | 'linetype' | 'dimstyle'
+export type ToolbarCombo = 'layer' | 'linetype' | 'dimstyle' | 'color' | 'lineweight'
 
 export type ToolbarItem =
   | {
@@ -134,7 +134,7 @@ export const TOOLBARS: ToolbarDef[] = [
     id: 'properties',
     name: 'Properties',
     side: 'top',
-    items: [combo('linetype'), b('linetype', 'Linetype manager', 'LINETYPE'), SEP, b('matchprop', 'Match properties', 'MATCHPROP'), b('properties', 'Properties', 'PROPERTIES')],
+    items: [combo('color'), combo('linetype'), b('linetype', 'Linetype manager', 'LINETYPE'), combo('lineweight'), SEP, b('matchprop', 'Match properties', 'MATCHPROP'), b('properties', 'Properties', 'PROPERTIES')],
   },
   {
     id: 'draw',

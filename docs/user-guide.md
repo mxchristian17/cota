@@ -132,6 +132,11 @@ Layer tools: `LAYMCUR` (make the layer of an object current), `LAYISO` / `LAYUNI
 
 `LINETYPE` loads linetypes (CENTER, HIDDEN, PHANTOM, DASHED, ISO patterns…) and sets the global scale.
 
+**Color and lineweight per object:** objects take the color and lineweight of their layer (**ByLayer**) unless
+they have their own. `COLOR` (index 1–255, a name, `#rrggbb` or `r,g,b`) and `LWEIGHT` (ByLayer, Default or mm) set
+them for new objects; change them for the selection in Properties or in the lists of the Properties toolbar.
+They are saved in DXF/DWG and plotted.
+
 **Properties** (`PROPERTIES`, or the ▣ strip on the left) shows the properties of the selection: layer,
 color, linetype, lineweight and the geometry of the object (coordinates, radius, height…). Edit any value
 there. `MATCHPROP` copies properties from one object to others.
@@ -269,8 +274,8 @@ Multileader, Insert, Inquiry and Drawing Views. Only Dimension is shown at first
   to dock it again, ✕ to close it. Right-click also offers *Dock Top/Left/Right/Bottom*, *Float* and *Close*.
 - A button cancels the command in progress and starts its own, like typing it. The **Object Snap** buttons are
   different: they act inside the current command (for example, click *Endpoint* when LINE asks for a point).
-- The lists on the toolbars set the current layer (Layers), the linetype of the selection or of new objects
-  (Properties) and the current dimension style (Dimension, Styles).
+- The lists on the toolbars set the current layer (Layers), the color, linetype and lineweight of the selection or
+  of new objects (Properties) and the current dimension style (Dimension, Styles).
 
 **Your setup is remembered:** toolbars, palettes, command line, clean screen, view cube, theme, visual style,
 drawing aids and their modes, autosave, full screen and user variables (`UCSICON`, `ZOOMFACTOR`, `ZOOMWHEEL`…)
