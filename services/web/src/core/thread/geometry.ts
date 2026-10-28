@@ -76,33 +76,31 @@ export function cylinderOfFace(topo: Topology, face: number): CylFace | null {
   const d = vnorm(ax)
   if (tris.some((i) => Math.abs(vdot(topo.normals[i], d)) > 0.05)) return null
   const [u, v] = perp(d)
-  // Punto del eje: el más cercano (mínimos cuadrados) a las rectas normales de las facetas.
-  let [a11, a12, a22, b1, b2] = [0, 0, 0, 0, 0]
-  const cents: Array<[number, number, number, number]> = []
+  // Las facetas son cuerdas del cilindro: sus VÉRTICES están sobre él. El eje sale del círculo que mejor ajusta
+  // los vértices proyectados (Kåsa); las normales de las facetas dicen de qué lado está el material.
   const verts = new Set<number>()
+  const cents: Array<[number, number, number, number]> = []
   for (const i of tris) {
     const [A, B, C] = topo.tris[i].map((k) => topo.verts[k])
     topo.tris[i].forEach((k) => verts.add(k))
     const c = vscale(vadd(vadd(A, B), C), 1 / 3)
-    const cx = vdot(c, u)
-    const cy = vdot(c, v)
-    let nx = vdot(topo.normals[i], u)
-    let ny = vdot(topo.normals[i], v)
-    const L = Math.hypot(nx, ny) || 1
-    ;[nx, ny] = [nx / L, ny / L]
-    const [m11, m12, m22] = [1 - nx * nx, -nx * ny, 1 - ny * ny]
-    a11 += m11
-    a12 += m12
-    a22 += m22
-    b1 += m11 * cx + m12 * cy
-    b2 += m12 * cx + m22 * cy
-    cents.push([cx, cy, nx, ny])
+    cents.push([vdot(c, u), vdot(c, v), vdot(topo.normals[i], u), vdot(topo.normals[i], v)])
   }
-  const det = a11 * a22 - a12 * a12
-  if (Math.abs(det) < 1e-12) return null
-  const ox = (b1 * a22 - b2 * a12) / det
-  const oy = (a11 * b2 - a12 * b1) / det
-  let rs = 0
+  const all = [...verts].map((k): [number, number] => [vdot(topo.verts[k], u), vdot(topo.verts[k], v)])
+  // Los vértices que deja la CSG sobre una cuerda (T-junctions) quedan adentro: se reajusta sólo con los que
+  // están en el radio mayor, hasta que el centro no cambia.
+  let fit = fitCircle(all)
+  for (const tol of [2e-3, 1e-5, 1e-7]) {
+    if (!fit) return null
+    const f = fit
+    const dist = all.map((p) => Math.hypot(p[0] - f.c[0], p[1] - f.c[1]))
+    const dmax = Math.max(...dist)
+    const on = all.filter((_, k) => dist[k] >= dmax - tol * dmax)
+    if (on.length < 3) break
+    fit = fitCircle(on)
+  }
+  if (!fit) return null
+  const [ox, oy] = fit.c
   let t0 = Infinity
   let t1 = -Infinity
   const rad: number[] = []
@@ -113,13 +111,48 @@ export function cylinderOfFace(topo: Topology, face: number): CylFace | null {
     t0 = Math.min(t0, t)
     t1 = Math.max(t1, t)
   }
-  for (const r of rad) rs += r
-  const radius = rs / rad.length
-  if (!(radius > 1e-9) || rad.some((r) => Math.abs(r - radius) > 0.03 * radius)) return null
+  // El radio es el de los vértices sobre el cilindro (los de las cuerdas quedan un poco adentro).
+  const radius = Math.max(...rad)
+  if (!(radius > 1e-9) || rad.some((r) => radius - r > 0.03 * radius)) return null
   let side = 0
   for (const [cx, cy, nx, ny] of cents) side += (cx - ox) * nx + (cy - oy) * ny
   const base = vadd(vscale(u, ox), vscale(v, oy))
   return { a: vadd(base, vscale(d, t0)), b: vadd(base, vscale(d, t1)), radius, shaft: side > 0 }
+}
+
+/** Círculo por mínimos cuadrados (Kåsa) de puntos 2D. */
+function fitCircle(pts: Array<[number, number]>): { c: [number, number] } | null {
+  const mx = pts.reduce((a, p) => a + p[0], 0) / pts.length
+  const my = pts.reduce((a, p) => a + p[1], 0) / pts.length
+  let [sxx, sxy, syy, sx, sy, sxz, syz, sz] = [0, 0, 0, 0, 0, 0, 0, 0]
+  for (const [px, py] of pts) {
+    const [x, y] = [px - mx, py - my]
+    const z = x * x + y * y
+    sxx += x * x
+    sxy += x * y
+    syy += y * y
+    sx += x
+    sy += y
+    sxz += x * z
+    syz += y * z
+    sz += z
+  }
+  const sol = solve3([
+    [sxx, sxy, sx],
+    [sxy, syy, sy],
+    [sx, sy, pts.length],
+  ], [-sxz, -syz, -sz])
+  return sol ? { c: [mx - sol[0] / 2, my - sol[1] / 2] } : null
+}
+
+/** Sistema 3×3 por Cramer; null si es singular. */
+function solve3(m: number[][], b: number[]): [number, number, number] | null {
+  const det = (a: number[][]) =>
+    a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1]) - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0]) + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0])
+  const D = det(m)
+  if (Math.abs(D) < 1e-18) return null
+  const col = (k: number) => m.map((row, i) => row.map((x, j) => (j === k ? b[i] : x)))
+  return [det(col(0)) / D, det(col(1)) / D, det(col(2)) / D]
 }
 
 /** Nodos del árbol del sólido (pre-orden). */

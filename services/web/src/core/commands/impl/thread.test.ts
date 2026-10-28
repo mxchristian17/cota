@@ -106,7 +106,9 @@ describe('THREAD 3D', () => {
     const topo = solidTopology(hole)!
     const cyl = [...Array(topo.faceCount).keys()].map((f) => cylinderOfFace(topo, f)).find(Boolean)!
     expect(cyl.shaft).toBe(false)
-    expect(cyl.radius).toBeCloseTo(4.25, 2)
+    // El eje sale de los vértices (sobre el cilindro): exacto aunque la CSG parta las facetas en triángulos desparejos.
+    expect(cyl.radius).toBeCloseTo(4.25, 6)
+    expect(Math.hypot(cyl.a[0], cyl.a[1])).toBeLessThan(1e-6)
     const withThread: SolidProps = { ...shaft, threads: [{ a: [0, 0, 0], b: [20, 0, 0], rim: [0, 5, 0], info: { series: 'M', designation: 'M10', d: 10, pitch: 1.5, internal: false } }] }
     const side = threadViewItems(withThread, { right: [1, 0, 0], up: [0, 0, 1], out: [0, -1, 0] }, solidTopology(withThread), 0)
     expect(side.map((i) => i.kind)).toEqual(['line', 'line'])

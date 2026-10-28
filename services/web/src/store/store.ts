@@ -878,6 +878,15 @@ export const useStore = create<AppState>((set, get) => {
     }
     if (!v) restoreModelUcs() // la vista en planta no le cambia la UCS que trae el dibujo
   }
+  /** Nombre de la UCS de cada panel (el desplegable muestra el del activo), mientras siga siendo esa UCS. */
+  const paneUcsNames = new Map<string, { ucs: Ucs; name: string | null }>()
+  /** Activa un panel: el store espeja su UCS (la de los puntos tecleados) y su nombre. */
+  const activatePane = (vp: Viewport) => {
+    const ucs = vp.getUcs()
+    const known = vp.paneKey ? paneUcsNames.get(vp.paneKey) : undefined
+    const ucsName = known && sameUcs(known.ucs, ucs) ? known.name : isWorldUcs(ucs) ? 'World' : null
+    set({ activeViewport: vp, ucs, ucsName })
+  }
   /** Al abrir/crear un dibujo, los paneles del modelo toman la UCS guardada en él. */
   const restoreModelUcs = () => {
     const u = normalizeUcs(doc.modelUcs ?? WORLD_UCS)
@@ -1554,19 +1563,22 @@ export const useStore = create<AppState>((set, get) => {
 
     registerViewport: (vp) => {
       vp.onViewRecorded = (cam, ucs) => recordViewUndo(vp, cam, ucs)
+      const first = !get().activeViewport
       set((s) => ({ viewports: [...s.viewports, vp], activeViewport: s.activeViewport ?? vp }))
       if (pendingActivePane && vp.paneKey === pendingActivePane) {
         pendingActivePane = null
         // Después de que el panel tome su cámara y su UCS guardadas (se fijan apenas se registra).
-        setTimeout(() => set({ activeViewport: vp, ucs: vp.getUcs() }), 0)
-      }
+        setTimeout(() => activatePane(vp), 0)
+      } else if (first) setTimeout(() => get().activeViewport === vp && activatePane(vp), 0)
     },
-    unregisterViewport: (vp) =>
-      set((s) => {
-        const viewports = s.viewports.filter((v) => v !== vp)
-        return { viewports, activeViewport: s.activeViewport === vp ? (viewports[0] ?? null) : s.activeViewport }
-      }),
-    setActiveViewport: (vp) => set({ activeViewport: vp, ucs: vp.getUcs() }),
+    unregisterViewport: (vp) => {
+      const viewports = get().viewports.filter((v) => v !== vp)
+      if (get().activeViewport !== vp) return set({ viewports })
+      // Al pasar del modelo a un layout (o al revés) el panel que queda manda: su UCS, no la del que se fue.
+      set({ viewports, activeViewport: viewports[0] ?? null })
+      if (viewports[0]) activatePane(viewports[0])
+    },
+    setActiveViewport: (vp) => activatePane(vp),
     setViewportLayout: (n) => {
       const layout = Math.max(1, Math.min(4, Math.round(n)))
       doc.setViewportLayout(layout)
@@ -2171,7 +2183,9 @@ export const useStore = create<AppState>((set, get) => {
       const vp = get().activeViewport
       if (vp && !sameUcs(vp.getUcs(), ucs)) vp.setUcs(ucs)
       if (doc.activeTab === MODEL_TAB && !temporary) doc.setModelUcs(isWorldUcs(ucs) ? null : ucsToDef(ucs))
-      set({ ucs, ucsName: name ?? (isWorldUcs(ucs) ? 'World' : null) })
+      const ucsName = name ?? (isWorldUcs(ucs) ? 'World' : null)
+      if (vp?.paneKey && !temporary) paneUcsNames.set(vp.paneKey, { ucs, name: ucsName })
+      set({ ucs, ucsName })
       if (sysvars.UCSFOLLOW && vp && !temporary && !sameUcs(prev, ucs)) vp.planView(ucs)
     },
     openDimStyle: () => set({ dimStyleOpen: true }),

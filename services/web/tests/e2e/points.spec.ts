@@ -20,9 +20,11 @@ test.describe('Cota POINT and DIVIDE', () => {
     // Un clic sobre un punto lo selecciona.
     const [px, py] = await scr(40, 0)
     await st('s.clearSelection()')
+    // El pick usa lo ya dibujado: en CI (más lento) el clic podía llegar antes de que la vista dibujara los
+    // puntos nuevos y tomaba la línea. Se esperan dos cuadros antes de hacer clic.
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null)))))
     await page.mouse.move(px, py)
     await page.mouse.click(px, py)
-    // En CI el clic puede tardar un cuadro en llegar a la selección.
     await expect.poll(() => st("return s.selection.map((id) => s.doc.getEntity(id).type)")).toContain('POINT')
     await page.keyboard.press('Escape')
     // NODE (anulación tecleada; como en el CAD clásico no está entre los snaps permanentes por defecto).

@@ -62,7 +62,7 @@ test.describe('Cota THREAD', () => {
     const th = await st<Array<{ info: { designation: string; internal: boolean } }>>(page, "return s.doc.entities.find((e) => e.type === 'SOLID3D').props.threads")
     expect(th.map((t) => [t.info.designation, t.info.internal])).toEqual([['M20', false]])
     // Vistas de dibujo: de costado, las líneas finas del fondo; de frente al eje, el arco de 3/4 con su designativo.
-    await cmd('UCS', 'W', 'VIEWBASE', '', '', '100,150', '100,60', '')
+    await cmd('VIEWBASE', '', '', '100,150', '100,60', '')
     await expect(page.locator('.cmd-output')).toContainText('Base view created with 1 projected view(s)')
     const views = await st<Array<{ out: number[]; thin: string[] }>>(page, "return s.doc.entities.filter((e) => e.type === 'INSERT' && e.props.view).map((e) => ({ out: e.props.view.basis.out, thin: s.doc.blocks.find((b) => b.name === e.props.name).entities.filter((x) => x.lineWeight === 0.18).map((x) => x.type + (x.props.thread ? ' ' + x.props.thread.designation : '')) }))")
     expect(views.map((v) => v.thin)).toEqual([['LINE', 'LINE'], ['ARC M20']])

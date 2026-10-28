@@ -374,3 +374,22 @@ test.describe('Cota Layout: hoja y viewports flotantes', () => {
     expect(await cam()).toBeCloseTo(radius, 6)
   })
 })
+
+test.describe('Cota UCS per space', () => {
+  test('a layout uses its own UCS: a Front UCS in the model does not move points typed on the sheet', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    const st = (js: string) => page.evaluate((c) => new Function('s', c)((window as any).__cotaStore.getState()), js)
+    await typeCmd(page, '-VIEW', 'FRONT')
+    expect(await st('return s.ucsName')).toBe('Front')
+    await page.getByTestId('tab-Layout1').click()
+    await expect.poll(() => st('return s.ucsName')).toBe('World')
+    await typeCmd(page, 'LINE', '10,20', '30,40', '')
+    expect(await st("return s.doc.entities.filter((e) => e.type === 'LINE').at(-1).props")).toEqual({ start: [10, 20, 0], end: [30, 40, 0] })
+    // De vuelta en el modelo sigue la UCS Front, con su nombre.
+    await page.getByTestId('tab-Model').click()
+    await expect.poll(() => st('return s.ucsName')).toBe('Front')
+    await typeCmd(page, 'LINE', '10,20', '30,40', '')
+    expect(await st("return s.doc.entities.filter((e) => e.type === 'LINE').at(-1).props")).toEqual({ start: [10, 0, 20], end: [30, 0, 40] })
+  })
+})

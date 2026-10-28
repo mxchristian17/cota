@@ -4,6 +4,15 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.5.1] — 2026-10-28
+
+### Fixed
+- A layout now uses its own UCS: after setting a view-based UCS in the model (for example with `-VIEW FRONT`), points
+  typed on the sheet went to the wrong place (drawing views and lines landed at y = 0). Going back to the model keeps
+  its UCS and its name.
+- THREAD finds the axis of a hole in a solid exactly: it was off by a few hundredths of a millimetre when the
+  boolean operation had split the faces of the hole unevenly.
+
 ## [2.5.0] — 2026-10-28
 
 ### Added
