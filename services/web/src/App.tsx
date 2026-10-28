@@ -8,6 +8,9 @@ import { canInstall, enterFullscreen, isStandalone, onInstallChange, promptInsta
 import { FlatshotDialog } from './ui/FlatshotDialog'
 import { PlotDialog } from './ui/PlotDialog'
 import { QSelectDialog } from './ui/QSelectDialog'
+import { ScriptDialog } from './ui/ScriptDialog'
+import { scriptFromHash } from './core/commands/script'
+import { hasClipboard } from './core/commands/impl/clipboard'
 import { CLOUD_ENABLED } from './core/io/backend'
 import { BRAND_HTML } from './ui/brand'
 import { focusCommandLine } from './ui/focus'
@@ -86,6 +89,14 @@ export default function App() {
   useEffect(() => {
     void restoreSession()
   }, [restoreSession])
+
+  // Un enlace compartido (`#script=…`) abre el lote en el diálogo SCRIPT: se revisa y sólo corre si se confirma.
+  useEffect(() => {
+    const t = scriptFromHash(window.location.hash)
+    if (t === null) return
+    useStore.getState().openScript(t, true)
+    history.replaceState(null, '', window.location.pathname + window.location.search)
+  }, [])
 
   // Cerrar o recargar la pestaña con cambios sin guardar pide confirmación al navegador (el dibujo que se
   // muestra al arrancar cuenta como guardado).
@@ -192,7 +203,8 @@ export default function App() {
         const s = useStore.getState()
         if (!textMarked && !s.engine.busy) {
           const cmd = k === 'v' ? 'PASTECLIP' : k === 'x' ? 'CUTCLIP' : e.shiftKey ? 'COPYBASE' : 'COPYCLIP'
-          if (k === 'v' || s.selection.length || cmd === 'COPYBASE') {
+          // Sin objetos copiados, Ctrl+V queda para el texto: un lote pegado en la línea de comandos corre entero.
+          if ((k === 'v' && hasClipboard()) || (k !== 'v' && (s.selection.length || cmd === 'COPYBASE'))) {
             e.preventDefault()
             s.submitCommand(cmd)
             return
@@ -418,6 +430,7 @@ export default function App() {
       <FlatshotDialog />
       <PlotDialog />
       <QSelectDialog />
+      <ScriptDialog />
       <ViewGenDialog />
     </div>
   )

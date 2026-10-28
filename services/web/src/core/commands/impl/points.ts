@@ -3,7 +3,7 @@ import type { Vec3 } from '../../math'
 import { askNumber, fmt } from '../ask'
 import { sysvars } from '../sysvars'
 import { pickCurve } from '../../editing/pickCurve'
-import type { Curve } from '../../geom/curve'
+import { curveOf, type Curve } from '../../geom/curve'
 
 const modes = () => `Current point modes:  PDMODE=${sysvars.PDMODE}  PDSIZE=${fmt(sysvars.PDSIZE)}`
 
@@ -43,6 +43,21 @@ async function pickObject(ctx: CommandContext, prompt: string): Promise<{ curve:
   }
 }
 
+/**
+ * Objetos a dividir o medir: los seleccionados antes del comando que lo admitan (como el CAD clásico con la
+ * selección previa) o, si no hay, uno elegido con un clic.
+ */
+async function pickTargets(ctx: CommandContext, prompt: string): Promise<Array<{ curve: Curve; t: number }> | null> {
+  const pre = (ctx.app.preselection?.() ?? []).map((id) => ctx.doc.getEntity(id)).filter((e) => e !== undefined)
+  const curves = pre.map((e) => curveOf(e)).filter((c): c is Curve => !!c)
+  if (curves.length) {
+    ctx.app.clearSelection()
+    return curves.map((curve) => ({ curve, t: 0 }))
+  }
+  const o = await pickObject(ctx, prompt)
+  return o ? [o] : null
+}
+
 const addPoints = (ctx: CommandContext, pts: Vec3[]) => {
   for (const p of pts) ctx.doc.addEntity({ type: 'POINT', layer: ctx.currentLayerId(), props: { position: p } })
 }
@@ -54,17 +69,19 @@ export const divideCommand: Command = {
   aliases: ['DIV'],
   description: 'Place points that divide an object into equal-length segments',
   async run(ctx) {
-    const o = await pickObject(ctx, 'Select object to divide: ')
-    if (!o) return
+    const list = await pickTargets(ctx, 'Select object to divide: ')
+    if (!list) return
     const r = await askNumber(ctx, 'Enter the number of segments: ', {
       check: (v) => (Number.isInteger(v) && v >= 2 && v <= 32767 ? null : 'Requires an integer between 2 and 32767.'),
     })
     if (r?.kind !== 'number') return
     const n = r.value
-    const L = o.curve.length()
-    // Un objeto cerrado lleva N puntos (el primero en su inicio); uno abierto, N − 1 entre sus extremos.
-    const ks = o.curve.closed ? Array.from({ length: n }, (_, i) => i) : Array.from({ length: n - 1 }, (_, i) => i + 1)
-    addPoints(ctx, ks.map((k) => o.curve.pointAt(paramAtLength(o.curve, (L * k) / n))))
+    for (const o of list) {
+      const L = o.curve.length()
+      // Un objeto cerrado lleva N puntos (el primero en su inicio); uno abierto, N − 1 entre sus extremos.
+      const ks = o.curve.closed ? Array.from({ length: n }, (_, i) => i) : Array.from({ length: n - 1 }, (_, i) => i + 1)
+      addPoints(ctx, ks.map((k) => o.curve.pointAt(paramAtLength(o.curve, (L * k) / n))))
+    }
     if (sysvars.PDMODE === 0) ctx.print('Tip: set PDMODE to 3 to see the points as crosses.')
   },
 }
@@ -76,16 +93,18 @@ export const measureCommand: Command = {
   aliases: ['ME'],
   description: 'Place points at measured intervals along an object, from the end nearest the pick',
   async run(ctx) {
-    const o = await pickObject(ctx, 'Select object to measure: ')
-    if (!o) return
+    const list = await pickTargets(ctx, 'Select object to measure: ')
+    if (!list) return
     const r = await askNumber(ctx, 'Specify length of segment: ', { check: (v) => (v > 0 ? null : 'Requires a positive length.') })
     if (r?.kind !== 'number') return
     const step = r.value
-    const L = o.curve.length()
-    // En uno abierto se empieza por el extremo más cercano al clic (como el CAD clásico).
-    const fromEnd = !o.curve.closed && o.curve.length(0, o.t) > L / 2
     const pts: Vec3[] = []
-    for (let s = step; s < L - 1e-9 * Math.max(1, L); s += step) pts.push(o.curve.pointAt(paramAtLength(o.curve, fromEnd ? L - s : s)))
+    for (const o of list) {
+      const L = o.curve.length()
+      // En uno abierto se empieza por el extremo más cercano al clic (con la selección previa, por su inicio).
+      const fromEnd = !o.curve.closed && o.curve.length(0, o.t) > L / 2
+      for (let s = step; s < L - 1e-9 * Math.max(1, L); s += step) pts.push(o.curve.pointAt(paramAtLength(o.curve, fromEnd ? L - s : s)))
+    }
     if (pts.length === 0) {
       ctx.print('The segment is longer than the object.')
       return

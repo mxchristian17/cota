@@ -23,6 +23,19 @@ describe('POINT, DIVIDE y MEASURE', () => {
     expect(h.ofType('LINE')).toHaveLength(1)
   })
 
+  it('DIVIDE y MEASURE usan la selección previa: no vuelven a pedir objetos', async () => {
+    const h = makeEngine()
+    const a = h.add('LINE', { start: [0, 0, 0], end: [100, 0, 0] })
+    const b = h.add('LINE', { start: [0, 10, 0], end: [100, 10, 0] })
+    h.setSelection([a.id, b.id])
+    await h.run('DIVIDE', '4')
+    expect(pts(h)).toHaveLength(6)
+    expect(h.prints.join('\n')).not.toContain('Select object to divide')
+    h.setSelection([a.id])
+    await h.run('MEASURE', '30')
+    expect(pts(h).filter((p) => p[1] === 0).map((p) => +p[0].toFixed(9)).sort((x, y) => x - y)).toEqual([25, 30, 50, 60, 75, 90])
+  })
+
   it('DIVIDE en un círculo cerrado: N puntos', async () => {
     const h = makeEngine()
     const c = h.add('CIRCLE', { center: [0, 0, 0], radius: 10, normal: [0, 0, 1] })

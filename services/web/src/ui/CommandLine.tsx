@@ -1,3 +1,4 @@
+import { isScript } from '../core/commands/script'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store/store'
 import { suggestCommands, type CommandSuggestion } from '../core/commands/complete'
@@ -205,6 +206,16 @@ export function CommandLine() {
             // Solo se permite pegar con teclado (Ctrl/⌘+V). Un paste sin esa combinación proviene
             // del botón central (X11) → se bloquea.
             if (!pasteViaKeyboard.current) e.preventDefault()
+            else {
+              // Varias entradas pegadas (multicomandos): corren como un lote, en un solo paso de deshacer, como el
+              // espacio del CAD clásico confirma cada una. En un prompt de texto se pega tal cual.
+              const pasted = e.clipboardData.getData('text')
+              if (useStore.getState().engine.pendingKind() !== 'string' && isScript(pasted)) {
+                e.preventDefault()
+                setText('')
+                void useStore.getState().runScript(pasted)
+              }
+            }
             pasteViaKeyboard.current = false
           }}
           data-testid="command-input"

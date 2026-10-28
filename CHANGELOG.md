@@ -4,6 +4,18 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.6.0] — 2026-10-28
+
+### Added
+- **Scripts**: several commands as one operation, written like classic CAD scripts (inputs separated by spaces or new
+  lines, `""` for Enter, quotes for text with spaces). Paste them in the command line or run **SCRIPT** to type them,
+  load a `.scr` file or copy a link that shares them; a shared link shows the script and runs it only when you
+  confirm. The whole script is one undo step, and it stops at the first rejected input, saying which one.
+
+### Changed
+- **DIVIDE** and **MEASURE** use the objects already selected (several at once) instead of asking for one again.
+- <kbd>Ctrl</kbd>+<kbd>V</kbd> pastes text in the command line when no objects are copied.
+
 ## [2.5.1] — 2026-10-28
 
 ### Fixed

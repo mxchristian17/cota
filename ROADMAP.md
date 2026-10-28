@@ -32,7 +32,7 @@ discussion.
 |---|---|
 | planned | **Faster command line**: smarter autocomplete (by usage, aliases and system variables), searchable history, and editable aliases in a file. |
 | planned | Dynamic input next to the cursor (length, angle and coordinates typed in place) with keyboard-only workflows end to end. |
-| idea | Scripts and macros: record, replay and share command sequences. |
+| next | Scripts: several commands as one operation (one undo step), pasted in the command line, typed in SCRIPT, loaded from a `.scr` file or shared as a link. Recording macros comes later. |
 
 ## AI agents
 
@@ -46,6 +46,12 @@ discussion.
 | planned | Context meter and a `COMPACT` command that summarizes a long conversation to free context. |
 | planned | **MCP server** so external agents (desktop and coding assistants) can model in Cota with the same tools. |
 | idea | Scripting API to drive Cota from code (batch drawings, parametric parts). |
+
+## Mobile and on site
+
+| Status | Item |
+|---|---|
+| planned | **Mobile view for the job site**: a reduced phone interface to open drawings, orbit comfortably with touch, measure with DIST and switch the visual style (shaded, wireframe, hidden) from big on-screen buttons. Not the full editor. |
 
 ## Mechanisms and assemblies
 

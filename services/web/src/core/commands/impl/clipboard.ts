@@ -14,6 +14,9 @@ import type { Command, CommandContext } from '../types'
 let clip: { items: EntityInput[]; base: Pt } | null = null
 
 /** Sólo para los tests. */
+/** ¿Hay objetos en el portapapeles del dibujo? (si no, Ctrl+V en la línea de comandos pega texto, p. ej. un lote). */
+export const hasClipboard = (): boolean => !!clip?.items.length
+
 export function resetClipboard(): void {
   clip = null
 }

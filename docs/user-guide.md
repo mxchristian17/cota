@@ -41,6 +41,23 @@ Specify center point for circle or [3P/2P/Ttr (tan tan radius)]:
 You never need to click the command line: typing anywhere in the window sends the keys there (unless you are
 typing in another field or a dialog is open).
 
+### Scripts: several commands at once
+
+A script is a list of inputs that answer the prompts in order, as if you typed them: separate them with spaces or
+new lines, write `""` for an empty Enter and put text with spaces in double quotes. When a command ends, the next
+input starts another one.
+
+```
+CIRCLE 50,50 20
+RECTANGLE 0,0 @100,60
+TEXT 10,70 5 0 "Base plate" ""
+```
+
+Paste a script in the command line (<kbd>Ctrl</kbd>+<kbd>V</kbd>, when no objects are copied) or run **SCRIPT** to
+type it, load a `.scr` file or **copy a link** that shares it. The whole script is one undo step. If an input is
+rejected, the script stops there and tells you which one. A shared link only shows the script: it runs when you
+press Run.
+
 ## Entering points and distances
 
 Click in the drawing, or type coordinates. Typed coordinates are **absolute**; put `@` in front to make them

@@ -1963,6 +1963,8 @@ div.lt-row {
 
 /* PLOT: opciones a la izquierda y la hoja a la derecha; en pantallas angostas, una debajo de la otra. */
 .plot-modal { width: min(860px, calc(100vw - 32px)); }
+.script-text { width: 100%; min-height: 220px; resize: vertical; font-family: var(--mono, ui-monospace, monospace); font-size: 12px; white-space: pre; }
+.script-help { font-size: 12px; margin: 4px 0 0; }
 .plot-body { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 16px; }
 .plot-options { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
 .plot-row { display: flex; flex-direction: column; gap: 3px; }

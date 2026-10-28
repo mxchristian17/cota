@@ -83,6 +83,8 @@ import { DEFAULT_FLATSHOT, flatshotItems, type FlatshotOptions } from '../core/p
 import { alignDrawingViews, isDrawingView, isShaded, showsHidden, viewBlockEntities } from '../core/drawing/views'
 import { shadeViewTriangles } from '../core/projection/shade'
 import { solidThreads, threadViewItems } from '../core/thread/geometry'
+import { parseScript } from '../core/commands/script'
+import type { ScriptResult } from '../core/commands/CommandEngine'
 import { solidTopology } from '../core/editing/topology'
 import { solidMesh, solidMeshWithSurfaces } from '../render/csg'
 import { parseStl } from '../core/io/stl'
@@ -409,6 +411,15 @@ export interface AppState {
   exportPdf: () => void
   plotOpen: boolean
   qselectOpen: boolean
+  /** Diálogo SCRIPT (multicomandos): texto inicial y si viene de un enlace compartido; null = cerrado. */
+  scriptDialog: { text: string; shared: boolean } | null
+  openScript: (text?: string, shared?: boolean) => void
+  closeScript: () => void
+  /**
+   * Multicomandos en una sola operación (un paso de deshacer). `finish: 'cancel'` cancela el comando que quede
+   * esperando al final; `'leave'` (por defecto) lo deja para seguir a mano.
+   */
+  runScript: (text: string, opts?: { finish?: 'cancel' | 'leave'; fresh?: boolean }) => Promise<ScriptResult>
   openQselect: () => void
   closeQselect: () => void
   /** QSELECT ▸ OK: deja seleccionados esos objetos (o los suma a la selección actual). */
@@ -767,6 +778,8 @@ export const useStore = create<AppState>((set, get) => {
   // Backup del documento antes de aplicar una propuesta de IA (para accept/discard).
   let aiBackup: DocumentData | null = null
 
+  /** Lotes de multicomandos en curso: sus comandos no dejan pasos de deshacer propios (el lote deja uno). */
+  let scriptDepth = 0
   const pushSnapshot = () => {
     undoStack.push(doc.toJSON())
     if (undoStack.length > MAX_UNDO) undoStack.shift()
@@ -1003,6 +1016,7 @@ export const useStore = create<AppState>((set, get) => {
     setViewportLayout: (n) => get().setViewportLayout(n),
     exportPdf: () => get().exportPdf(),
     qselect: () => get().openQselect(),
+    script: () => get().openScript(),
     solidMesh: (e) => (e.type === 'SOLID3D' ? solidMesh(e.props) : e.type === 'MESH3D' ? e.props : null),
     plotDialog: (window) =>
       new Promise((resolve) => {
@@ -1220,9 +1234,10 @@ export const useStore = create<AppState>((set, get) => {
         capturedBefore = null
         return
       }
-      capturedBefore = doc.toJSON()
-      capturedRev = doc.revision
       capturedVars = JSON.stringify(persistedSysvars())
+      // Dentro de un lote de multicomandos el paso de deshacer es el del lote entero.
+      capturedBefore = scriptDepth ? null : doc.toJSON()
+      capturedRev = doc.revision
     },
     onAfterCommand: (name) => {
       // FILLETRAD, CHAMFERA… cambiados desde un comando se guardan en la config del usuario.
@@ -1409,6 +1424,30 @@ export const useStore = create<AppState>((set, get) => {
     plotOpen: false,
     plotSettings: { ...DEFAULT_PLOT },
     qselectOpen: false,
+    scriptDialog: null,
+    openScript: (text = '', shared = false) => set({ scriptDialog: { text, shared } }),
+    closeScript: () => set({ scriptDialog: null }),
+    runScript: async (text, opts = {}) => {
+      // `fresh`: empieza en la línea de comandos vacía (cancela lo que hubiera); si no, alimenta al comando en curso.
+      if (opts.fresh && engine.isBusy()) engine.cancel()
+      const before = doc.toJSON()
+      const rev = doc.revision
+      const inputs = parseScript(text)
+      scriptDepth++
+      try {
+        const r = await engine.runScript(inputs, { finish: opts.finish ?? 'leave' })
+        if (!r.ok && r.failedAt !== undefined) print(`Script stopped at input ${r.failedAt + 1} (${inputs[r.failedAt] === '' ? '""' : inputs[r.failedAt]}).`)
+        return r
+      } finally {
+        scriptDepth--
+        // Todo el lote es un solo paso de deshacer.
+        if (!scriptDepth && doc.revision !== rev) {
+          undoStack.push(before)
+          if (undoStack.length > MAX_UNDO) undoStack.shift()
+          redoStack.length = 0
+        }
+      }
+    },
     openQselect: () => set({ qselectOpen: true }),
     closeQselect: () => set({ qselectOpen: false }),
     applyQselect: (ids, append) => {

@@ -68,6 +68,7 @@ import { distCommand } from './impl/dist'
 import { groupCliCommand, groupCommand, hideObjectsCommand, isolateObjectsCommand, pickstyleCommand, qselectCommand, ungroupCommand, unisolateObjectsCommand } from './impl/group'
 import { purgeCommand } from './impl/purge'
 import { threadCommand } from './impl/thread'
+import { scriptCommand } from './impl/script'
 import { colorCommand, lweightCommand } from './impl/objectprops'
 import { areaCommand, idCommand, listCommand, masspropCommand, polarAngCommand } from './impl/inquiry'
 import { exportCommand, importCommand } from './impl/io'
@@ -159,6 +160,7 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   registerVariable(engine, pickstyleCommand)
   engine.register(purgeCommand)
   engine.register(threadCommand)
+  engine.register(scriptCommand)
   engine.register(colorCommand)
   engine.register(lweightCommand)
   engine.register(blockCommand)

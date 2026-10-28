@@ -130,6 +130,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | `ISOLATEOBJECTS` | `ISOLATE` | Temporarily hide everything except the selected objects (UNISOLATEOBJECTS shows them again) |
 | `HIDEOBJECTS` | — | Temporarily hide the selected objects (UNISOLATEOBJECTS shows them again) |
 | `UNISOLATEOBJECTS` | `UNISOLATE` | Show again the objects hidden by ISOLATEOBJECTS or HIDEOBJECTS |
+| `SCRIPT` | `SCR` | Run several commands as one operation (one undo step): type or paste them, load a .scr file or share them as a link |
 | `PROMPT` | `AI` | Generate or edit the model with natural language (LLM). Opens a prompt box. |
 | `ATTSYNC` | — | Synchronize block references with their redefined attributes [?/Name/Select] |
 

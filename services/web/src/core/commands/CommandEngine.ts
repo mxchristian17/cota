@@ -26,6 +26,26 @@ import type {
   PointResult,
 } from './types'
 
+
+/** Resultado de un lote de multicomandos. */
+export interface ScriptResult {
+  ok: boolean
+  /** Entradas procesadas. */
+  ran: number
+  /** Índice de la entrada rechazada. */
+  failedAt?: number
+  error?: string
+  /** Todo lo que se imprimió (prompts con su respuesta y mensajes). */
+  transcript: string[]
+  /** Prompt en el que quedó esperando un comando (`finish: 'leave'`). */
+  waitingAt?: string
+  /** Prompt del comando que se canceló al terminar el lote (`finish: 'cancel'`). */
+  cancelledAt?: string
+}
+
+/** Mensajes con los que un comando rechaza una entrada y la vuelve a pedir. */
+const SCRIPT_ERROR = /invalid|requires|cannot|not found|unknown|must be|out of range|not allowed|no .*found/i
+
 export interface CommandEngineDeps {
   doc: DocumentModel
   currentLayerId: () => string
@@ -307,6 +327,75 @@ export class CommandEngine {
     if (line) this.deps.onPrint(line)
   }
 
+  /** Entrada rechazada por el motor (punto, valor, opción o comando inválido): el lote de comandos se corta ahí. */
+  private rejected = false
+  private reject(msg: string): void {
+    this.rejected = true
+    this.deps.onPrint(msg)
+  }
+
+  /** ¿Hay un comando en curso? */
+  isBusy(): boolean {
+    return this.activeCommand !== null
+  }
+
+  /**
+   * Multicomandos: da cada entrada al prompt que toque, como un script del CAD clásico (al terminar un comando, la
+   * siguiente entrada arranca otro; `''` es Enter y en la línea de comandos vacía no repite el último). Si una
+   * entrada no sirve se cancela el comando y el lote se corta ahí. Al final, `finish: 'cancel'` cancela el comando
+   * que haya quedado esperando (el agente); `'leave'`, lo deja para seguir a mano.
+   */
+  async runScript(inputs: string[], opts: { finish?: 'cancel' | 'leave'; timeoutMs?: number } = {}): Promise<ScriptResult> {
+    const lines: string[] = []
+    const print = this.deps.onPrint
+    this.deps.onPrint = (msg) => {
+      lines.push(msg)
+      print(msg)
+    }
+    const tick = () => new Promise<void>((r) => setTimeout(r, 0))
+    const timeout = opts.timeoutMs ?? 20000
+    const settle = async () => {
+      const t0 = Date.now()
+      await tick()
+      while (this.activeCommand && !this.pending) {
+        if (Date.now() - t0 > timeout) return false
+        await tick()
+      }
+      return true
+    }
+    try {
+      for (let i = 0; i < inputs.length; i++) {
+        const text = inputs[i]
+        if (!this.activeCommand && text.trim() === '') continue
+        const prompt = this.currentPrompt
+        const from = lines.length
+        this.rejected = false
+        this.submitText(text)
+        if (!(await settle())) {
+          this.cancel()
+          return { ok: false, ran: i, failedAt: i, error: 'The command did not answer (it may be waiting for a dialog).', transcript: lines }
+        }
+        const fresh = lines.slice(from).filter((l) => !(prompt && l.startsWith(prompt)))
+        const asksAgain = !!this.pending && this.currentPrompt === prompt && fresh.some((l) => SCRIPT_ERROR.test(l))
+        if (this.rejected || asksAgain) {
+          const error = fresh.filter((l) => SCRIPT_ERROR.test(l)).at(-1) ?? fresh.at(-1) ?? 'Input rejected.'
+          this.cancel()
+          await settle()
+          return { ok: false, ran: i, failedAt: i, error, transcript: lines }
+        }
+      }
+      if (this.activeCommand && opts.finish === 'cancel') {
+        const waiting = this.currentPrompt
+        this.cancel()
+        await settle()
+        return { ok: true, ran: inputs.length, transcript: lines, cancelledAt: waiting }
+      }
+      return { ok: true, ran: inputs.length, transcript: lines, ...(this.activeCommand ? { waitingAt: this.currentPrompt } : {}) }
+    } finally {
+      this.deps.onPrint = print
+    }
+  }
+
   /** Texto tecleado en la línea de comandos. */
   submitText(text: string): void {
     if (this.pending) {
@@ -464,7 +553,7 @@ export class CommandEngine {
   async executeByName(input: string, opts: { silent?: boolean } = {}): Promise<void> {
     const cmd = this.lookup.get(stripUnderscore(input).toUpperCase())
     if (!cmd) {
-      this.deps.onPrint(`Unknown command: ${input}`)
+      this.reject(`Unknown command: ${input}`)
       this.setPrompt('')
       return
     }
@@ -740,7 +829,7 @@ export class CommandEngine {
       }
       const p = parseCoordinate(trimmed, sub.pts[sub.pts.length - 1] ?? this.lastPoint, this.deps.currentUcs(), this.dyn())
       if (p) this.addSelPoint(sel, p)
-      else this.deps.onPrint('*Invalid point*')
+      else this.reject('*Invalid point*')
       return
     }
     if (trimmed === '') {
@@ -796,7 +885,7 @@ export class CommandEngine {
         return
       }
       default:
-        this.deps.onPrint('*Invalid selection*')
+        this.reject('*Invalid selection*')
         this.deps.onPrint('Expects a point or Window/Last/Crossing/ALL/Fence/WPolygon/CPolygon/Add/Remove/Previous/Undo')
     }
   }
@@ -882,7 +971,7 @@ export class CommandEngine {
       const p = parseCoordinate(trimmed, this.relBase(pending.base, trimmed), this.deps.currentUcs(), this.dyn())
       if (!p) {
         // Mensajes del CAD clásico: con opciones, pide punto u opción; sin ellas, sólo punto.
-        this.deps.onPrint(pending.keywords?.length ? 'Point or option keyword required.' : 'Invalid point.')
+        this.reject(pending.keywords?.length ? 'Point or option keyword required.' : 'Invalid point.')
         return // mantiene el prompt pendiente
       }
       if (this.outsideLimits(p)) return
@@ -907,7 +996,7 @@ export class CommandEngine {
         pending.resolve({ kind: 'angle', deg: next })
         return
       }
-      this.deps.onPrint(`Invalid angle: ${text}`)
+      this.reject(`Invalid angle: ${text}`)
       return
     }
 
@@ -925,6 +1014,6 @@ export class CommandEngine {
       pending.resolve({ kind: 'distance', value: pending.measure ? pending.measure(p) : Math.hypot(p.x - base.x, p.y - base.y, p.z - base.z) })
       return
     }
-    this.deps.onPrint(`Invalid value: ${text}`)
+    this.reject(`Invalid value: ${text}`)
   }
 }
