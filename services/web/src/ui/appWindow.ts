@@ -76,3 +76,26 @@ export async function exitFullscreen(): Promise<void> {
   keyboard()?.unlock?.()
   if (isFullscreen()) await document.exitFullscreen().catch(() => {})
 }
+
+/** Vista elegida: `auto` = la mobile en teléfonos y el editor completo en el resto (PRD076). */
+export type ViewMode = 'auto' | 'mobile' | 'full'
+
+/**
+ * ¿Es un teléfono? Pantalla táctil sin mouse y lado corto chico: las tablets y las computadoras táctiles siguen con el
+ * editor completo (con los gestos de dos dedos).
+ */
+export const isPhone = (): boolean =>
+  typeof window !== 'undefined' &&
+  !!window.matchMedia?.('(pointer: coarse)').matches &&
+  !window.matchMedia('(any-pointer: fine)').matches &&
+  Math.min(window.screen.width, window.screen.height) < 600
+
+/** `?mobile=1` / `?mobile=0` en la dirección eligen la vista (pruebas y enlaces). */
+export function mobileParam(): boolean | null {
+  if (typeof location === 'undefined') return null
+  const v = new URLSearchParams(location.search).get('mobile')
+  return v === '1' ? true : v === '0' ? false : null
+}
+
+/** ¿Se muestra la vista mobile con esta preferencia? */
+export const mobileActive = (mode: ViewMode): boolean => mode === 'mobile' || (mode === 'auto' && isPhone())

@@ -273,7 +273,7 @@ A **layout** is a drawing sheet. Click the **Layout1** tab (or **+** to add one;
 
 ## Modeling agent
 
-The **agent panel** on the right (open the first time; **AGENT** opens or closes it) is where you ask, in plain
+The **agent panel** (beta) on the right (open the first time; **AGENT** opens or closes it) is where you ask, in plain
 words, for what you want to model; an LLM runs Cota for
 you with the same commands you would type (as scripts), looks at what it built and answers. It needs **your own API
 key** (Anthropic, OpenAI, Google Gemini, OpenRouter —for DeepSeek, Kimi, GLM and others— or any OpenAI-compatible
@@ -290,6 +290,25 @@ remember it in this browser, explaining the risk, and keeps that choice.
 - **With the optional server (Docker)** and signed in, the panel uses it: your key is saved on the server for your
   account (encrypted, it never comes back to the browser), the server calls the model with pydantic-ai, and the
   conversations are stored in its database. The commands still run in your browser, on the open drawing.
+
+## Mobile view for the job site
+
+On a phone Cota opens a reduced view made for the field (tablets and computers keep the full editor):
+
+- **⋮ ▸ Open drawing…** opens a `.cota`, `.dxf` or `.dwg` from the phone (with the server and signed in, the list of
+  your drawings). The selector at the top switches between the model and the layouts.
+- **One finger** orbits a 3D part (in a 2D drawing and on a layout it moves the view; the round button changes it).
+  **Two fingers** pinch to zoom and move the view. A **double tap** shows everything.
+- **Fit**, **Views** (top, front, right, isometrics…) and **Style** (2D wireframe, wireframe, hidden, shaded,
+  shaded with edges).
+- **Layers** turns layers off only on the screen: the drawing does not change.
+- **Measure** runs DIST: press, drag the ring that sits above your finger onto the point (object snap catches ends,
+  midpoints and centers) and lift; then the second point. The card shows the distance, ΔX, ΔY, ΔZ and the angle,
+  and the measured segment stays drawn until you close it.
+- **⋮ ▸ Full editor** goes to the complete editor and **MOBILEVIEW** (View menu) comes back; the choice is saved with
+  your preferences. `?mobile=1` in the address forces the phone view in that tab.
+
+In the full editor on a tablet, two fingers pinch and move the view and one finger works as the mouse.
 
 ## Natural-language modeling
 

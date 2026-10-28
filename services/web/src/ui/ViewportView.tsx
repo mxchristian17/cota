@@ -13,7 +13,7 @@ import { focusCommandLine } from './focus'
 import { ViewNet } from './ViewNet'
 import { LayoutView } from './LayoutView'
 import { paneKeyOf, paneState } from '../render/viewMemory'
-import { isolation } from '../core/editing/isolation'
+import { isolation, viewLayers } from '../core/editing/isolation'
 
 
 function containerStyle(layout: number): CSSProperties {
@@ -129,7 +129,7 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
         revision: s.doc.revision + isolation.rev * 1e-6,
         entities: isolation.hidden.size ? s.doc.entities.filter((e) => !isolation.hidden.has(e.id)) : s.doc.entities,
         blocks: s.doc.blocks,
-        layers: s.doc.layers,
+        layers: viewLayers(s.doc.layers),
         selection: s.picked.length ? [...s.selection, ...s.picked] : s.selection,
         gridSnap: s.gridSnap,
         gridStep: s.gridStep,
@@ -227,9 +227,10 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
  * Área de dibujo: grilla de 1–4 viewports sobre la misma escena (el cubo de vistas controla el activo) o, con
  * una pestaña de layout activa, la hoja con sus viewports flotantes.
  */
-export function ViewportView() {
+export function ViewportView({ single = false }: { single?: boolean }) {
   const tab = useStore((s) => s.doc.activeTab) // se reevalúa en cada cambio del store
-  const layout = useStore((s) => s.viewportLayout)
+  // `single`: la vista mobile muestra sólo el panel principal aunque el dibujo tenga varios.
+  const layout = useStore((s) => (single ? 1 : s.viewportLayout))
   const views = VPORT_VIEWS[layout] ?? VPORT_VIEWS[1]
   if (tab !== MODEL_TAB) return <LayoutView key={tab} layoutId={tab} />
 

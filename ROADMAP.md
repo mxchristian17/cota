@@ -51,7 +51,7 @@ discussion.
 
 | Status | Item |
 |---|---|
-| planned | **Mobile view for the job site**: a reduced phone interface to open drawings, orbit comfortably with touch, measure with DIST and switch the visual style (shaded, wireframe, hidden) from big on-screen buttons. Not the full editor. |
+| done | **Mobile view for the job site**: a reduced phone interface to open drawings, orbit comfortably with touch, measure with DIST and switch the visual style (shaded, wireframe, hidden) from big on-screen buttons; also views, layers only on screen and layouts. Not the full editor (2.10.0). |
 
 ## Mechanisms and assemblies
 

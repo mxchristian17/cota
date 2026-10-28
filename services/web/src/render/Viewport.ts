@@ -37,6 +37,7 @@ import { entityDashes, linetypePaths, type DashResult } from '../core/linetype/d
 import { hatchFrame, hatchRegions, hatchRings, hatchStrokesCached, isSolidHatch, to3, type Ring } from '../core/hatch/geometry'
 import { isWide, polylineBand } from '../core/geom/plineWidth'
 import type { HatchEntity } from '../core/document/types'
+import { isDoubleTap, isTap, pinchStep, touchConfig, TOUCH_AIM_OFFSET, type TouchPt } from './touchGesture'
 
 /** Distancia de `p` al segmento a→b. */
 function distToSegment(p: Pt, a: Pt, b: Pt): number {
@@ -297,6 +298,14 @@ export class Viewport {
   private readonly lastPan = new THREE.Vector2()
   /** Dónde se apretó el botón derecho (para distinguir clic de arrastre de órbita). */
   private rightDown: [number, number] | null = null
+  /** Dedos apoyados (pointerId → posición de pantalla) y gesto en curso (ver `touchGesture.ts`). */
+  private touches = new Map<number, TouchPt>()
+  private touchGesture: 'none' | 'mouse' | 'nav' | 'aim' | 'pinch' | 'ended' = 'none'
+  private touchStart: (TouchPt & { t: number }) | null = null
+  private lastTap: (TouchPt & { t: number }) | null = null
+  /** Apuntando con el dedo: el object snap captura más lejos (el dedo no es tan preciso como el mouse). */
+  private touchAim = false
+  private aimEl: HTMLDivElement | null = null
   /** Entidades que dan snaps (visibles + extras del papel); se recalcula con los datos. */
   private snapList: Entity[] | null = null
   private readonly keyLight = new THREE.DirectionalLight(0xffffff, 2.2)
@@ -743,15 +752,20 @@ export class Viewport {
     const now = performance.now()
     if (now - this.lastWheelAt > 400) this.recordView()
     this.lastWheelAt = now
-    const [nx, ny] = this.ndc(clientX, clientY)
-    const before = this.worldOnViewPlane(nx, ny)
     // ZOOMFACTOR (3–100, 60 = 1,1 por paso) y ZOOMWHEEL (1 = rueda hacia adelante aleja), como el CAD clásico.
     const k = 1 + Math.min(100, Math.max(3, sysvars.ZOOMFACTOR)) / 600
     const out = (deltaY > 0) !== (sysvars.ZOOMWHEEL === 1)
-    this.controller.zoom(out ? k : 1 / k)
+    this.zoomAt(clientX, clientY, out ? k : 1 / k)
+  }
+
+  /** Zoom (`f > 1` aleja) que mantiene fijo el punto de pantalla indicado (rueda y pinza). */
+  private zoomAt(clientX: number, clientY: number, f: number): void {
+    const [nx, ny] = this.ndc(clientX, clientY)
+    const before = this.worldOnViewPlane(nx, ny)
+    this.controller.zoom(f)
     const after = this.worldOnViewPlane(nx, ny)
-    // Zoom hacia el cursor: mantiene fijo el punto bajo el cursor en CUALQUIER vista
-    // (usa un plano que enfrenta la cámara a través del target, no el plano Z=0).
+    // Mantiene fijo el punto bajo el cursor en CUALQUIER vista (usa un plano que enfrenta la cámara a través del
+    // target, no el plano Z=0).
     if (before && after) {
       this.controller.target.add(before.sub(after))
       this.controller.update()
@@ -804,6 +818,7 @@ export class Viewport {
     el.addEventListener('dblclick', this.onDoubleClick)
     el.addEventListener('pointerdown', this.onPointerDown)
     el.addEventListener('pointerup', this.onPointerUp)
+    el.addEventListener('pointercancel', this.onTouchCancel)
     el.addEventListener('wheel', this.onWheel, { passive: false })
     el.addEventListener('contextmenu', (e) => e.preventDefault())
   }
@@ -815,6 +830,7 @@ export class Viewport {
   }
 
   private onPointerMove = (e: PointerEvent): void => {
+    if (e.pointerType === 'touch' && this.touchMove(e)) return
     // Botón derecho: hasta moverse unos píxeles es un clic (menú contextual), no una órbita.
     const rd = this.rightDown
     if (this.dragging && rd && Math.hypot(e.clientX - rd[0], e.clientY - rd[1]) >= 4) this.rightDown = null
@@ -879,7 +895,8 @@ export class Viewport {
   }
 
   private onDoubleClick = (e: MouseEvent): void => {
-    if (e.button !== 0) return
+    // Vista mobile: el doble toque es zoom extents (el navegador igual manda un doble clic, que no edita nada acá).
+    if (e.button !== 0 || touchConfig.mode === 'mobile') return
     const id = this.pickAt(e.clientX, e.clientY)
     const world = this.screenToWorld(e.clientX, e.clientY)
     if (id) this.cb.onEntityDoubleClick?.(id, world)
@@ -887,6 +904,10 @@ export class Viewport {
   }
 
   private onPointerDown = (e: PointerEvent): void => {
+    if (e.pointerType === 'touch' && this.touchDown(e)) {
+      e.preventDefault() // sin los eventos de mouse de compatibilidad (el doble toque no es un doble clic)
+      return
+    }
     this.cb.onActivate?.() // este viewport pasa a ser el activo
     if (this.realtime && e.button === 2) {
       // Realtime: el clic derecho abre el menú del CAD clásico (Exit/Pan/Zoom/…).
@@ -946,6 +967,152 @@ export class Viewport {
     }
   }
 
+  /** Un dedo se apoya. Devuelve true si el gesto lo maneja el viewport (si no, sigue como botón izquierdo). */
+  private touchDown(e: PointerEvent): boolean {
+    this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    try {
+      this.renderer.domElement.setPointerCapture(e.pointerId)
+    } catch {
+      // Puntero que ya no existe (se levantó el dedo antes de procesar el evento): sigue sin captura.
+    }
+    if (this.touches.size === 2) {
+      // Segundo dedo: pinza. Se descarta lo que había empezado el primero (ventana de selección, mira de medir).
+      this.cancelSingleTouch()
+      this.touchGesture = 'pinch'
+      if (!this.navLocked) this.recordView()
+      return true
+    }
+    if (this.touches.size > 2) return true
+    this.cb.onActivate?.()
+    this.touchStart = { x: e.clientX, y: e.clientY, t: performance.now() }
+    if (touchConfig.mode === 'editor') {
+      this.touchGesture = 'mouse'
+      return false
+    }
+    // Datos al día: el prompt de punto puede haber empezado después del último cuadro.
+    if ((this.data = this.provider?.() ?? this.data)?.pointPrompt) {
+      this.touchGesture = 'aim'
+      this.touchAim = true
+      this.aimAt(e.clientX, e.clientY)
+      return true
+    }
+    this.touchGesture = 'nav'
+    this.lastPan.set(e.clientX, e.clientY)
+    if (!this.navLocked) this.recordView()
+    return true
+  }
+
+  private touchMove(e: PointerEvent): boolean {
+    const prev = this.touches.get(e.pointerId)
+    if (!prev) return this.touchGesture !== 'mouse' && this.touchGesture !== 'none'
+    const cur = { x: e.clientX, y: e.clientY }
+    if (this.touchGesture === 'pinch') {
+      const other = [...this.touches.entries()].find(([id]) => id !== e.pointerId)?.[1]
+      this.touches.set(e.pointerId, cur)
+      if (!other) return true
+      const step = pinchStep(prev, other, cur, other)
+      if (this.navLocked) this.cb.onLockedPan?.(step.pan.x, step.pan.y)
+      else {
+        this.zoomAt(step.mid.x, step.mid.y, step.zoom)
+        this.controller.pan(step.pan.x, step.pan.y)
+      }
+      this.invalidate()
+      return true
+    }
+    this.touches.set(e.pointerId, cur)
+    if (this.touchGesture === 'mouse' || this.touchGesture === 'none') return false
+    if (this.touchGesture === 'aim') this.aimAt(e.clientX, e.clientY)
+    else if (this.touchGesture === 'nav') {
+      const dx = e.clientX - this.lastPan.x
+      const dy = e.clientY - this.lastPan.y
+      this.lastPan.set(e.clientX, e.clientY)
+      if (this.navLocked) this.cb.onLockedPan?.(dx, dy)
+      else if (this.kind !== 'model' || touchConfig.oneFinger === 'pan') this.controller.pan(dx, dy)
+      else this.controller.orbit(dx, dy)
+      this.invalidate()
+    }
+    return true
+  }
+
+  private touchUp(e: PointerEvent): boolean {
+    if (!this.touches.delete(e.pointerId)) return this.touchGesture !== 'mouse'
+    if (this.renderer.domElement.hasPointerCapture(e.pointerId)) this.renderer.domElement.releasePointerCapture(e.pointerId)
+    const g = this.touchGesture
+    if (this.touches.size) {
+      // Queda un dedo de una pinza: se ignora hasta levantarlo (seguir con él daría un salto).
+      if (g === 'pinch') this.touchGesture = 'ended'
+      return true
+    }
+    this.touchGesture = 'none'
+    const start = this.touchStart
+    this.touchStart = null
+    if (g === 'mouse') return false
+    if (g === 'aim') {
+      // Se fija el punto bajo la mira, como un clic del mouse ahí.
+      this.hideAim()
+      const at = { clientX: e.clientX, clientY: e.clientY - TOUCH_AIM_OFFSET, button: 0, shiftKey: false, pointerId: e.pointerId } as PointerEvent
+      this.onPointerUp(at)
+      this.touchAim = false
+      return true
+    }
+    if (g === 'nav') {
+      this.invalidate() // siluetas pendientes de la órbita
+      const end = { x: e.clientX, y: e.clientY, t: performance.now() }
+      if (start && isTap(start, end)) {
+        if (isDoubleTap(this.lastTap, end)) {
+          this.lastTap = null
+          if (!this.navLocked) {
+            this.zoomExtents()
+            this.invalidate()
+          }
+        } else this.lastTap = end
+      }
+    }
+    return true
+  }
+
+  private onTouchCancel = (e: PointerEvent): void => {
+    if (e.pointerType !== 'touch') return
+    this.touches.delete(e.pointerId)
+    if (this.touches.size) return
+    this.cancelSingleTouch()
+    this.touchGesture = 'none'
+  }
+
+  /** Descarta lo que hacía un dedo solo: ventana de selección del editor o mira de medir. */
+  private cancelSingleTouch(): void {
+    this.hideAim()
+    this.touchAim = false
+    this.gripArmed = false
+    this.draggingBox = false
+    this.boxPending = false
+    this.boxActive = false
+    this.boxStartPx = null
+    this.boxEl.style.display = 'none'
+  }
+
+  /** Mira de medir: el punto que se toca queda por encima del dedo; el object snap se busca ahí. */
+  private aimAt(clientX: number, clientY: number): void {
+    const y = clientY - TOUCH_AIM_OFFSET
+    this.onPointerMove({ clientX, clientY: y } as PointerEvent)
+    if (!this.aimEl) {
+      const el = document.createElement('div')
+      el.className = 'touch-aim'
+      el.setAttribute('data-testid', 'touch-aim')
+      this.container.appendChild(el)
+      this.aimEl = el
+    }
+    const [px, py] = this.pxOf(clientX, y)
+    this.aimEl.style.display = 'block'
+    this.aimEl.style.left = `${px}px`
+    this.aimEl.style.top = `${py}px`
+    this.aimEl.style.height = `${TOUCH_AIM_OFFSET}px`
+  }
+
+  private hideAim(): void {
+    if (this.aimEl) this.aimEl.style.display = 'none'
+  }
+
   /** Cierra sin seleccionar la ventana abierta con un clic (Esc). */
   cancelPendingBox(): void {
     if (!this.boxPending) return
@@ -956,6 +1123,7 @@ export class Viewport {
   }
 
   private onPointerUp = (e: PointerEvent): void => {
+    if (e.pointerType === 'touch' && this.touchUp(e)) return
     if (this.realtime && e.button === 0 && this.dragging) {
       // 3DCORBIT: al soltar en movimiento, la vista sigue girando con esa velocidad hasta el próximo clic.
       if (this.realtime === 'corbit' && Math.hypot(this.lastDrag.dx, this.lastDrag.dy) > 0.5) this.spin = { ...this.lastDrag }
@@ -1279,7 +1447,8 @@ export class Viewport {
   }
 
   /** Marca la escena como "sucia" → se re-dibuja en el próximo tick. */
-  private invalidate(): void {
+  /** Pide redibujar en el próximo cuadro (el render es a demanda). */
+  invalidate(): void {
     this.dirty = true
   }
 
@@ -1345,7 +1514,7 @@ export class Viewport {
       if (!isFinite(s.r)) { near.push(all[i]); continue }
       const pr = this.controller.project(s.c)
       if (!pr) continue
-      if (Math.hypot(pr[0] - cx, pr[1] - cy) <= s.r / wpp + 16) near.push(all[i])
+      if (Math.hypot(pr[0] - cx, pr[1] - cy) <= s.r / wpp + (this.touchAim ? 32 : 16)) near.push(all[i])
     }
     const result = computeSnap(raw, near, {
       gridSnap: d.gridSnap,
@@ -1356,7 +1525,7 @@ export class Viewport {
       explicitOsnap: !!override,
       base: d.snapBase,
       cursorPx: this.lastPx,
-      pixelThreshold: 10,
+      pixelThreshold: this.touchAim ? 24 : 10,
       project: (p) => this.controller.project(new THREE.Vector3(p.x, p.y, p.z)),
       depth: (p) => this.controller.camera.position.distanceTo(new THREE.Vector3(p.x, p.y, p.z)),
     })

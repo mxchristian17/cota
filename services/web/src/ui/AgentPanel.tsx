@@ -18,6 +18,7 @@ export function AgentPanel() {
   return (
     <button className="agent-tab" onClick={() => setPanel({ open: true })} title="Open the modeling agent (AGENT)" data-testid="agent-tab">
       Agents
+      <span className="agent-beta">beta</span>
     </button>
   )
 }
@@ -54,6 +55,7 @@ function AgentBody() {
     <aside className="agent-panel" data-testid="agent-panel">
       <div className="agent-head">
         <strong>Agent</strong>
+        <span className="agent-beta" title="Beta: the agent is new and can make mistakes; check what it builds.">beta</span>
         <select className="field agent-convs" value={s.currentId ?? ''} onChange={(e) => (e.target.value ? s.openChat(e.target.value) : s.newChat())} data-testid="agent-convs">
           <option value="">New conversation</option>
           {s.conversations.map((c) => (

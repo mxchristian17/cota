@@ -1,4 +1,5 @@
 import { paperSnapProxies } from '../core/layout/transspatial'
+import { isolation, viewLayers, viewLayersOff } from '../core/editing/isolation'
 import { annoScaleOf, paperPerModel } from '../core/layout/scale'
 import { openContextMenu } from './DimContextMenu'
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
@@ -30,13 +31,13 @@ function baseData(
   vp: Viewport,
   entities: ViewportData['entities'],
   active: boolean,
-  layers: ViewportData['layers'] = st().doc.layers,
+  layers: ViewportData['layers'] = viewLayers(st().doc.layers),
   annoScale = 1,
   linetypes: ViewportData['linetypes'] = st().doc.linetypeContext('paper'),
 ): ViewportData {
   const s = st()
   return {
-    revision: s.doc.revision,
+    revision: s.doc.revision + isolation.rev * 1e-6, // las capas apagadas sólo en pantalla también redibujan
     entities,
     blocks: s.doc.blocks,
     layers,
@@ -191,9 +192,10 @@ function FloatingViewport({ entity, rect, clipPath, active, maximized, paperRef,
       const doc = st().doc
       const e = doc.getEntity(id)
       const frozen = e?.type === 'VIEWPORT' ? e.props.frozenLayers : []
-      const key = `${doc.revision}|${frozen.join(',')}`
+      const key = `${doc.revision}|${frozen.join(',')}|${isolation.rev}`
       if (memo?.key !== key) {
-        const set = new Set(frozen)
+        // Las capas apagadas sólo en pantalla (vista mobile) se tratan como congeladas en el viewport.
+        const set = new Set([...frozen, ...viewLayersOff])
         memo = set.size
           ? {
               key,

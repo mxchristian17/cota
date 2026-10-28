@@ -77,7 +77,7 @@ import { optionsCommand } from './impl/options'
 import { osnapCommand } from './impl/osnap'
 import { shademodeCommand, vscurrentCommand } from './impl/vstyle'
 import { redrawCommand } from './impl/redraw'
-import { dashToolbarCommand, fullscreenCommand, gridCommand, layerCommand, propertiesCommand, toolbarCommand, screenCommands, navvcubeCommand } from './impl/ui'
+import { dashToolbarCommand, fullscreenCommand, gridCommand, layerCommand, propertiesCommand, toolbarCommand, screenCommands, navvcubeCommand, mobileviewCommand } from './impl/ui'
 import { promptCommand } from './impl/ai'
 import { clipboardCommands } from './impl/clipboard'
 import { sliceCommand } from './impl/slice'
@@ -209,6 +209,7 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   engine.register(fullscreenCommand)
   for (const c of screenCommands) engine.register(c)
   engine.register(navvcubeCommand)
+  engine.register(mobileviewCommand)
   engine.register(promptCommand)
   engine.register(plotCommand)
   engine.register(plotNowCommand)

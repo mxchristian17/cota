@@ -120,3 +120,15 @@ export const navvcubeCommand: Command = {
     ctx.app.screen?.({ viewCubeOn: k === 'ON' })
   },
 }
+
+/** MOBILEVIEW: la vista para el celular en obra (abrir, orbitar, medir, estilos visuales, capas) o el editor completo. */
+export const mobileviewCommand: Command = {
+  name: 'MOBILEVIEW',
+  aliases: [],
+  description: 'Switch to the phone view for the job site (open, orbit, measure, visual styles) [ON/OFF]',
+  async run(ctx) {
+    const k = await askKeyword(ctx, 'Enter an option [ON/OFF] <ON>: ', ['ON', 'OFF'], 'ON')
+    if (!k) return
+    ctx.app.screen?.({ mobileView: k === 'ON' })
+  },
+}

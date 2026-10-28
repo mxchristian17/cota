@@ -143,7 +143,8 @@ test.describe('Cota agent panel (browser mode, own API key)', () => {
     await expect(page.getByTestId('agent-panel')).toBeVisible()
     await page.getByTestId('agent-close').click()
     await expect(page.getByTestId('agent-panel')).toHaveCount(0)
-    await expect(page.getByTestId('agent-tab')).toHaveText('Agents')
+    await expect(page.getByTestId('agent-tab')).toContainText('Agents')
+    await expect(page.getByTestId('agent-tab')).toContainText('beta')
     await page.reload()
     await expect(input).toBeVisible()
     await expect(page.getByTestId('agent-panel')).toHaveCount(0) // sigue cerrado

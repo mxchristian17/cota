@@ -74,6 +74,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | `NAVVCUBE` | — | Show or hide the view cube [ON/OFF] |
 | `UCSICON` | — | UCS icon [ON/OFF/All/Noorigin/ORigin] |
 | `ATTDISP` | — | Attribute visibility [Normal/ON/OFF] |
+| `MOBILEVIEW` | — | Switch to the phone view for the job site (open, orbit, measure, visual styles) [ON/OFF] |
 
 ## Insert menu
 

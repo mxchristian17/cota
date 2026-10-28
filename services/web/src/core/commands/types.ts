@@ -83,6 +83,18 @@ export interface GetAngleOptions {
   preview?: (cursor: Pt) => PreviewShape[]
 }
 
+/** Resultado de DIST: puntos (mundo), distancia, deltas y ángulos en grados. */
+export interface Measure {
+  a: Pt
+  b: Pt
+  dist: number
+  dx: number
+  dy: number
+  dz: number
+  angXY: number
+  angFromXY: number
+}
+
 /** Hooks de nivel de aplicación (auth, persistencia, undo) que exponen diálogos/acciones. */
 export interface AppHooks {
   newDocument(): void
@@ -214,7 +226,9 @@ export interface AppHooks {
   /** Descarga entidades como DXF; devuelve el nombre del archivo. */
   downloadDxf?(entities: Entity[], baseName: string): string
   /** Pantalla limpia, línea de comandos compacta y cubo de vistas (CLEANSCREENON…, NAVVCUBE). */
-  screen?(patch: { cleanScreen?: boolean; commandLineCompact?: boolean; viewCubeOn?: boolean }): void
+  screen?(patch: { cleanScreen?: boolean; commandLineCompact?: boolean; viewCubeOn?: boolean; mobileView?: boolean }): void
+  /** DIST informa su medición (la vista mobile la muestra en grande). */
+  reportMeasure?(m: Measure): void
   /** SCRIPT: abre el diálogo de multicomandos. */
   script?(): void
   /** Deja seleccionados estos objetos (SELECTSIMILAR). */

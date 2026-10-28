@@ -28,5 +28,6 @@ export const distCommand: Command = {
       `Distance = ${dist.toFixed(4)}, Angle in XY Plane = ${angXY.toFixed(2)}, Angle from XY Plane = ${angFromXY.toFixed(2)}`,
     )
     ctx.print(`Delta X = ${dx.toFixed(4)}, Delta Y = ${dy.toFixed(4)}, Delta Z = ${dz.toFixed(4)}`)
+    ctx.app.reportMeasure?.({ a: p1.point, b: p2.point, dist, dx, dy, dz, angXY, angFromXY })
   },
 }

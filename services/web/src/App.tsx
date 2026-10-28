@@ -4,12 +4,13 @@ import { ViewGenDialog } from './ui/ViewGenDialog'
 import { useEffect, useRef, useState } from 'react'
 import { ViewportView } from './ui/ViewportView'
 import { FloatingToolbars, ToolbarDialog, ToolbarDock } from './ui/Toolbar'
-import { canInstall, enterFullscreen, isStandalone, onInstallChange, promptInstall } from './ui/appWindow'
+import { canInstall, enterFullscreen, isStandalone, mobileActive, onInstallChange, promptInstall } from './ui/appWindow'
 import { FlatshotDialog } from './ui/FlatshotDialog'
 import { PlotDialog } from './ui/PlotDialog'
 import { QSelectDialog } from './ui/QSelectDialog'
 import { ScriptDialog } from './ui/ScriptDialog'
 import { AgentPanel } from './ui/AgentPanel'
+import { MobileApp } from './ui/mobile/MobileApp'
 import { scriptFromHash } from './core/commands/script'
 import { hasClipboard } from './core/commands/impl/clipboard'
 import { CLOUD_ENABLED } from './core/io/backend'
@@ -58,6 +59,7 @@ function inOtherField(): boolean {
 
 export default function App() {
   const openHelp = useStore((s) => s.openHelp)
+  const mobile = useStore((s) => s.viewForce ?? mobileActive(s.viewMode))
   const toggleOrtho = useStore((s) => s.toggleOrtho)
   const toggleSnap = useStore((s) => s.toggleSnap)
   const toggleEsnap = useStore((s) => s.toggleEsnap)
@@ -302,6 +304,9 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [toggleOrtho, toggleSnap, toggleEsnap, toggleOtrack, toggleDynInput, togglePolar])
+
+  // Vista para el celular en obra (PRD076): reemplaza el editor completo.
+  if (mobile) return <MobileApp />
 
   return (
     <div className="app">

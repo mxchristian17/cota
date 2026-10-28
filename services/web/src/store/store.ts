@@ -10,7 +10,7 @@ import { LayerService } from '../core/layers/LayerService'
 import { CommandEngine } from '../core/commands/CommandEngine'
 import { registerDefaultCommands } from '../core/commands/registry'
 import { applySysvars, persistedSysvars, sysvars, type PersistedSysvars } from '../core/commands/sysvars'
-import type { AppHooks, Command } from '../core/commands/types'
+import type { AppHooks, Command, Measure } from '../core/commands/types'
 import type { DimensionProps, DocumentData, DrawingVars, Entity, HatchIsland, SolidProps, EntityProps, EntityType, LineType, PageSetup } from '../core/document/types'
 import { rebuildHatchLoops } from '../core/hatch/assoc'
 import { DEFAULT_THEME, normalizeTheme, type Theme } from '../core/theme'
@@ -19,13 +19,14 @@ import type { Pt, Vec3 } from '../core/math'
 import type { PreviewShape } from '../core/preview'
 import { isWorldUcs, normalizeUcs, sameUcs, ucsToDef, WORLD_UCS, type Ucs } from '../core/ucs'
 import { paneKeyOf, paneState, paperCams } from '../render/viewMemory'
-import { endIsolation, isHidden } from '../core/editing/isolation'
+import { clearViewLayers, endIsolation, isHidden } from '../core/editing/isolation'
+import { touchConfig } from '../render/touchGesture'
 import type { SavedViews } from '../core/document/types'
 import { DEFAULT_PALETTE, normalizePalette, type PaletteState } from '../core/ui/palette'
 import { dockToolbar, normalizeToolbar, normalizeToolbars, type ToolbarSide, type ToolbarState, type ToolbarStates } from '../core/ui/toolbar'
 import { DEFAULT_TOOLBARS, findToolbar } from '../core/ui/toolbars'
 import { pickPrefs, readLocalPrefs, writeLocalPrefs, type Prefs } from '../core/ui/prefs'
-import { enterFullscreen, exitFullscreen } from '../ui/appWindow'
+import { enterFullscreen, exitFullscreen, isPhone, mobileParam, type ViewMode } from '../ui/appWindow'
 import { DEFAULT_VISUAL_STYLE, VISUAL_STYLES, type CameraMode, type ViewName, type VisualStyle } from '../core/view'
 import type { CameraState, Viewport } from '../render/Viewport'
 import { entitiesInScreenBox, entityOutline, type RectPx } from '../core/editing/bounds'
@@ -178,6 +179,13 @@ export interface AppState {
   agentOpen: boolean
   agentTab: boolean
   setAgentPanel: (patch: { open?: boolean; tab?: boolean }) => void
+  /** Vista para el celular (PRD076): `auto` = la mobile en teléfonos; `mobile`/`full` = elegida a mano. */
+  viewMode: ViewMode
+  /** `?mobile=1`/`?mobile=0` en la dirección: fuerza la vista en esta pestaña hasta que se elija otra (no se guarda). */
+  viewForce: boolean | null
+  /** Última medición de DIST (la muestra la vista mobile, con el tramo medido dibujado). */
+  lastMeasure: Measure | null
+  setMeasure: (m: Measure | null) => void
   /** Disposición del cubo desplegado: ISO-E (primer diedro, predeterminada) o ISO-A. */
   viewNetStd: ProjStd
   // IA / LLM
@@ -402,7 +410,7 @@ export interface AppState {
   setLayerNewVpFreeze: (id: string, frozen: boolean) => void
   toggleAutosave: () => void
   /** Ajustes de pantalla: pantalla limpia, línea de comandos compacta, cubo de vistas. */
-  setScreen: (patch: { cleanScreen?: boolean; commandLineCompact?: boolean; viewCubeOn?: boolean; viewNetStd?: ProjStd }) => void
+  setScreen: (patch: { cleanScreen?: boolean; commandLineCompact?: boolean; viewCubeOn?: boolean; viewNetStd?: ProjStd; mobileView?: boolean }) => void
   redraw: () => void
   openAi: () => void
   closeAi: () => void
@@ -861,6 +869,7 @@ export const useStore = create<AppState>((set, get) => {
   /** Al abrir un dibujo: sus vistas guardadas (o, si no trae, planta a extensiones) en los paneles y el papel. */
   const applyViews = () => {
     endIsolation() // los objetos ocultos con ISOLATEOBJECTS/HIDEOBJECTS son del dibujo anterior
+    clearViewLayers() // y las capas apagadas sólo en pantalla (vista mobile)
     const v = doc.savedViews
     paneState.clear()
     paperCams.clear()
@@ -1047,6 +1056,7 @@ export const useStore = create<AppState>((set, get) => {
     openLinetypes: () => get().openLinetypeDialog(),
     preselection: () => [...get().selection],
     screen: (patch) => get().setScreen(patch),
+    reportMeasure: (m) => get().setMeasure(m),
     viewGenDialog: (initial) => requestViewGen(initial),
     template: async (action) => {
       const name = get().docName || 'drawing'
@@ -1286,6 +1296,7 @@ export const useStore = create<AppState>((set, get) => {
       viewNetStd: s.viewNetStd,
       agentOpen: s.agentOpen,
       agentTab: s.agentTab,
+      viewMode: s.viewMode,
       sysvars: persistedSysvars(),
       savedAt: Date.now(),
     }
@@ -1343,6 +1354,7 @@ export const useStore = create<AppState>((set, get) => {
     if (typeof d.viewCubeOn === 'boolean') patch.viewCubeOn = d.viewCubeOn
     if (typeof d.agentOpen === 'boolean') patch.agentOpen = d.agentOpen
     if (typeof d.agentTab === 'boolean') patch.agentTab = d.agentTab
+    if (d.viewMode === 'auto' || d.viewMode === 'mobile' || d.viewMode === 'full') patch.viewMode = d.viewMode
     if (d.viewNetStd === 'E' || d.viewNetStd === 'A') patch.viewNetStd = d.viewNetStd
     if (d.sysvars && typeof d.sysvars === 'object') {
       applySysvars(d.sysvars as Record<string, unknown>)
@@ -1494,6 +1506,13 @@ export const useStore = create<AppState>((set, get) => {
     viewCubeOn: true,
     agentOpen: true,
     agentTab: true,
+    viewMode: 'auto',
+    viewForce: mobileParam(),
+    lastMeasure: null,
+    setMeasure: (m) => {
+      set({ lastMeasure: m })
+      get().viewports.forEach((vp) => vp.invalidate())
+    },
     setAgentPanel: (patch) => {
       set({ ...(patch.open !== undefined ? { agentOpen: patch.open } : {}), ...(patch.tab !== undefined ? { agentTab: patch.tab } : {}) })
       saveConfig()
@@ -2400,7 +2419,9 @@ export const useStore = create<AppState>((set, get) => {
       set(opts ? { flatshotOpen: false, flatshotOptions: opts } : { flatshotOpen: false })
       r?.(opts)
     },
-    setScreen: (patch) => {
+    setScreen: ({ mobileView, ...patch }) => {
+      // En un teléfono, volver a la vista mobile es volver a `auto`; en una computadora, salir de ella también.
+      if (mobileView !== undefined) set({ viewForce: null, viewMode: mobileView ? (isPhone() ? 'auto' : 'mobile') : isPhone() ? 'full' : 'auto' })
       set(patch)
       saveConfig()
     },
@@ -2761,7 +2782,12 @@ export const useStore = create<AppState>((set, get) => {
         .then((bytes) => download(bytes, 'dwg', 'image/vnd.dwg'))
         .catch((err) => print(`DWG export failed: ${dwgErrorMessage(err)}`))
     },
-    computePreview: (cursor) => engine.computePreview(cursor),
+    computePreview: (cursor) => {
+      const shapes = engine.computePreview(cursor)
+      // Vista mobile: el tramo de la última medición queda dibujado mientras se ve su tarjeta.
+      const m = touchConfig.mode === 'mobile' && !engine.busy ? get().lastMeasure : null
+      return m ? [...shapes, { kind: 'line', a: m.a, b: m.b }] : shapes
+    },
     listCommands: () => engine.getCommands(),
     clearSelection: () => set({ selection: [] }),
     selectAll: () => {

@@ -21,7 +21,7 @@ export const CATEGORIES: { label: string; names: string[] }[] = [
     names: [
       'REDRAW', 'ZOOM', '@zoom', '§Pan', 'PAN', '-PAN', '§Orbit', '3DORBIT', '3DFORBIT', '3DCORBIT', '3DPAN', '3DZOOM', '§Views', 'VIEW', 'PLAN', 'PERSPECTIVE', 'ORTHOGRAPHIC', '@views',
       '§Viewports', 'VPORTS', 'MVIEW', 'MSPACE', 'PSPACE', 'VPMAX', 'VPMIN', 'VPCLIP', 'VPLAYER',
-      '§Visual styles', 'VSCURRENT', 'SHADEMODE', '§Display', 'FULLSCREEN', 'CLEANSCREENON', 'CLEANSCREENOFF', 'COMMANDLINE', 'COMMANDLINEHIDE', 'NAVVCUBE', 'UCSICON', 'ATTDISP',
+      '§Visual styles', 'VSCURRENT', 'SHADEMODE', '§Display', 'FULLSCREEN', 'CLEANSCREENON', 'CLEANSCREENOFF', 'COMMANDLINE', 'COMMANDLINEHIDE', 'NAVVCUBE', 'UCSICON', 'ATTDISP', 'MOBILEVIEW',
     ],
   },
   { label: 'Insert', names: ['INSERT', '§Layout', 'LAYOUT', '§Drawing views', 'VIEWBASE', 'VIEWGEN', 'VIEWPROJ', 'VIEWEDIT', 'VIEWUPDATE', 'VIEWSTD', '§Fields', 'FIELD', 'UPDATEFIELD'] },

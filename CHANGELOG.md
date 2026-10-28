@@ -4,6 +4,21 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.10.0] — 2026-10-28
+
+### Added
+- **Mobile view for the job site.** On a phone Cota opens a reduced view instead of the editor: open a drawing from
+  the device (or from your account with the server), orbit with one finger, pinch to zoom, move with two fingers,
+  double tap to see everything, and big buttons for **Fit**, **Views** (top, front, right, isometrics…), **Style**
+  (2D wireframe, wireframe, hidden, shaded, shaded with edges), **Layers** (turn them off only on screen, the drawing
+  does not change) and **Measure**: drag a ring that sits above your finger onto the points, with object snap, and
+  read the distance, ΔX, ΔY, ΔZ and the angle; the measured segment stays drawn. Layouts can be viewed too.
+  **Full editor** in its menu, or **MOBILEVIEW** in the editor, switches; the choice is saved with your preferences.
+- **Touch in the full editor** (tablets): pinch to zoom and move with two fingers; one finger still works as the mouse.
+
+### Changed
+- The agent panel and its tab show a **beta** label.
+
 ## [2.9.0] — 2026-10-28
 
 ### Changed
