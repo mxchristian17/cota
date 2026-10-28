@@ -74,6 +74,8 @@ test.describe('Cota paletas: LAYER modal + Properties', () => {
   })
 
   test('la paleta de Propiedades se arrastra, se acopla a la derecha y se minimiza', async ({ page }) => {
+    // Con el panel del agente cerrado el borde derecho es el del dibujo (la prueba suelta la paleta en x = 1200).
+    await page.getByTestId('agent-close').click()
     const palette = page.getByTestId('properties-palette')
     await expect(palette).toHaveAttribute('data-dock', 'left')
 

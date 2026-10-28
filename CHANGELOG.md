@@ -4,6 +4,13 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.9.0] — 2026-10-28
+
+### Changed
+- The **agent panel** is a column at the right of the drawing (it no longer covers the view cube) and is open on the
+  first visit. Closed, it leaves a narrow **Agents** tab to open it again; **Options ▸ User Preferences** can hide the
+  tab. Both are saved with your preferences, in the browser and in your account when signed in.
+
 ## [2.8.2] — 2026-10-28
 
 More fixes from testing the modeling agent with real Gemini models.

@@ -2014,7 +2014,10 @@ div.lt-row {
 }
 
 /* Panel del agente (AGENT): a la derecha, sobre el área de dibujo. */
-.agent-panel { position: fixed; right: 0; top: 34px; bottom: 150px; width: min(380px, 100vw); z-index: 40; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--panel, #252526); color: var(--text, #ddd); border-left: 1px solid var(--border, #3a3a3a); box-shadow: -4px 0 16px rgba(0,0,0,.25); font-size: 13px; }
+.agent-panel { flex: 0 0 min(380px, 42vw); min-width: 0; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--panel, #252526); color: var(--text, #ddd); border-left: 1px solid var(--border, #3a3a3a); font-size: 13px; overflow: hidden; }
+/* Pestaña del panel cerrado: angosta, texto vertical, pegada al borde derecho. */
+.agent-tab { flex: 0 0 22px; writing-mode: vertical-rl; border: 0; border-left: 1px solid var(--border, #3a3a3a); background: var(--panel, #252526); color: var(--text-muted, #aaa); font-size: 12px; letter-spacing: .06em; cursor: pointer; padding: 10px 0; }
+.agent-tab:hover { color: var(--text, #ddd); background: var(--field, #2d2d30); }
 .agent-head, .agent-row, .agent-meter { display: flex; align-items: center; gap: 6px; }
 .agent-row { justify-content: flex-end; }
 .agent-convs { flex: 1; min-width: 0; }

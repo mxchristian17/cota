@@ -273,7 +273,8 @@ A **layout** is a drawing sheet. Click the **Layout1** tab (or **+** to add one;
 
 ## Modeling agent
 
-**AGENT** opens a panel on the right where you ask, in plain words, for what you want to model; an LLM runs Cota for
+The **agent panel** on the right (open the first time; **AGENT** opens or closes it) is where you ask, in plain
+words, for what you want to model; an LLM runs Cota for
 you with the same commands you would type (as scripts), looks at what it built and answers. It needs **your own API
 key** (Anthropic, OpenAI, Google Gemini, OpenRouter —for DeepSeek, Kimi, GLM and others— or any OpenAI-compatible
 API); Cota has none. The key goes only from your browser to that provider. The first time, Cota asks whether to
@@ -282,6 +283,8 @@ remember it in this browser, explaining the risk, and keeps that choice.
 - **Ask before running** (default) shows each batch of commands and runs it only when you press Run;
   **Run automatically** lets the agent work alone. Each batch is one undo step.
 - Conversations are kept in the browser and listed at the top of the panel.
+- Closed, it leaves a narrow **Agents** tab at the right edge to open it again; **Options ▸ User Preferences** hides
+  the tab. Whether it is open, and the tab, are saved with your preferences (in your account when signed in).
 - The bar shows how much of the model's context is used; **Compact** (or the **COMPACT** command) replaces the
   conversation with a summary to free it.
 - **With the optional server (Docker)** and signed in, the panel uses it: your key is saved on the server for your

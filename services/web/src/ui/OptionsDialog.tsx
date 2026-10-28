@@ -149,6 +149,8 @@ export function OptionsDialog() {
   const setDefaultTemplate = useStore((s) => s.setDefaultTemplate)
   const listTemplates = useStore((s) => s.listTemplates)
   const autosave = useStore((s) => s.autosave)
+  const agentTab = useStore((s) => s.agentTab)
+  const setAgentPanel = useStore((s) => s.setAgentPanel)
   const toggleAutosave = useStore((s) => s.toggleAutosave)
   const openOsnap = useStore((s) => s.openOsnap)
   const submitCommand = useStore((s) => s.submitCommand)
@@ -309,6 +311,11 @@ export function OptionsDialog() {
             ))}
           {tab === 'user' && (
             <>
+              <h3>Agent</h3>
+              <label className="color-row">
+                <span>Show the Agents tab on the right when the agent panel is closed</span>
+                <input type="checkbox" checked={agentTab} onChange={(e) => setAgentPanel({ tab: e.target.checked })} data-testid="options-agent-tab" />
+              </label>
               <h3>Blocks</h3>
               {USER_FIELDS.map((f) => (
                 <SysvarField key={f.key} f={f} />

@@ -406,6 +406,7 @@ export default function App() {
           <StatusBar />
         </section>
         {!cleanScreen && palette.open && palette.dock === 'right' && <PropertiesPalette />}
+        {!cleanScreen && <AgentPanel />}
       </div>
 
       {!cleanScreen && <FloatingToolbars />}
@@ -432,7 +433,6 @@ export default function App() {
       <PlotDialog />
       <QSelectDialog />
       <ScriptDialog />
-      <AgentPanel />
       <ViewGenDialog />
     </div>
   )

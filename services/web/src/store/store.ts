@@ -174,6 +174,10 @@ export interface AppState {
   commandLineCompact: boolean
   /** Cubo de vistas visible (NAVVCUBE). */
   viewCubeOn: boolean
+  /** Panel del agente abierto (abierto la primera vez) y pestaña "Agents" a la derecha cuando está cerrado. */
+  agentOpen: boolean
+  agentTab: boolean
+  setAgentPanel: (patch: { open?: boolean; tab?: boolean }) => void
   /** Disposición del cubo desplegado: ISO-E (primer diedro, predeterminada) o ISO-A. */
   viewNetStd: ProjStd
   // IA / LLM
@@ -1280,6 +1284,8 @@ export const useStore = create<AppState>((set, get) => {
       cmdHeight: s.cmdHeight,
       viewCubeOn: s.viewCubeOn,
       viewNetStd: s.viewNetStd,
+      agentOpen: s.agentOpen,
+      agentTab: s.agentTab,
       sysvars: persistedSysvars(),
       savedAt: Date.now(),
     }
@@ -1335,6 +1341,8 @@ export const useStore = create<AppState>((set, get) => {
     if (typeof d.commandLineCompact === 'boolean') patch.commandLineCompact = d.commandLineCompact
     if (typeof d.cmdHeight === 'number' && d.cmdHeight >= 48 && d.cmdHeight <= 400) patch.cmdHeight = d.cmdHeight
     if (typeof d.viewCubeOn === 'boolean') patch.viewCubeOn = d.viewCubeOn
+    if (typeof d.agentOpen === 'boolean') patch.agentOpen = d.agentOpen
+    if (typeof d.agentTab === 'boolean') patch.agentTab = d.agentTab
     if (d.viewNetStd === 'E' || d.viewNetStd === 'A') patch.viewNetStd = d.viewNetStd
     if (d.sysvars && typeof d.sysvars === 'object') {
       applySysvars(d.sysvars as Record<string, unknown>)
@@ -1484,6 +1492,12 @@ export const useStore = create<AppState>((set, get) => {
     cleanScreen: false,
     commandLineCompact: false,
     viewCubeOn: true,
+    agentOpen: true,
+    agentTab: true,
+    setAgentPanel: (patch) => {
+      set({ ...(patch.open !== undefined ? { agentOpen: patch.open } : {}), ...(patch.tab !== undefined ? { agentTab: patch.tab } : {}) })
+      saveConfig()
+    },
     viewNetStd: 'E',
     aiOpen: false,
     aiProcessing: false,

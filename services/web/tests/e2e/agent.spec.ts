@@ -30,8 +30,7 @@ test.describe('Cota agent panel (browser mode, own API key)', () => {
     await page.goto('/')
     const input = page.getByTestId('command-input')
     await expect(input).toBeVisible()
-    await input.fill('AGENT')
-    await input.press('Enter')
+    await expect(page.getByTestId('agent-panel')).toBeVisible() // abierto desde la primera visita
     await expect(page.getByTestId('agent-panel')).toBeVisible()
     await page.getByTestId('agent-key').fill('sk-test-not-a-real-key')
     await page.getByTestId('agent-save').click()
@@ -53,8 +52,7 @@ test.describe('Cota agent panel (browser mode, own API key)', () => {
     // Recargar: la conversación sigue (IndexedDB); la key de "sólo esta sesión" no, y la decisión no se vuelve a preguntar.
     await page.reload()
     await expect(input).toBeVisible()
-    await input.fill('AGENT')
-    await input.press('Enter')
+    await expect(page.getByTestId('agent-panel')).toBeVisible() // abierto desde la primera visita
     await expect(page.getByTestId('agent-feed')).toContainText('Plate 100×60 with a Ø8 hole in the middle.')
     await expect(page.getByTestId('agent-settings')).toBeVisible()
     await page.getByTestId('agent-key').fill('sk-test-2')
@@ -74,8 +72,7 @@ test.describe('Cota agent panel (browser mode, own API key)', () => {
     await page.goto('/')
     const input = page.getByTestId('command-input')
     await expect(input).toBeVisible()
-    await input.fill('AGENT')
-    await input.press('Enter')
+    await expect(page.getByTestId('agent-panel')).toBeVisible() // abierto desde la primera visita
     await page.getByTestId('agent-key').fill('sk-test')
     await page.getByTestId('agent-save').click()
     await page.getByTestId('agent-key-remember').click()
@@ -126,8 +123,7 @@ test.describe('Cota agent panel (browser mode, own API key)', () => {
     await page.goto('/')
     const input = page.getByTestId('command-input')
     await expect(input).toBeVisible()
-    await input.fill('AGENT')
-    await input.press('Enter')
+    await expect(page.getByTestId('agent-panel')).toBeVisible() // abierto desde la primera visita
     await expect(page.getByTestId('agent-settings')).toHaveCount(0) // la key ya está en el servidor
     await page.getByTestId('agent-mode').selectOption('auto')
     await page.getByTestId('agent-input').fill('a circle of radius 12')
@@ -138,5 +134,33 @@ test.describe('Cota agent panel (browser mode, own API key)', () => {
     expect(JSON.stringify(steps[1].messages)).toContain('CIRCLE center 0,0,0 r 12')
     expect(direct).toBe(0) // el navegador no llamó al proveedor
     await expect.poll(() => Object.values(saved).map((c) => c.title)).toEqual(['a circle of radius 12'])
+  })
+
+  test('opens on the first visit; closed it leaves an Agents tab, which Options can hide; all of it is remembered', async ({ page }) => {
+    await page.goto('/')
+    const input = page.getByTestId('command-input')
+    await expect(input).toBeVisible()
+    await expect(page.getByTestId('agent-panel')).toBeVisible()
+    await page.getByTestId('agent-close').click()
+    await expect(page.getByTestId('agent-panel')).toHaveCount(0)
+    await expect(page.getByTestId('agent-tab')).toHaveText('Agents')
+    await page.reload()
+    await expect(input).toBeVisible()
+    await expect(page.getByTestId('agent-panel')).toHaveCount(0) // sigue cerrado
+    await page.getByTestId('agent-tab').click()
+    await expect(page.getByTestId('agent-panel')).toBeVisible()
+    await input.fill('AGENT') // el comando también lo alterna
+    await input.press('Enter')
+    await expect(page.getByTestId('agent-tab')).toBeVisible()
+    await input.fill('OPTIONS')
+    await input.press('Enter')
+    await page.getByTestId('options-tab-user').click()
+    await page.getByTestId('options-agent-tab').uncheck()
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('agent-tab')).toHaveCount(0)
+    await page.reload()
+    await expect(input).toBeVisible()
+    await expect(page.getByTestId('agent-tab')).toHaveCount(0)
+    expect(await st<boolean>(page, 'return s.agentTab')).toBe(false)
   })
 })

@@ -70,7 +70,6 @@ const serverProvider = (p: ProviderId, baseUrl: string): { provider: string; api
 const sessionKeys = new Map<ProviderId, string>()
 
 interface AgentState {
-  open: boolean
   settings: AgentSettings
   /** null = todavía no eligió si guarda la key (se pregunta una sola vez). */
   keyDecision: KeyDecision | null
@@ -161,7 +160,6 @@ export const useAgentStore = create<AgentState>((set, get) => {
   }
 
   return {
-    open: false,
     settings: { ...DEFAULT, ...read<Partial<AgentSettings>>(SETTINGS_KEY, {}) },
     keyDecision: read<KeyDecision | null>(DECISION_KEY, null),
     hasKey: false,
@@ -171,10 +169,10 @@ export const useAgentStore = create<AgentState>((set, get) => {
     running: false,
     pending: null,
     keyAwaitingDecision: null,
+    // Abierto/cerrado es una preferencia de la interfaz (se guarda con las demás, por usuario): vive en el store.
     toggle: (open) => {
-      const next = open ?? !get().open
-      set({ open: next })
-      if (next) void get().load()
+      const next = open ?? !useStore.getState().agentOpen
+      useStore.getState().setAgentPanel({ open: next })
     },
     load: async () => {
       const list = serverMode()

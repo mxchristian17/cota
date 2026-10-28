@@ -2,15 +2,24 @@ import { useEffect, useRef, useState } from 'react'
 import { CONTEXT_LIMIT, serverMode, useAgentStore } from '../agent/agentStore'
 import { PROVIDERS, type ProviderId } from '../agent/providers'
 import { focusCommandLine } from './focus'
+import { useStore } from '../store/store'
 
 /**
  * Panel del agente (colapsable, a la derecha): conversación con un LLM que maneja Cota con las herramientas del
  * agente. Cada usuario usa su propia key; las conversaciones quedan en el navegador.
  */
 export function AgentPanel() {
-  const open = useAgentStore((s) => s.open)
-  if (!open) return null
-  return <AgentBody />
+  const open = useStore((s) => s.agentOpen)
+  const tab = useStore((s) => s.agentTab)
+  const setPanel = useStore((s) => s.setAgentPanel)
+  if (open) return <AgentBody />
+  if (!tab) return null
+  // Cerrado: una pestaña angosta a la derecha para volver a abrirlo (se quita en Options ▸ User Preferences).
+  return (
+    <button className="agent-tab" onClick={() => setPanel({ open: true })} title="Open the modeling agent (AGENT)" data-testid="agent-tab">
+      Agents
+    </button>
+  )
 }
 
 function AgentBody() {
@@ -22,6 +31,9 @@ function AgentBody() {
   const used = conv?.context ?? 0
   const pct = Math.min(100, Math.round((used / CONTEXT_LIMIT) * 100))
 
+  useEffect(() => {
+    void useAgentStore.getState().load()
+  }, [])
   useEffect(() => {
     // Bloque sin valor de retorno: en Chrome reciente scrollIntoView devuelve una promesa, y un efecto sólo puede
     // devolver su función de limpieza.
