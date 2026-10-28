@@ -4,6 +4,19 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.7.0] — 2026-10-28
+
+### Added
+- **Modeling agent** (**AGENT**): a panel where an LLM models for you through Cota's own commands, using your own
+  API key from the browser (Anthropic, OpenAI, Google Gemini, OpenRouter or any OpenAI-compatible API; Cota ships no
+  key). Choose whether each batch of commands is shown for approval or runs automatically; every batch is one undo
+  step. The agent can query the drawing (objects in a box with their parameters), select objects, change their
+  properties, look at the view and read short guides per topic, so it starts with only what it needs. Conversations
+  are kept in the browser, the context bar shows how much is used and **COMPACT** summarizes the conversation. The
+  first API key asks once whether to remember it in the browser, explaining the risk.
+- A point typed at a prompt that asks for an object (and at "Select objects") picks the object passing through it,
+  so scripts can select without clicking.
+
 ## [2.6.0] — 2026-10-28
 
 ### Added

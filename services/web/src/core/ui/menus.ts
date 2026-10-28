@@ -32,7 +32,7 @@ export const CATEGORIES: { label: string; names: string[] }[] = [
       '§Styles', 'COLOR', 'LINETYPE', 'LWEIGHT', 'DIMSTYLE', 'MLEADERSTYLE', '§Drawing', 'LIMITS',
     ],
   },
-  { label: 'Tools', names: ['@toolbars', 'TOOLBAR', 'OPTIONS', 'OSNAP', 'GRID', '§UCS', 'UCS', '§Inquiry', 'DIST', 'ID', 'AREA', 'LIST', 'MASSPROP', '§Groups', 'GROUP', 'UNGROUP', '§Isolate', 'ISOLATEOBJECTS', 'HIDEOBJECTS', 'UNISOLATEOBJECTS', '§Other', 'SCRIPT', 'PROMPT', 'ATTSYNC'] },
+  { label: 'Tools', names: ['@toolbars', 'TOOLBAR', 'OPTIONS', 'OSNAP', 'GRID', '§UCS', 'UCS', '§Inquiry', 'DIST', 'ID', 'AREA', 'LIST', 'MASSPROP', '§Groups', 'GROUP', 'UNGROUP', '§Isolate', 'ISOLATEOBJECTS', 'HIDEOBJECTS', 'UNISOLATEOBJECTS', '§Other', 'AGENT', 'COMPACT', 'SCRIPT', 'PROMPT', 'ATTSYNC'] },
   {
     label: 'Draw',
     names: [

@@ -420,6 +420,8 @@ export interface AppState {
    * esperando al final; `'leave'` (por defecto) lo deja para seguir a mano.
    */
   runScript: (text: string, opts?: { finish?: 'cancel' | 'leave'; fresh?: boolean }) => Promise<ScriptResult>
+  /** Capa, color, tipo de línea o grosor de objetos existentes (agente), en un paso de deshacer. Devuelve cuántos. */
+  setObjectProps: (ids: string[], p: { layer?: string; color?: string; linetype?: string; lineweight?: number }) => number
   openQselect: () => void
   closeQselect: () => void
   /** QSELECT ▸ OK: deja seleccionados esos objetos (o los suma a la selección actual). */
@@ -1447,6 +1449,30 @@ export const useStore = create<AppState>((set, get) => {
           redoStack.length = 0
         }
       }
+    },
+    setObjectProps: (ids, p) => {
+      const list = ids.map((id) => doc.getEntity(id)).filter((e): e is Entity => !!e)
+      if (!list.length) return 0
+      pushSnapshot()
+      const layerId = p.layer ? doc.layers.find((l) => l.name.toLowerCase() === p.layer!.toLowerCase())?.id : undefined
+      for (const e of list) {
+        if (layerId) e.layer = layerId
+        if (p.color !== undefined) {
+          if (p.color.toUpperCase() === 'BYLAYER') delete e.color
+          else e.color = p.color
+        }
+        if (p.linetype !== undefined) {
+          if (p.linetype.toUpperCase() === 'BYLAYER') delete e.lineType
+          else e.lineType = p.linetype
+        }
+        if (p.lineweight !== undefined) {
+          if (p.lineweight < 0) delete e.lineWeight
+          else e.lineWeight = p.lineweight
+        }
+      }
+      doc.touch()
+      bump()
+      return list.length
     },
     openQselect: () => set({ qselectOpen: true }),
     closeQselect: () => set({ qselectOpen: false }),

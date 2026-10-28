@@ -69,6 +69,7 @@ import { groupCliCommand, groupCommand, hideObjectsCommand, isolateObjectsComman
 import { purgeCommand } from './impl/purge'
 import { threadCommand } from './impl/thread'
 import { scriptCommand } from './impl/script'
+import { agentCommand, compactCommand } from './impl/agent'
 import { colorCommand, lweightCommand } from './impl/objectprops'
 import { areaCommand, idCommand, listCommand, masspropCommand, polarAngCommand } from './impl/inquiry'
 import { exportCommand, importCommand } from './impl/io'
@@ -161,6 +162,8 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   engine.register(purgeCommand)
   engine.register(threadCommand)
   engine.register(scriptCommand)
+  engine.register(agentCommand)
+  engine.register(compactCommand)
   engine.register(colorCommand)
   engine.register(lweightCommand)
   engine.register(blockCommand)

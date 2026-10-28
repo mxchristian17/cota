@@ -9,6 +9,7 @@ import { FlatshotDialog } from './ui/FlatshotDialog'
 import { PlotDialog } from './ui/PlotDialog'
 import { QSelectDialog } from './ui/QSelectDialog'
 import { ScriptDialog } from './ui/ScriptDialog'
+import { AgentPanel } from './ui/AgentPanel'
 import { scriptFromHash } from './core/commands/script'
 import { hasClipboard } from './core/commands/impl/clipboard'
 import { CLOUD_ENABLED } from './core/io/backend'
@@ -431,6 +432,7 @@ export default function App() {
       <PlotDialog />
       <QSelectDialog />
       <ScriptDialog />
+      <AgentPanel />
       <ViewGenDialog />
     </div>
   )

@@ -271,6 +271,20 @@ A **layout** is a drawing sheet. Click the **Layout1** tab (or **+** to add one;
 - **Account:** with the optional server, `LOGIN` and save to the server (`CLOUD` switches back from a local
   folder to the account).
 
+## Modeling agent
+
+**AGENT** opens a panel on the right where you ask, in plain words, for what you want to model; an LLM runs Cota for
+you with the same commands you would type (as scripts), looks at what it built and answers. It needs **your own API
+key** (Anthropic, OpenAI, Google Gemini, OpenRouter —for DeepSeek, Kimi, GLM and others— or any OpenAI-compatible
+API); Cota has none. The key goes only from your browser to that provider. The first time, Cota asks whether to
+remember it in this browser, explaining the risk, and keeps that choice.
+
+- **Ask before running** (default) shows each batch of commands and runs it only when you press Run;
+  **Run automatically** lets the agent work alone. Each batch is one undo step.
+- Conversations are kept in the browser and listed at the top of the panel.
+- The bar shows how much of the model's context is used; **Compact** (or the **COMPACT** command) replaces the
+  conversation with a summary to free it.
+
 ## Natural-language modeling
 
 `PROMPT` (alias `AI`) opens a box where you describe what you want ("a 100×60×10 plate with four Ø8 holes

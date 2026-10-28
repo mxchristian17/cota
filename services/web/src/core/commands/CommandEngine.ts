@@ -1,3 +1,4 @@
+import { entityAtPoint, selectAtPoint } from '../editing/pointPick'
 import { byFence, inPolygon, rectPolygon, selectableEntities } from './selectionSets'
 import type { Entity } from '../document/types'
 import type { Deferred } from '../geom/tangency'
@@ -845,6 +846,13 @@ export class CommandEngine {
     }
     const opt = this.matchKeyword(trimmed, SELECT_KEYWORDS)
     const ents = () => selectableEntities(this.deps.doc)
+    // Un punto tecleado elige el objeto que pasa por él (o el sólido, texto o bloque que lo contiene).
+    const at = opt ? null : parseCoordinate(trimmed, this.lastPoint, this.deps.currentUcs(), false)
+    if (at) {
+      const id = selectAtPoint(ents(), [at.x, at.y, at.z])
+      if (!id) return this.reject('0 found: no object at that point.')
+      return this.applySel(sel, [id], !!sel.remove)
+    }
     switch (opt) {
       case 'ALL':
         return this.applySel(sel, ents().map((e) => e.id), !!sel.remove)
@@ -977,7 +985,9 @@ export class CommandEngine {
       if (this.outsideLimits(p)) return
       this.lastPoint = p
       this.pending = null
-      pending.resolve({ kind: 'point', point: p })
+      // Un punto tecleado sobre un objeto lo elige (THREAD, DIMRADIUS, UNGROUP… sin clic), como el CAD clásico.
+      const id = entityAtPoint(selectableEntities(this.deps.doc), [p.x, p.y, p.z])
+      pending.resolve(id ? { kind: 'point', point: p, pick: { id, raw: p, shift: false } } : { kind: 'point', point: p })
       return
     }
 

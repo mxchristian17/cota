@@ -38,12 +38,12 @@ discussion.
 
 | Status | Item |
 |---|---|
-| planned | **Agent panel** (collapsible), the evolution of today's `PROMPT` command: bring your own API key, pick the provider and model, and drive all of Cota through a conversation — the agent runs any command, models, edits, manages layouts and every other feature, the way a coding agent works on a repository. |
-| planned | Providers: Anthropic, OpenAI, Google Gemini, DeepSeek, Kimi (Moonshot), GLM (Zhipu) and other frontier models, plus any OpenAI-compatible endpoint. |
+| next | **Agent panel**: shipped in 2.7.0 for the browser (your own API key). Next: the same panel against the optional server (Docker), where keys and conversations live on the server. |
+| next | Providers: Anthropic, OpenAI, Google Gemini and OpenRouter or any OpenAI-compatible endpoint shipped in 2.7.0; direct DeepSeek, Kimi (Moonshot) and GLM (Zhipu) presets next. |
 | planned | **Sub-agents**: the main agent can launch helpers for parallel work, each with its own model. |
-| planned | **Scene context on demand**: the agent asks for a list of objects with their bounding boxes and short descriptions, picks what it needs, and can limit its context to one or more virtual boxes in space (on a large scene it only loads the region it is working on). |
+| next | **Scene context on demand** (objects in a box with bounding boxes and descriptions shipped in 2.7.0): the agent asks for a list of objects with their bounding boxes and short descriptions, picks what it needs, and can limit its context to one or more virtual boxes in space (on a large scene it only loads the region it is working on). |
 | planned | **Parametric geometry for agents**: objects are passed by their parameters (a cylinder is its axis, radius and height; a fillet is its edge and radius), never as raw vertices, to keep token use low. |
-| planned | Context meter and a `COMPACT` command that summarizes a long conversation to free context. |
+| done | Context meter and a `COMPACT` command that summarizes a long conversation to free context (2.7.0). |
 | planned | **MCP server** so external agents (desktop and coding assistants) can model in Cota with the same tools. |
 | idea | Scripting API to drive Cota from code (batch drawings, parametric parts). |
 

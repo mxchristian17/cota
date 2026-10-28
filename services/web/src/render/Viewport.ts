@@ -1168,6 +1168,19 @@ export class Viewport {
     return { x: this.lastWorldRaw.x, y: this.lastWorldRaw.y, z: this.lastWorldRaw.z }
   }
 
+  /** Imagen de la vista (PNG, lado mayor ≤ `max` px) para el agente: se dibuja y se lee en el mismo paso. */
+  captureImage(max = 1024): string {
+    this.renderer.render(this.scene, this.controller.camera)
+    const src = this.renderer.domElement
+    const k = Math.min(1, max / Math.max(src.width, src.height))
+    if (k >= 1) return src.toDataURL('image/png')
+    const c = document.createElement('canvas')
+    c.width = Math.round(src.width * k)
+    c.height = Math.round(src.height * k)
+    c.getContext('2d')?.drawImage(src, 0, 0, c.width, c.height)
+    return c.toDataURL('image/png')
+  }
+
   pickAt(clientX: number, clientY: number): string | null {
     this.raycaster.params.Line = { threshold: 6 * this.controller.worldPerPx() }
     this.raycaster.params.Points = { threshold: 5 * this.controller.worldPerPx() }

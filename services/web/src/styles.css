@@ -2012,3 +2012,25 @@ div.lt-row {
     scrollbar-color: var(--scroll-thumb) transparent;
   }
 }
+
+/* Panel del agente (AGENT): a la derecha, sobre el área de dibujo. */
+.agent-panel { position: fixed; right: 0; top: 34px; bottom: 150px; width: min(380px, 100vw); z-index: 40; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--panel, #252526); color: var(--text, #ddd); border-left: 1px solid var(--border, #3a3a3a); box-shadow: -4px 0 16px rgba(0,0,0,.25); font-size: 13px; }
+.agent-head, .agent-row, .agent-meter { display: flex; align-items: center; gap: 6px; }
+.agent-row { justify-content: flex-end; }
+.agent-convs { flex: 1; min-width: 0; }
+.agent-meter { font-size: 11px; }
+.agent-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--border, #3a3a3a); overflow: hidden; }
+.agent-bar > div { height: 100%; background: var(--accent, #3b82f6); }
+.agent-feed { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
+.agent-msg { white-space: pre-wrap; padding: 6px 8px; border-radius: 6px; line-height: 1.4; }
+.agent-user { align-self: flex-end; background: var(--accent-soft, rgba(59,130,246,.18)); max-width: 90%; }
+.agent-assistant { background: var(--field, rgba(255,255,255,.04)); }
+.agent-error { color: #f87171; }
+.agent-tool { font-family: var(--mono, ui-monospace, monospace); font-size: 11px; opacity: .75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-err { color: #f87171; opacity: 1; }
+.agent-approve { border: 1px solid var(--border, #3a3a3a); border-radius: 6px; padding: 6px; display: flex; flex-direction: column; gap: 6px; }
+.agent-approve pre { margin: 0; max-height: 180px; overflow: auto; font-size: 11px; white-space: pre-wrap; }
+.agent-input textarea { width: 100%; min-height: 64px; resize: vertical; }
+.agent-settings { border-bottom: 1px solid var(--border, #3a3a3a); padding-bottom: 6px; }
+.agent-small, .agent-hint { font-size: 11px; margin: 0; }
+.btn-sm { padding: 1px 6px; font-size: 11px; }
