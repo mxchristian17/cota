@@ -6,6 +6,7 @@ import { ViewportView } from './ui/ViewportView'
 import { FloatingToolbars, ToolbarDialog, ToolbarDock } from './ui/Toolbar'
 import { canInstall, enterFullscreen, isStandalone, onInstallChange, promptInstall } from './ui/appWindow'
 import { FlatshotDialog } from './ui/FlatshotDialog'
+import { PlotDialog } from './ui/PlotDialog'
 import { CLOUD_ENABLED } from './core/io/backend'
 import { BRAND_HTML } from './ui/brand'
 import { focusCommandLine } from './ui/focus'
@@ -56,6 +57,7 @@ export default function App() {
   const toggleSnap = useStore((s) => s.toggleSnap)
   const toggleEsnap = useStore((s) => s.toggleEsnap)
   const toggleOtrack = useStore((s) => s.toggleOtrack)
+  const toggleDynInput = useStore((s) => s.toggleDynInput)
   const email = useStore((s) => s.email)
   const token = useStore((s) => s.token)
   const docName = useStore((s) => s.docName)
@@ -82,6 +84,19 @@ export default function App() {
   useEffect(() => {
     void restoreSession()
   }, [restoreSession])
+
+  // Cerrar o recargar la pestaña con cambios sin guardar pide confirmación al navegador (el dibujo que se
+  // muestra al arrancar cuenta como guardado).
+  useEffect(() => {
+    useStore.getState().markSaved()
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!useStore.getState().isDirty()) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [])
 
   // Autoguardado cada 2 min, si el documento cambió desde el último guardado. Guarda en la cuenta
   // (si hay sesión) o sobre el archivo abierto de la carpeta local; un dibujo local que
@@ -120,6 +135,31 @@ export default function App() {
       document.removeEventListener('fullscreenchange', onChange)
       window.removeEventListener('pointerdown', onGesture, true)
       window.removeEventListener('keydown', onGesture, true)
+    }
+  }, [])
+
+  // El foco no se queda en la nada: si cae en el body (un menú o un panel que se cierra, un botón que desaparece),
+  // vuelve a la línea de comandos, salvo que haya un cuadro de diálogo abierto o texto marcado para copiar.
+  useEffect(() => {
+    let down = false
+    const settle = () => {
+      if (down || document.activeElement !== document.body || document.querySelector('.modal-backdrop')) return
+      if (!document.getSelection()?.isCollapsed) return
+      focusCommandLine()
+    }
+    const onFocusOut = () => setTimeout(settle, 0)
+    const onDown = () => (down = true)
+    const onUp = (e: PointerEvent) => {
+      down = false
+      if (e.pointerType !== 'touch') setTimeout(settle, 0) // en un teléfono no se abre el teclado con cada toque
+    }
+    document.addEventListener('focusout', onFocusOut)
+    window.addEventListener('pointerdown', onDown, true)
+    window.addEventListener('pointerup', onUp, true)
+    return () => {
+      document.removeEventListener('focusout', onFocusOut)
+      window.removeEventListener('pointerdown', onDown, true)
+      window.removeEventListener('pointerup', onUp, true)
     }
   }, [])
 
@@ -182,6 +222,10 @@ export default function App() {
         // F11 = object snap tracking (CAD clásico); se evita el pantalla completa del navegador.
         e.preventDefault()
         toggleOtrack()
+      } else if (e.key === 'F12') {
+        // F12 = entrada dinámica (CAD clásico): coordenadas relativas sin '@' tras el primer punto.
+        e.preventDefault()
+        toggleDynInput()
       } else if (e.key === 'Delete') {
         // Suprimir: borra la selección cuando no hay comando activo ni se está tecleando.
         const s = useStore.getState()
@@ -232,7 +276,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [toggleOrtho, toggleSnap, toggleEsnap, toggleOtrack])
+  }, [toggleOrtho, toggleSnap, toggleEsnap, toggleOtrack, toggleDynInput])
 
   return (
     <div className="app">
@@ -360,6 +404,7 @@ export default function App() {
       <RealtimeMenu />
       <AiDialog />
       <FlatshotDialog />
+      <PlotDialog />
       <ViewGenDialog />
     </div>
   )

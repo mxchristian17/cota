@@ -26,7 +26,7 @@ import { pointMarkTexture } from './pointMarks'
 import { ellipsePoints } from '../core/geom/ellipse'
 import { arcBasis, tessellateArc } from '../core/geom/arc'
 import { polylinePoints } from '../core/geom/polyline'
-import { LINE_SPACING, attdefText, textAxes, textCorners } from '../core/geom/text'
+import { LINE_SPACING, attdefText, textAxes, textCorners, textTop } from '../core/geom/text'
 import { entityGrips, type Grip } from '../core/editing/grips'
 import { viewportRing } from '../core/layout/viewport'
 import { evaluateFields, fieldSegments, hasFields, type FieldContext } from '../core/fields/fields'
@@ -645,6 +645,21 @@ export class Viewport {
   /** ¿La vista mira en planta (a lo largo de ±Z del mundo)? */
   isPlanView(): boolean {
     return Math.abs(Math.abs(this.controller.el) - Math.PI / 2) < 0.02
+  }
+
+  /** Rectángulo del XY del mundo que se ve en el viewport (para PLOT ▸ Display); null si no está en planta. */
+  displayRect(): { minX: number; minY: number; maxX: number; maxY: number } | null {
+    if (!this.isPlanView()) return null
+    const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0)
+    const xs: number[] = []
+    const ys: number[] = []
+    for (const [nx, ny] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      const out = new THREE.Vector3()
+      if (!this.controller.rayFromNdc(nx, ny).intersectPlane(plane, out)) return null
+      xs.push(out.x)
+      ys.push(out.y)
+    }
+    return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) }
   }
 
   /** Modo Realtime (ZOOM ↵ / PAN): `null` sale. */
@@ -1614,7 +1629,7 @@ export class Viewport {
     const ax = textAxes(t)
     this.textLabels.push({
       el,
-      pos: new THREE.Vector3(t.position[0], t.position[1], t.position[2]),
+      pos: new THREE.Vector3(...textTop(t)),
       height: t.height,
       u: new THREE.Vector3(...ax.u),
       v: new THREE.Vector3(...ax.v),

@@ -6,7 +6,7 @@ import { meshWireframe } from '../editing/mesh'
 import { ellipsePoints, isEllipseArc } from '../geom/ellipse'
 import { tessellateArc } from '../geom/arc'
 import { polylinePoints } from '../geom/polyline'
-import { LINE_SPACING, textSize } from '../geom/text'
+import { LINE_SPACING, textSize, textTop } from '../geom/text'
 import { dimDisplay, type DimContext } from '../dimension/dimGeometry'
 import { viewportRing } from '../layout/viewport'
 import { byLayerOrder } from '../layers/order'
@@ -29,7 +29,20 @@ export interface PageSize {
 export const PAGE_SIZES: Record<string, PageSize> = {
   A4: { w: 841.89, h: 595.28 },
   A3: { w: 1190.55, h: 841.89 },
+  A2: { w: 1683.78, h: 1190.55 },
+  A1: { w: 2383.94, h: 1683.78 },
+  A0: { w: 3370.39, h: 2383.94 },
   LETTER: { w: 792, h: 612 },
+  LEGAL: { w: 1008, h: 612 },
+  TABLOID: { w: 1224, h: 792 },
+}
+
+/** Área de dibujo en el XY del mundo. */
+export interface PlotArea {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
 }
 
 export interface PlotOptions {
@@ -39,6 +52,12 @@ export interface PlotOptions {
   linetypes?: LinetypeContext
   /** Puntos de papel por unidad de dibujo. Si se omite, se ajusta al contenido (fit). */
   scale?: number
+  /** Qué se plotea (Display, Window): se recorta a ella. Sin ella, las extensiones del dibujo. */
+  area?: PlotArea
+  /** Centrar en el papel (por defecto); si no, el área arranca en la esquina de abajo a la izquierda del margen. */
+  center?: boolean
+  /** Estilo de ploteo (color/monocromo/grises) y lineweights. */
+  style?: PlotStyleOpts
 }
 
 export interface PlotTransform {
@@ -83,15 +102,16 @@ export function computePlotTransform(
   page: PageSize,
   margin: number,
   scale?: number,
+  center = true,
 ): PlotTransform {
   const spanX = Math.max(1e-6, bounds.maxX - bounds.minX)
   const spanY = Math.max(1e-6, bounds.maxY - bounds.minY)
   const availW = page.w - 2 * margin
   const availH = page.h - 2 * margin
   const s = scale ?? Math.min(availW / spanX, availH / spanY)
-  // Centrado del contenido en el área imprimible.
-  const ox = margin + (availW - spanX * s) / 2 - bounds.minX * s
-  const oy = margin + (availH - spanY * s) / 2 - bounds.minY * s
+  // Centrado del contenido en el área imprimible (o desde su esquina de abajo a la izquierda).
+  const ox = margin + (center ? (availW - spanX * s) / 2 : 0) - bounds.minX * s
+  const oy = margin + (center ? (availH - spanY * s) / 2 : 0) - bounds.minY * s
   return { s, ox, oy }
 }
 
@@ -351,7 +371,7 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
           const h = e.props.height
           const c = Math.cos(e.props.rotation)
           const sn = Math.sin(e.props.rotation)
-          const [px, py] = e.props.position
+          const [px, py] = textTop(e.props)
           lines.forEach((ln, i) => {
             const dy = -(i + 1) * h * LINE_SPACING + h * 0.25
             const o = worldToPage(px + offX * c - dy * sn, py + offX * sn + dy * c, t)
@@ -360,8 +380,9 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
           break
         }
         for (let i = 0; i < lines.length; i++) {
-          const wy = e.props.position[1] - (i + 1) * e.props.height * LINE_SPACING + e.props.height * 0.25
-          const [tx, ty] = worldToPage(e.props.position[0] + offX, wy, t)
+          const top = textTop(e.props)
+          const wy = top[1] - (i + 1) * e.props.height * LINE_SPACING + e.props.height * 0.25
+          const [tx, ty] = worldToPage(top[0] + offX, wy, t)
           out += `BT\n/F1 ${f(size)} Tf\n${f(tx)} ${f(ty)} Td\n(${pdfText(lines[i])}) Tj\nET\n`
         }
         break
@@ -438,8 +459,8 @@ export function pdfDocument(pages: PdfPage[]): Uint8Array {
   return latin1Bytes(pdf)
 }
 
-/** Genera un PDF vectorial (una página) del dibujo, respetando line weight/color/printable/visible. */
-export function exportPdf(entities: Entity[], layers: Layer[], opts: PlotOptions = {}): PlotResult {
+/** Página del ploteo del modelo (para el PDF y su vista previa). */
+export function modelPlotPage(entities: Entity[], layers: Layer[], opts: PlotOptions = {}): { page: PdfPage; transform: PlotTransform; empty: boolean } {
   const page = opts.page ?? PAGE_SIZES.A4
   const margin = opts.marginPt ?? 28 // ~1 cm
   const layerMap = new Map(layers.map((l) => [l.id, l]))
@@ -448,8 +469,35 @@ export function exportPdf(entities: Entity[], layers: Layer[], opts: PlotOptions
     const l = layerMap.get(e.layer)
     return !l || (layerShown(l) && l.printable)
   })
-  const bounds = drawingBounds(printable) ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 }
-  const transform = computePlotTransform(bounds, page, margin, opts.scale)
-  const content = printable.length > 0 ? plotContentStream(printable, layers, transform, undefined, undefined, opts.linetypes) : ''
-  return { bytes: pdfDocument([{ w: page.w, h: page.h, content }]), transform, empty: printable.length === 0 }
+  const area = opts.area
+  const inArea = area
+    ? printable.filter((e) => {
+        const b = entityBounds(e)
+        return b.maxX >= area.minX && b.minX <= area.maxX && b.maxY >= area.minY && b.minY <= area.maxY
+      })
+    : printable
+  const bounds = area ?? drawingBounds(printable) ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 }
+  const transform = computePlotTransform(bounds, page, margin, opts.scale, opts.center ?? true)
+  let content = inArea.length > 0 ? plotContentStream(inArea, layers, transform, opts.style, undefined, opts.linetypes) : ''
+  if (area && content) {
+    // Lo que sale del área no se plotea (como la ventana de ploteo del CAD clásico).
+    const [x0, y0] = worldToPage(area.minX, area.minY, transform)
+    const [x1, y1] = worldToPage(area.maxX, area.maxY, transform)
+    content = `q
+${f(x0)} ${f(y0)} m
+${f(x1)} ${f(y0)} l
+${f(x1)} ${f(y1)} l
+${f(x0)} ${f(y1)} l
+h
+W n
+${content}Q
+`
+  }
+  return { page: { w: page.w, h: page.h, content }, transform, empty: inArea.length === 0 }
+}
+
+/** Genera un PDF vectorial (una página) del dibujo, respetando line weight/color/printable/visible. */
+export function exportPdf(entities: Entity[], layers: Layer[], opts: PlotOptions = {}): PlotResult {
+  const { page, transform, empty } = modelPlotPage(entities, layers, opts)
+  return { bytes: pdfDocument([page]), transform, empty }
 }

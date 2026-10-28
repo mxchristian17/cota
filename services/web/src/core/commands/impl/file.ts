@@ -3,8 +3,16 @@ import type { Command } from '../types'
 export const newCommand: Command = {
   name: 'NEW',
   aliases: [],
-  description: 'Start a new empty drawing',
+  description: 'Start a new empty drawing (asks to save the changes first)',
   async run(ctx) {
+    if (ctx.app.isDirty?.()) {
+      const r = await ctx.getPoint(`Save changes to ${ctx.app.docName()}? [Yes/No] <Yes>: `, { keywords: ['Yes', 'No'], enterKeyword: 'Yes', base: null })
+      if (r.kind !== 'keyword') return // Esc (o un clic) cancela NEW
+      if (r.keyword === 'Yes' && !(await ctx.app.saveNow?.())) {
+        ctx.print('The drawing was not saved: NEW cancelled.')
+        return
+      }
+    }
     ctx.app.newDocument()
     ctx.print('New drawing.')
   },
@@ -35,8 +43,10 @@ export const openCmdlineCommand: Command = {
   async run(ctx) {
     const r = await ctx.getPoint('Open drawing from [Device/List] <List>: ', { keywords: ['Device', 'List'], enterKeyword: 'List' })
     if (r.kind !== 'keyword') return
-    if (r.keyword === 'Device' || !hasList(ctx)) ctx.app.openFromDevice()
-    else ctx.app.openDialog()
+    if (r.keyword === 'Device' || !hasList(ctx)) {
+      if (r.keyword === 'List') ctx.print('No working folder or account to list: choose a file on this device.')
+      ctx.app.openFromDevice()
+    } else ctx.app.openDialog()
   },
 }
 

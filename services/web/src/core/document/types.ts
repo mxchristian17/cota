@@ -178,6 +178,12 @@ export interface TextProps {
   rotation: number // radianes en el plano
   justify: 'left' | 'center' | 'right'
   normal: Vec3
+  /**
+   * `text`: texto de un renglón del CAD clásico (TEXT/DTEXT): `position` es el punto de la línea base (al inicio,
+   * centro o final según `justify`). `mtext`: párrafo (MTEXT): `position` es la esquina de arriba. Ausente (dibujos
+   * anteriores, rótulos): como `mtext`, salvo que se muestra como TEXT si tiene un solo renglón.
+   */
+  kind?: 'text' | 'mtext'
 }
 
 export interface ExtrudeProps {

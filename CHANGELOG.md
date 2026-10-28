@@ -4,6 +4,55 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-10-28
+
+### Changed (breaking)
+- **Typed coordinates are absolute**, as on the classic CAD command line: `10,20` is the point X = 10, Y = 20 at
+  any prompt, and `@10,20` is relative to the last point. Until now, `x,y` after the first point was relative
+  (like the dynamic input box); that behavior is now **dynamic input**, toggled with <kbd>F12</kbd> or the new
+  **DYN** button in the status bar (with it on, `#x,y` is absolute). Scripts and macros that typed relative
+  coordinates without `@` need the `@` (or DYN on).
+- **TEXT** sits on its baseline: the point you give is the start (or the center or end, with the new `Justify`
+  option) of the baseline, instead of the top-left corner. Every <kbd>Enter</kbd> starts the next line below; an
+  empty line ends. Texts in existing drawings keep their place.
+- **Esc cancels the whole command** and prints `*Cancel*`; before, some commands went back to their options (for
+  example a `-LAYER` sub-prompt) or took Esc as Enter.
+
+### Added
+- **PLOT dialog with preview**: paper size (ISO A4–A0, ANSI Letter, Legal, Tabloid), orientation, plot area
+  (Extents, Display or a Window picked in the drawing), plot scale (fit to paper, showing the resulting scale, or a
+  standard 1:n), center the plot, plot style (color, monochrome, grayscale) and lineweights. The preview draws the
+  same sheet that is exported. A layout plots at 1:1 with its page setup. `-PLOT` plots right away with the last
+  settings (for scripts and macros).
+- **Grip modes**: with a hot grip, <kbd>Space</kbd> or <kbd>Enter</kbd> cycles STRETCH → MOVE → ROTATE → SCALE →
+  MIRROR, acting on the whole selection, with `Base point`, `Copy` (multiple copies) and `eXit`.
+- `%%c`, `%%d`, `%%p` and `%%%` in TEXT, MTEXT and Properties become Ø, °, ± and %; DXF export writes them back as
+  control codes.
+- NEW asks to save the changes first, and starts in plan view with the world UCS. Closing or reloading the tab with
+  unsaved changes asks for confirmation.
+- When a window or crossing in a command leaves objects out because their layer is locked, the command line says
+  how many ("1 was on a locked layer.").
+
+### Fixed
+- Esc at the format prompt of EXPORT exported the drawing; Esc in ARRAY (rotate items), OFFSET (multiple), MLEADER
+  and DIMREASSOC continued instead of cancelling.
+- With a menu open, Esc closes it and typing closes it and goes to the command line. When a menu, a panel or a
+  button that had the focus closes, the keyboard goes back to the command line.
+- `@` at a prompt without a base point (the dimension line location of DIMLINEAR, for example) is relative to the
+  last point instead of being rejected.
+- EXTRUDE with a taper angle showed the solid inside out (and without its top) when the profile was drawn
+  clockwise; any LOFT now faces outwards.
+- DXF: TEXT keeps its baseline and justification (center/right with the alignment point, vertical justification
+  on import); MTEXT keeps its attachment point (middle and bottom rows) and arrives as plain text, without
+  formatting codes, with `\U+` characters. MTEXT shows as MTEXT in Properties, with its lines separated by `\P`.
+- After NEW, the UCS list said "Front" while the UCS was the world one.
+- Properties shows numbers without floating-point noise (a viewport custom scale of 0.832572, not
+  0.8325718347040308).
+- BLOCK with nothing selected, and `-OPEN` ▸ List without a folder or account, say what happened.
+- OPTIONS keeps the same size on every tab; the layer manager fits better in narrow windows.
+- Paper and layout template names in English ("IRAM A3 landscape", "Letter / ANSI A").
+- Saved PDMODE and PDSIZE were not restored on the next visit.
+
 ## [1.11.0] — 2026-10-27
 
 ### Added

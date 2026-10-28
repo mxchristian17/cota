@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useStore } from '../store/store'
 import type { Command } from '../core/commands/types'
 import { VARIABLE_COMMANDS } from '../core/commands/registry'
@@ -35,6 +35,22 @@ export function CommandBar() {
     const r = el.getBoundingClientRect()
     setAt({ left: Math.max(0, Math.min(r.left, window.innerWidth - 270)), top: r.bottom })
   }
+
+  // Con un menú abierto, Esc lo cierra (sin cancelar el comando en curso) y una tecla escrita lo cierra y sigue a la
+  // línea de comandos; en los dos casos el foco vuelve a ella.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        e.preventDefault()
+      } else if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return
+      setOpen(null)
+      focusCommandLine()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [open])
 
   const commands = listCommands()
   const byName = new Map(commands.map((c) => [c.name, c]))
@@ -173,7 +189,15 @@ export function CommandBar() {
           )}
         </div>
       ))}
-      {open && <div className="command-backdrop" onClick={() => setOpen(null)} />}
+      {open && (
+        <div
+          className="command-backdrop"
+          onClick={() => {
+            setOpen(null)
+            focusCommandLine()
+          }}
+        />
+      )}
     </div>
   )
 }

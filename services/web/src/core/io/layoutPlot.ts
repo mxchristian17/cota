@@ -6,7 +6,7 @@ import { meshWireframe } from '../editing/mesh'
 import { ellipsePoints, isEllipseArc } from '../geom/ellipse'
 import { tessellateArc } from '../geom/arc'
 import { polylinePoints } from '../geom/polyline'
-import { LINE_SPACING, textAxes, textSize } from '../geom/text'
+import { LINE_SPACING, textAxes, textSize, textTop } from '../geom/text'
 import { projectHiddenGroups, type Mesh } from '../projection/orthographic'
 import { dimDisplay, type DimContext } from '../dimension/dimGeometry'
 import { paperSizeMm } from '../layout/paper'
@@ -214,9 +214,10 @@ export function viewportContent(
       const toPt = (d: Vec3): [number, number] => [dot(d, right) * k * t.height * MM_TO_PT, dot(d, up) * k * t.height * MM_TO_PT]
       const w = textSize(t).width
       const offX = t.justify === 'center' ? -w / 2 : t.justify === 'right' ? -w : 0
+      const top = textTop(t)
       t.text.split('\n').forEach((ln, i) => {
         const dy = -(i + 1) * t.height * LINE_SPACING + t.height * 0.25
-        const o = proj([0, 1, 2].map((j) => t.position[j] + u[j] * offX + v[j] * dy) as Vec3)
+        const o = proj([0, 1, 2].map((j) => top[j] + u[j] * offX + v[j] * dy) as Vec3)
         if (o[0] < clip.minX || o[0] > clip.maxX || o[1] < clip.minY || o[1] > clip.maxY) return
         body += textTm(ln, [o[0] * MM_TO_PT, o[1] * MM_TO_PT], toPt(u), toPt(v))
       })

@@ -49,7 +49,8 @@ export function HelpDialog() {
         <p className="help-hint">
           Type a command in the command line, then follow the prompts. Coordinates: absolute
           <span className="mono"> x,y</span>, relative <span className="mono">@dx,dy</span>, polar
-          <span className="mono"> @dist&lt;ang</span>. Press <span className="mono">Enter</span> to finish,
+          <span className="mono"> @dist&lt;ang</span> (with dynamic input, F12, <span className="mono">x,y</span> after the
+          first point is relative and <span className="mono">#x,y</span> absolute). Press <span className="mono">Enter</span> to finish,
           <span className="mono"> Esc</span> to cancel. Pan with the middle button, orbit with the right button, zoom with the wheel.
         </p>
       </div>

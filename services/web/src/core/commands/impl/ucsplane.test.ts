@@ -93,7 +93,7 @@ describe('comandos en el plano de la UCS', () => {
     await h.run('CYLINDER', '0,0', '2', '6')
     const cyl = h.ofType('SOLID3D')[1].props as { axis: Vec3 }
     closeV(cyl.axis, [0, -1, 0])
-    await h.run('TEXT', '0,0', '2.5', '0', 'Hola')
+    await h.run('TEXT', '0,0', '2.5', '0', 'Hola', '')
     const t = h.ofType('TEXT')[0].props as TextProps
     closeV(t.normal, [0, -1, 0])
   })

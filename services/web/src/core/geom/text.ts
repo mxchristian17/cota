@@ -6,6 +6,8 @@ import type { AttdefProps, TextProps } from '../document/types'
 const GLYPH_ASPECT = 0.6
 /** Interlineado (alto de línea / alto de texto). */
 export const LINE_SPACING = 1.35
+/** Distancia de la parte de arriba de la caja a la línea base del primer renglón, en altos de texto. */
+export const BASELINE_DROP = LINE_SPACING - 0.25
 
 const addv = (p: Vec3, q: Vec3, s = 1): Vec3 => [p[0] + q[0] * s, p[1] + q[1] * s, p[2] + q[2] * s]
 
@@ -47,12 +49,17 @@ export function textSize(t: TextProps): { width: number; height: number } {
   return { width: cols * t.height * GLYPH_ASPECT, height: lines.length * t.height * LINE_SPACING }
 }
 
-/** 4 esquinas de la caja del texto en mundo (para bounds/selección/pick). `position` = arriba-izq. */
+/** Punto de arriba de la caja del texto (sobre la línea de `position`): para TEXT, una línea base más arriba. */
+export function textTop(t: TextProps): Vec3 {
+  return t.kind === 'text' ? addv(t.position, textAxes(t).v, t.height * BASELINE_DROP) : t.position
+}
+
+/** 4 esquinas de la caja del texto en mundo (para bounds/selección/pick), desde arriba-izquierda. */
 export function textCorners(t: TextProps): Vec3[] {
   const { u, v } = textAxes(t)
   const { width, height } = textSize(t)
   const off = t.justify === 'center' ? -width / 2 : t.justify === 'right' ? -width : 0
-  const tl = addv(t.position, u, off)
+  const tl = addv(textTop(t), u, off)
   const tr = addv(tl, u, width)
   const br = addv(tr, v, -height)
   const bl = addv(tl, v, -height)

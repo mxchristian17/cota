@@ -15,11 +15,18 @@ export const blockCommand: Command = {
   description: 'Create a block definition from selected objects (and insert a reference)',
   async run(ctx) {
     const picked = await ctx.getSelection('Select objects: ')
-    if (picked === null || picked.length === 0) return
+    if (picked === null) return
+    if (picked.length === 0) {
+      ctx.print('No objects selected: a block needs at least one object.')
+      return
+    }
     // Los viewports de un layout no pueden formar parte de un bloque (como el CAD clásico): se descartan.
     const ids = picked.filter((id) => ctx.doc.getEntity(id)?.type !== 'VIEWPORT')
     if (ids.length < picked.length) ctx.print(`${picked.length - ids.length} viewport(s) excluded from the block.`)
-    if (ids.length === 0) return
+    if (ids.length === 0) {
+      ctx.print('Nothing left to make the block from.')
+      return
+    }
     const name = (await ctx.getString('Block name: '))?.trim()
     if (!name) {
       ctx.print('Block name required.')

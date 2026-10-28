@@ -58,8 +58,8 @@ test.describe('Cota Layout: hoja y viewports flotantes', () => {
     page.on('console', (m) => m.type() === 'error' && !m.text().startsWith('Failed to load resource') && errors.push(m.text()))
     await page.goto('/')
     await expect(page.getByTestId('command-input')).toBeVisible()
-    // Modelo de 4000 × 3000 con un círculo en el centro (coordenadas relativas tras el 1er punto).
-    await typeCmd(page, 'LINE', '0,0', '4000,0', '0,3000', '-4000,0', 'C', 'CIRCLE', '2000,1500', '800')
+    // Modelo de 4000 × 3000 con un círculo en el centro.
+    await typeCmd(page, 'LINE', '0,0', '@4000,0', '@0,3000', '@-4000,0', 'C', 'CIRCLE', '2000,1500', '800')
     await page.getByTestId('tab-Layout1').click()
     await expect(page.getByTestId('layout-sheet')).toBeVisible()
   })
@@ -202,7 +202,7 @@ test.describe('Cota Layout: hoja y viewports flotantes', () => {
     })
     expect(style).toBe('hidden')
 
-    await typeCmd(page, 'PS', 'MV', '#10,10', '60,60', 'MS')
+    await typeCmd(page, 'PS', 'MV', '#10,10', '@60,60', 'MS')
     const ids = (await snap(page)).vps.map((v) => v.id)
     expect((await snap(page)).ms).toBe(ids[0])
     await page.keyboard.press('Control+r')
@@ -233,7 +233,9 @@ test.describe('Cota Layout: hoja y viewports flotantes', () => {
 
   test('PLOT en el layout descarga la hoja A3 1:1 con el viewport recortado', async ({ page }) => {
     await typeCmd(page, 'PS')
-    const [download] = await Promise.all([page.waitForEvent('download'), typeCmd(page, 'PLOT')])
+    await typeCmd(page, 'PLOT')
+    await expect(page.getByTestId('plot-layout-note')).toBeVisible() // el layout plotea con su Page Setup
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('plot-ok').click()])
     expect(download.suggestedFilename()).toBe('drawing1-Layout1.pdf')
     const path = await download.path()
     const { readFileSync } = await import('node:fs')

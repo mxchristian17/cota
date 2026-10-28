@@ -26,6 +26,8 @@ import { enterFullscreen, exitFullscreen } from '../ui/appWindow'
 import { DEFAULT_VISUAL_STYLE, VISUAL_STYLES, type CameraMode, type ViewName, type VisualStyle } from '../core/view'
 import type { CameraState, Viewport } from '../render/Viewport'
 import { entitiesInScreenBox, entityOutline, type RectPx } from '../core/editing/bounds'
+import { scaleEntity, translateEntity } from '../core/editing/edit'
+import { addTransformed, applyTransform, mirrorAxis, mirrorTransform, rotateTransform, type EntityTransform } from '../core/editing/transform'
 import { applyGrip, type Grip } from '../core/editing/grips'
 import { mergeSelection } from '../core/editing/selection'
 import { applyField } from '../core/editing/props'
@@ -46,9 +48,11 @@ import {
   type LayoutTemplate,
 } from '../core/layout/template'
 import { layoutViews, mergeSegments, orthoProject, projectHidden, segmentsBounds, snapToHints, solidCircleHints, viewHints, viewOffsets, type CircleHint, type Mesh, type ProjBasis, type ProjItem } from '../core/projection/orthographic'
-import { fromVec3 } from '../core/math'
-import { exportPdf } from '../core/io/pdf'
-import { plotLayouts } from '../core/io/layoutPlot'
+import { fromVec3, toVec3 } from '../core/math'
+import { MM_TO_PT, modelPlotPage, pdfDocument, type PdfPage, type PlotArea } from '../core/io/pdf'
+import { layoutPage, plotLayouts } from '../core/io/layoutPlot'
+import { DEFAULT_PLOT, plotPage, type PlotSettings } from '../core/io/plotSettings'
+import { paperPerModel, unitToMm } from '../core/layout/scale'
 import { fieldContextFor, resolveFieldTexts } from '../core/fields/context'
 import { exportObj, importObj, type ObjMesh } from '../core/io/obj'
 import { exportDxf, importDxf } from '../core/io/dxf'
@@ -123,6 +127,8 @@ export interface AppState {
   esnap: boolean
   /** Object snap tracking (OTRACK / F11): alineaciones desde puntos adquiridos. */
   otrack: boolean
+  /** Entrada dinámica (DYN / F12): tras el primer punto, `x,y` tecleado es relativo sin `@`. */
+  dynInput: boolean
   ucs: Ucs
   /** Nombre de la UCS actual si es una guardada o World; null = sin nombre. */
   ucsName: string | null
@@ -284,6 +290,7 @@ export interface AppState {
   openHelp: () => void
   closeHelp: () => void
   toggleOrtho: () => void
+  toggleDynInput: () => void
   /** GRID / F7: muestra u oculta la grilla; sin argumento, alterna. */
   setGrid: (on?: boolean) => void
   /** FULLSCREEN: pantalla completa total; sin argumento, alterna. `apply = false` sólo anota la preferencia. */
@@ -390,6 +397,13 @@ export interface AppState {
   setAiMinimized: (v: boolean) => void
   setAiLod: (n: number) => void
   exportPdf: () => void
+  plotOpen: boolean
+  /** Opciones del último PLOT del modelo (se recuerdan en la sesión). */
+  plotSettings: PlotSettings
+  /** Página que saldría con esas opciones (para la vista previa), y si se puede usar Display (vista en planta). */
+  plotPreview: (s: PlotSettings) => { page: PdfPage; empty: boolean; layout: string | null; displayAvailable: boolean; scale: number | null }
+  /** Cierra el diálogo de PLOT: 'plot' descarga el PDF con esas opciones. */
+  resolvePlot: (r: 'plot' | 'window' | 'cancel', s?: PlotSettings) => void
   /** PUBLISH: un PDF con una página por layout (en el orden de las pestañas). */
   publishLayouts: (ids: string[]) => void
   importFile: () => void
@@ -422,7 +436,12 @@ export interface AppState {
   openLoginDialog: () => void
   // document actions
   newDocument: () => void
-  saveDocument: () => Promise<void>
+  /** Guarda el dibujo (carpeta, cuenta o descarga); true si quedó guardado. */
+  saveDocument: () => Promise<boolean>
+  /** ¿Hay cambios desde que se abrió, se creó o se guardó el dibujo? */
+  isDirty: () => boolean
+  /** El dibujo actual cuenta como guardado (al terminar de arrancar la app). */
+  markSaved: () => void
   openDocumentsDialog: () => Promise<void>
   /** Elige (o cambia) la carpeta de trabajo del sistema. */
   pickWorkspaceFolder: () => Promise<void>
@@ -473,6 +492,9 @@ export const useStore = create<AppState>((set, get) => {
   // Handles de la File System Access API: viven fuera del estado de React (no son serializables).
   let workspaceDir: FsDirHandle | null = null
   let currentFile: FsFileHandle | null = null
+  /** Revisión del dibujo la última vez que se abrió, creó o guardó (para avisar de cambios sin guardar). */
+  let savedRev = doc.revision
+  const markSaved = () => (savedRev = doc.revision)
 
   /** Aplica el tema a todos los viewports vivos y a las variables CSS. */
   const applyTheme = (theme: Theme) => {
@@ -657,6 +679,7 @@ export const useStore = create<AppState>((set, get) => {
       currentFile = null
       set({ docId: null, docName: 'drawing1', docFolder: '', fsFilePath: null, currentLayerId: doc.currentLayer ?? doc.firstLayerId, selection: [], viewportLayout: doc.viewportLayout })
       bump()
+      markSaved()
     }
   }
   /** Firma del modelo (para saber si una vista de dibujo quedó desactualizada). */
@@ -691,6 +714,7 @@ export const useStore = create<AppState>((set, get) => {
   }
   /** Resolución pendiente del diálogo de FLATSHOT (fuera del estado: no es serializable). */
   let flatshotResolve: ((o: FlatshotOptions | null) => void) | null = null
+  let plotResolve: ((r: 'plot' | 'window' | 'cancel') => void) | null = null
   const recordViewUndo = (vp: Viewport, cam: CameraState, ucs: Ucs) => {
     if (restoringView) return
     const top = undoStack[undoStack.length - 1]
@@ -771,7 +795,8 @@ export const useStore = create<AppState>((set, get) => {
   const restoreModelUcs = () => {
     const u = normalizeUcs(doc.modelUcs ?? WORLD_UCS)
     for (const vp of get().viewports) if (vp.kind === 'model') vp.setUcs(u)
-    set({ ucs: u })
+    // El nombre que muestra el desplegable de UCS: World, o ninguno para la que trae el dibujo.
+    set({ ucs: u, ucsName: isWorldUcs(u) ? 'World' : null })
   }
   const downloadText = (text: string, name: string, mime: string) => {
     const url = URL.createObjectURL(new Blob([text], { type: mime }))
@@ -821,6 +846,8 @@ export const useStore = create<AppState>((set, get) => {
 
   const app: AppHooks = {
     newDocument: () => get().newDocument(),
+    isDirty: () => get().isDirty(),
+    saveNow: () => get().saveDocument(),
     openDialog: () => void get().openDocumentsDialog(),
     save: (name) => {
       if (name && name.trim()) {
@@ -879,6 +906,13 @@ export const useStore = create<AppState>((set, get) => {
     facingNormal: () => get().activeViewport?.facingNormal() ?? [0, 0, 1],
     setViewportLayout: (n) => get().setViewportLayout(n),
     exportPdf: () => get().exportPdf(),
+    plotDialog: (window) =>
+      new Promise((resolve) => {
+        plotResolve?.('cancel')
+        plotResolve = resolve
+        const s = get().plotSettings
+        set({ plotOpen: true, plotSettings: window ? { ...s, area: 'window', window } : s })
+      }),
     publish: (ids) => get().publishLayouts(ids),
     importFile: () => get().importFile(),
     openFromDevice: () => get().openFromDevice(),
@@ -1071,6 +1105,7 @@ export const useStore = create<AppState>((set, get) => {
     doc,
     currentLayerId: () => get().currentLayerId,
     isOrtho: () => get().ortho,
+    isDynInput: () => get().dynInput,
     currentCursor: () => get().cursor,
     currentUcs: () => get().ucs,
     currentSelection: () => get().selection,
@@ -1116,6 +1151,7 @@ export const useStore = create<AppState>((set, get) => {
       gridSnap: s.gridSnap,
       esnap: s.esnap,
       otrack: s.otrack,
+      dynInput: s.dynInput,
       gridStep: s.gridStep,
       theme: s.theme,
       osnap: s.osnap,
@@ -1158,6 +1194,7 @@ export const useStore = create<AppState>((set, get) => {
     if (typeof d.gridSnap === 'boolean') patch.gridSnap = d.gridSnap
     if (typeof d.esnap === 'boolean') patch.esnap = d.esnap
     if (typeof d.otrack === 'boolean') patch.otrack = d.otrack
+    if (typeof d.dynInput === 'boolean') patch.dynInput = d.dynInput
     if (typeof d.gridStep === 'number' && d.gridStep > 0) patch.gridStep = d.gridStep
     if (d.theme && typeof d.theme === 'object') {
       const theme = normalizeTheme(d.theme)
@@ -1233,6 +1270,7 @@ export const useStore = create<AppState>((set, get) => {
     gridStep: 10,
     esnap: true,
     otrack: true,
+    dynInput: false,
     ucs: { ...WORLD_UCS },
     ucsName: 'World',
     dimStyleOpen: false,
@@ -1267,6 +1305,8 @@ export const useStore = create<AppState>((set, get) => {
     autosave: false,
     flatshotOpen: false,
     flatshotOptions: { ...DEFAULT_FLATSHOT },
+    plotOpen: false,
+    plotSettings: { ...DEFAULT_PLOT },
     cleanScreen: false,
     commandLineCompact: false,
     viewCubeOn: true,
@@ -1508,9 +1548,102 @@ export const useStore = create<AppState>((set, get) => {
           .filter((poly) => poly.length >= 2)
           .map((poly) => ({ kind: 'polyline', points: poly }))
       }
+      // Como el CAD clásico: Espacio (o Enter) pasa de STRETCH a MOVE, ROTATE, SCALE y MIRROR, que actúan sobre todo
+      // lo seleccionado desde el grip; Base point cambia el punto base, Copy deja copias hasta salir, eXit (o Esc) sale.
+      const targets = () => {
+        const ids = get().selection.includes(entityId) ? get().selection : [entityId]
+        return ids.filter((id) => {
+          const e = doc.getEntity(id)
+          return !!e && layerEditable(layerSvc.get(e.layer))
+        })
+      }
+      const ghosts = (fn: EntityTransform): PreviewShape[] =>
+        targets().flatMap((id) => {
+          const e = doc.getEntity(id)
+          const next = e && fn(structuredClone(e))
+          return next ? entityOutline({ ...next, id } as Entity).filter((p) => p.length >= 2).map((points) => ({ kind: 'polyline' as const, points })) : []
+        })
+      const inPlace = (fn: (e: Entity) => void): EntityTransform => (e) => {
+        fn(e)
+        return e
+      }
+      const modes = ['STRETCH', 'MOVE', 'ROTATE', 'SCALE', 'MIRROR'] as const
       void (async () => {
-        const r = await engine.requestGripPoint('Specify new location: ', fromVec3(grip.point), preview)
-        if (r.kind === 'point') get().gripEdit(entityId, grip, [r.point.x, r.point.y, r.point.z], r.pick?.id ?? null)
+        let mode = 0
+        let base = fromVec3(grip.point)
+        let copy = false
+        for (;;) {
+          const name = modes[mode]
+          const opts = { keywords: ['Base point', 'Copy', 'eXit'], enterKeyword: 'next' }
+          const tail = `or [Base point/Copy/eXit]: `
+          print(`** ${name}${copy ? ' (multiple)' : ''} **`)
+          let fn: EntityTransform | null = null
+          let key: string | null = null
+          if (name === 'ROTATE') {
+            const b = toVec3(base)
+            const at = (deg: number) => rotateTransform(b, (deg * Math.PI) / 180)
+            const r = await engine.requestGripValue('angle', `Specify rotation angle ${tail}`, base, (c) => ghosts(at((Math.atan2(c.y - base.y, c.x - base.x) * 180) / Math.PI)), opts)
+            if (r.kind === 'angle') fn = at(r.deg)
+            else key = r.kind === 'keyword' ? r.keyword : 'eXit'
+          } else if (name === 'SCALE') {
+            const b = toVec3(base)
+            const by = (f: number) => inPlace((e) => scaleEntity(e, b, f))
+            const r = await engine.requestGripValue('distance', `Specify scale factor ${tail}`, base, (c) => ghosts(by(Math.hypot(c.x - base.x, c.y - base.y, c.z - base.z) || 1)), opts)
+            if (r.kind === 'distance' && r.value > 0) fn = by(r.value)
+            else key = r.kind === 'keyword' ? r.keyword : r.kind === 'distance' ? 'next' : 'eXit'
+          } else {
+            const verb = name === 'STRETCH' ? 'stretch point' : name === 'MOVE' ? 'move point' : 'second point'
+            const pointFn = (c: Pt): EntityTransform | null => {
+              const d: Vec3 = [c.x - base.x, c.y - base.y, c.z - base.z]
+              if (name === 'MOVE') return inPlace((e) => translateEntity(e, d[0], d[1], d[2]))
+              if (name === 'MIRROR') {
+                const ax = mirrorAxis(toVec3(base), toVec3(c))
+                return ax ? mirrorTransform(ax) : null
+              }
+              // STRETCH: sólo el objeto del grip, con su grip llevado al punto (desde el punto base).
+              return (e) => {
+                if (e.id !== entityId) return e
+                applyGrip(e, grip, [grip.point[0] + d[0], grip.point[1] + d[1], grip.point[2] + d[2]])
+                return e
+              }
+            }
+            const look = (c: Pt) => {
+              const f = pointFn(c)
+              if (!f) return []
+              return name === 'STRETCH' ? preview({ x: grip.point[0] + c.x - base.x, y: grip.point[1] + c.y - base.y, z: grip.point[2] + c.z - base.z }) : ghosts(f)
+            }
+            const r = await engine.requestGripPoint(`Specify ${verb} ${tail}`, base, look, opts)
+            if (r.kind === 'point') {
+              if (name === 'STRETCH' && !copy) {
+                const d = [r.point.x - base.x, r.point.y - base.y, r.point.z - base.z]
+                get().gripEdit(entityId, grip, [grip.point[0] + d[0], grip.point[1] + d[1], grip.point[2] + d[2]], r.pick?.id ?? null)
+                return
+              }
+              fn = pointFn(r.point)
+            } else key = r.kind === 'keyword' ? r.keyword : 'eXit'
+          }
+          if (key === 'next') {
+            mode = (mode + 1) % modes.length
+            continue
+          }
+          if (key === 'Copy') {
+            copy = true
+            continue
+          }
+          if (key === 'Base point') {
+            const b = await engine.requestGripPoint('Specify base point: ', base, () => [])
+            if (b.kind === 'point') base = b.point
+            continue
+          }
+          if (!fn) return // eXit o Esc
+          pushSnapshot()
+          const ids = name === 'STRETCH' ? [entityId] : targets()
+          const res = copy ? addTransformed(doc, ids, fn) : applyTransform(doc, ids, fn)
+          doc.touch()
+          if (!copy) set({ selection: res.ids })
+          bump()
+          if (!copy) return
+        }
       })()
     },
     gripEdit: (entityId, grip, to, pickedId) => {
@@ -1536,11 +1669,24 @@ export const useStore = create<AppState>((set, get) => {
         return layerEditable(l)
       })
       const area = engine.selectionArea
-      const ids = entitiesInScreenBox(selectable, rect, area ? area === 'crossing' : crossing, project)
-      if (area) engine.completeArea(ids)
-      else if (engine.isSelecting) {
+      const cross = area ? area === 'crossing' : crossing
+      const ids = entitiesInScreenBox(selectable, rect, cross, project)
+      // Como el CAD clásico: dentro de un comando avisa lo que quedó afuera por estar en una capa bloqueada.
+      const reportLocked = () => {
+        const locked = doc.entities.filter((e) => {
+          const l = layerSvc.get(e.layer)
+          return !!l && l.locked && l.visible && !l.frozen
+        })
+        const n = locked.length ? entitiesInScreenBox(locked, rect, cross, project).length : 0
+        if (n) print(`${n} ${n === 1 ? 'was' : 'were'} on a locked layer.`)
+      }
+      if (area) {
+        engine.completeArea(ids)
+        reportLocked()
+      } else if (engine.isSelecting) {
         if (subtract) engine.removePicks(ids)
         else engine.addPicks(ids)
+        reportLocked()
       } else if (!engine.busy) {
         // La ventana también acumula (CAD clásico); con Shift resta lo encerrado.
         set({ selection: mergeSelection(get().selection, ids, subtract) })
@@ -1874,6 +2020,12 @@ export const useStore = create<AppState>((set, get) => {
       print(`<Osnap ${next ? 'on' : 'off'}>`)
       saveConfig()
     },
+    toggleDynInput: () => {
+      const next = !get().dynInput
+      set({ dynInput: next })
+      print(next ? '<Dynamic input on: x,y after the first point is relative (# = absolute)>' : '<Dynamic input off: x,y is absolute (@ = relative)>')
+      saveConfig()
+    },
     toggleOtrack: () => {
       const next = !get().otrack
       set({ otrack: next })
@@ -2202,33 +2354,48 @@ export const useStore = create<AppState>((set, get) => {
       print(`<Published ${layouts.length} sheet(s) to "${base}.pdf">`)
     },
     exportPdf: () => {
-      const download = (bytes: Uint8Array, name: string) => {
-        const blob = new Blob([bytes as unknown as BlobPart], { type: 'application/pdf' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = name
-        document.body.appendChild(a)
-        a.click()
-        a.remove()
-        setTimeout(() => URL.revokeObjectURL(url), 1000)
-        print(`<Plotted "${name}">`)
-      }
+      // -PLOT y PLOT ▸ Plot: el layout activo 1:1 con su Page Setup, o el modelo con las opciones del diálogo.
       const base = get().docName || 'drawing'
-      const layout = doc.activeLayout
-      doc.meta.plotted = new Date().toISOString() // campo PlotDate
-      const fields = fieldContextFor(doc, base + DRAWING_EXT, doc.activeTab)
-      if (layout) {
-        // Layout: la hoja 1:1 en su papel, con cada viewport a escala.
-        download(plotLayouts([layoutPlotInput(layout.id, base)]), `${base}-${layout.name}.pdf`)
-        return
-      }
-      const { empty, bytes } = exportPdf(resolveFieldTexts(expandEntities(doc.entities, doc.blocks, { attdisp: doc.attdisp, skipLayers: frozenLayerIds(doc.layers) }), fields), doc.layers, { linetypes: doc.linetypeContext('model') })
-      if (empty) {
+      const r = get().plotPreview(get().plotSettings)
+      if (r.empty && !r.layout) {
         print('Nothing to plot (no printable/visible geometry).')
         return
       }
-      download(bytes, `${base}.pdf`)
+      doc.meta.plotted = new Date().toISOString() // campo PlotDate
+      const name = r.layout ? `${base}-${r.layout}.pdf` : `${base}.pdf`
+      downloadBytes(pdfDocument([r.page]), name)
+      print(`<Plotted "${name}">`)
+    },
+    plotPreview: (st) => {
+      const base = get().docName || 'drawing'
+      const layout = doc.activeLayout
+      const vp = get().activeViewport
+      const displayAvailable = !layout && !!vp && vp.kind === 'model' && vp.isPlanView()
+      if (layout) {
+        // Layout: la hoja 1:1 en su papel, con cada viewport a escala (Page Setup).
+        return { page: layoutPage(layoutPlotInput(layout.id, base)), empty: false, layout: layout.name, displayAvailable, scale: 1 }
+      }
+      const fields = fieldContextFor(doc, base + DRAWING_EXT, doc.activeTab)
+      const entities = resolveFieldTexts(expandEntities(doc.entities, doc.blocks, { attdisp: doc.attdisp, skipLayers: frozenLayerIds(doc.layers) }), fields)
+      const area: PlotArea | undefined =
+        st.area === 'window' && st.window ? st.window : st.area === 'display' && displayAvailable ? (vp!.displayRect() ?? undefined) : undefined
+      const { page, empty, transform } = modelPlotPage(entities, doc.layers, {
+        page: plotPage(st),
+        linetypes: doc.linetypeContext('model'),
+        area,
+        center: st.center,
+        scale: st.scale === null ? undefined : paperPerModel(st.scale, doc.units) * MM_TO_PT,
+        style: { plotStyle: st.plotStyle, lineWeights: st.lineWeights },
+      })
+      // Escala papel:dibujo que resulta (la de "ajustar al papel" se calcula).
+      return { page, empty, layout: null, displayAvailable, scale: empty ? null : transform.s / MM_TO_PT / unitToMm(doc.units) }
+    },
+    resolvePlot: (r, st) => {
+      const res = plotResolve
+      plotResolve = null
+      set(st ? { plotOpen: false, plotSettings: st } : { plotOpen: false })
+      if (r === 'plot') get().exportPdf()
+      res?.(r)
     },
     importFile: () => {
       const input = document.createElement('input')
@@ -2313,6 +2480,7 @@ export const useStore = create<AppState>((set, get) => {
           print(`Opened "${file.name}" from the device (${n} entities).`)
         }
         bump()
+        markSaved()
         get().activeViewport?.zoomExtents()
       } catch (err) {
         if (err instanceof ApiError && err.status === 501) print('DWG converter not available on the server.')
@@ -2540,7 +2708,13 @@ export const useStore = create<AppState>((set, get) => {
         viewportLayout: 1,
       })
       bump()
+      // Un dibujo nuevo empieza en planta (sin la vista ni la UCS del anterior).
+      for (const vp of get().viewports) if (vp.kind === 'model') vp.setView('TOP')
+      restoreModelUcs()
+      markSaved()
     },
+    isDirty: () => doc.revision !== savedRev,
+    markSaved,
     setDocName: (name) => set({ docName: name }),
     setDocPath: (path) => {
       const trimmed = path.replace(/^\/+|\/+$/g, '')
@@ -2568,33 +2742,37 @@ export const useStore = create<AppState>((set, get) => {
         a.remove()
         setTimeout(() => URL.revokeObjectURL(url), 1000)
         print(`<Saved "${file}" to your downloads>`)
-        return
+        markSaved()
+        return true
       }
       // Modo carpeta local: el dibujo se escribe como .cota en la carpeta elegida.
       if (workspaceDir) {
         if (!(await ensurePermission(workspaceDir))) {
           print('Permission to write in the folder was denied.')
-          return
+          return false
         }
         const text = JSON.stringify(doc.toJSON())
         try {
           if (currentFile) {
             await writeTextFile(currentFile, text)
             print(`<Saved "${get().fsFilePath ?? docName}">`)
-            return
+            markSaved()
+            return true
           }
           const written = await writeDrawing(workspaceDir, docFolder, docName, text, DRAWING_EXT)
           if (!written) {
             print('Could not create the file in the working folder.')
-            return
+            return false
           }
           currentFile = written.handle
           set({ fsFilePath: written.path, docId: null })
           print(`<Saved "${written.path}">`)
+          markSaved()
+          return true
         } catch {
           print('Save failed: the file could not be written.')
+          return false
         }
-        return
       }
       try {
         const data = doc.toJSON()
@@ -2605,8 +2783,11 @@ export const useStore = create<AppState>((set, get) => {
           set({ docId: created.id })
         }
         print(`<Saved "${docFolder ? docFolder + '/' : ''}${docName}">`)
+        markSaved()
+        return true
       } catch (err) {
         print(err instanceof ApiError ? `Save failed: ${err.message}` : 'Save failed: network error')
+        return false
       }
     },
     openDocumentsDialog: async () => {
@@ -2690,6 +2871,7 @@ export const useStore = create<AppState>((set, get) => {
           currentFile = null // un DXF importado se guarda como .cota nuevo
           set({ docId: null, docName: name, docFolder: folder, fsFilePath: null, openOpen: false, selection: [] })
           print(`Imported "${path}" (${n} entities).`)
+          markSaved()
         } else {
           doc.load(JSON.parse(text) as DocumentData)
           restoreModelUcs()
@@ -2705,6 +2887,7 @@ export const useStore = create<AppState>((set, get) => {
             viewportLayout: doc.viewportLayout,
           })
           print(`Opened "${path}".`)
+          markSaved()
         }
         bump()
       } catch {
@@ -2726,6 +2909,7 @@ export const useStore = create<AppState>((set, get) => {
           viewportLayout: doc.viewportLayout,
         })
         bump()
+        markSaved()
         print(`Opened "${payload.name}".`)
       } catch (err) {
         print(err instanceof ApiError ? err.message : 'Could not open document')

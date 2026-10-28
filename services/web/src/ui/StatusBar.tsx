@@ -185,6 +185,8 @@ export function StatusBar() {
   const gridOn = useStore((s) => s.gridOn)
   const setGrid = useStore((s) => s.setGrid)
   const toggleOtrack = useStore((s) => s.toggleOtrack)
+  const dynInput = useStore((s) => s.dynInput)
+  const toggleDynInput = useStore((s) => s.toggleDynInput)
   const setUcs = useStore((s) => s.setUcs)
   const setCurrentLayer = useStore((s) => s.setCurrentLayer)
   const openLayers = useStore((s) => s.openLayers)
@@ -195,7 +197,7 @@ export function StatusBar() {
 
   const isWorld = isWorldUcs(ucs)
   const local = worldToUcs(cursor, ucs)
-  // Al continuar desde un punto (hay base), las coordenadas se toman RELATIVAS → mostrar Δ + distancia.
+  // Al continuar desde un punto (hay base) se muestra el Δ y la distancia desde él.
   const base = engine.snapBase()
   const rel = base ? worldToUcs(base, ucs) : null
 
@@ -284,6 +286,15 @@ export function StatusBar() {
           onClick={withFocus(toggleOtrack)}
         >
           OTRACK
+        </button>
+        <button
+          className={'status-toggle' + (dynInput ? ' on' : '')}
+          title={dynInput ? 'Dynamic input (F12): x,y after the first point is relative; # = absolute' : 'Dynamic input (F12) off: x,y is absolute; @ = relative'}
+          data-testid="dyn-toggle"
+          aria-pressed={dynInput}
+          onClick={withFocus(toggleDynInput)}
+        >
+          DYN
         </button>
         <button
           className={'status-toggle' + (isWorld ? '' : ' on')}

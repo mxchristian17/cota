@@ -44,9 +44,9 @@ test.describe('Cota editing', () => {
   })
 
   test('draws PLINE / RECTANGLE / SPLINE and returns to Command prompt', async ({ page }) => {
-    await typeCmd(page, 'PLINE', '0,0', '10,0', '10,10', 'Close')
-    await typeCmd(page, 'RECTANGLE', '20,0', '40,15')
-    await typeCmd(page, 'SPLINE', '0,20', '10,30', '20,20', '')
+    await typeCmd(page, 'PLINE', '0,0', '@10,0', '@10,10', 'Close')
+    await typeCmd(page, 'RECTANGLE', '20,0', '@40,15')
+    await typeCmd(page, 'SPLINE', '0,20', '@10,30', '@20,20', '')
     await expect(page.locator('.cmd-prompt')).toHaveText('Command:')
   })
 

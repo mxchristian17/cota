@@ -29,6 +29,8 @@ export interface CommandEngineDeps {
   doc: DocumentModel
   currentLayerId: () => string
   isOrtho: () => boolean
+  /** Entrada dinámica (F12): coordenadas tecleadas relativas al punto anterior sin `@`. */
+  isDynInput?: () => boolean
   currentCursor: () => Pt
   currentUcs: () => Ucs
   currentSelection: () => string[]
@@ -79,6 +81,7 @@ type Pending =
       measure?: (p: Pt) => number
       keywords: string[]
       def?: number
+      enterKeyword?: string
       preview?: PreviewFn
       resolve: (r: DistanceResult) => void
     }
@@ -89,6 +92,7 @@ type Pending =
       relativeTo?: Pt
       keywords: string[]
       def?: number
+      enterKeyword?: string
       preview?: PreviewFn
       resolve: (r: AngleResult) => void
     }
@@ -119,12 +123,18 @@ type Pending =
  * Framework-agnostic: la UI le entrega texto (línea de comandos) o puntos
  * (clicks del viewport) y el engine resuelve el prompt pendiente.
  */
+/** Esc durante un comando: el comando que vuelva a preguntar algo se corta (como el CAD clásico, Esc cancela todo). */
+class CommandCancelled extends Error {}
+
 export class CommandEngine {
   private readonly commands: Command[] = []
   private readonly lookup = new Map<string, Command>()
   private pending: Pending | null = null
   private activeCommand: Command | null = null
   private lastPoint: Pt | null = null
+  private dyn = () => this.deps.isDynInput?.() ?? false
+  /** Base de lo relativo: la del prompt; sin ella, `@` sigue siendo relativo al último punto (LASTPOINT). */
+  private relBase = (base: Pt | null, text: string): Pt | null => base ?? (text.startsWith('@') ? this.lastPoint : null)
   /** Override de snap de un solo uso (tecleado en el prompt: cen/end/mid/…). */
   private osnapOverrideKind: OsnapKind | null = null
   /** Historial de comandos ejecutados (para recuperar con ↑/↓) y repetir con Enter. */
@@ -141,13 +151,20 @@ export class CommandEngine {
   private ducsRun = false
   private replay: Array<string | Pt> = []
   private restart: { name: string; ucs: Ucs; replay: Array<string | Pt> } | null = null
+  /** Hubo Esc en el comando en curso: un prompt más lo termina (ver `CommandCancelled`). */
+  private escaped = false
+
+  /** Un prompt del comando en curso, salvo que ya se haya cancelado con Esc. */
+  private ask<T>(f: () => Promise<T>): Promise<T> {
+    return this.escaped && this.activeCommand ? Promise.reject(new CommandCancelled()) : f()
+  }
 
   constructor(private readonly deps: CommandEngineDeps) {
     this.ctx = {
-      getPoint: (prompt, opts) => this.requestPoint(prompt, opts),
-      getDistance: (prompt, opts) => this.requestDistance(prompt, opts),
-      getAngle: (prompt, opts) => this.requestAngle(prompt, opts),
-      getSelection: (prompt) => this.requestSelection(prompt),
+      getPoint: (prompt, opts) => this.ask(() => this.requestPoint(prompt, opts)),
+      getDistance: (prompt, opts) => this.ask(() => this.requestDistance(prompt, opts)),
+      getAngle: (prompt, opts) => this.ask(() => this.requestAngle(prompt, opts)),
+      getSelection: (prompt) => this.ask(() => this.requestSelection(prompt)),
       markPicked: (ids) => {
         for (const id of ids) if (!this.picked.includes(id)) this.picked.push(id)
         this.deps.onPicked?.([...this.picked])
@@ -157,7 +174,7 @@ export class CommandEngine {
         this.deps.onSelectionChange(ids)
       },
       getSelectionOrKeyword: (prompt, keywords) =>
-        new Promise((resolve) => {
+        this.ask(() => new Promise((resolve) => {
           this.selectionUsed = true
           this.pending = {
             type: 'selection',
@@ -169,8 +186,8 @@ export class CommandEngine {
             onKeyword: (keyword) => resolve({ kind: 'keyword', keyword }),
           }
           this.setPrompt(prompt)
-        }),
-      getString: (prompt, opts) => this.requestString(prompt, opts),
+        })),
+      getString: (prompt, opts) => this.ask(() => this.requestString(prompt, opts)),
       print: (msg) => this.deps.onPrint(msg),
       openHelp: () => this.deps.onOpenHelp(),
       app: this.deps.app,
@@ -389,7 +406,7 @@ export class CommandEngine {
     // punto y lo ya tecleado se repiten); al terminar vuelve la UCS anterior.
     if (face && this.ducsEligible && this.activeCommand) {
       this.restart = { name: this.activeCommand.name, ucs: face, replay: [...this.runInputs, { ...world }] }
-      this.cancel()
+      this.cancel(true)
       return
     }
     if (this.pending.type === 'selection') {
@@ -421,12 +438,16 @@ export class CommandEngine {
     return this.pending?.type ?? null
   }
 
-  /** Cancelación (ESC). */
-  cancel(): void {
+  /** Cancelación (ESC); `quiet` = sin `*Cancel*` (el reinicio de la UCS dinámica). */
+  cancel(quiet = false): void {
     const pending = this.pending
     if (!pending) return
     this.osnapOverrideKind = null
     this.pending = null
+    if (this.activeCommand && !this.escaped) {
+      this.escaped = true
+      if (!quiet) this.deps.onPrint('*Cancel*')
+    }
     if (pending.type === 'selection') pending.resolve(null)
     else if (pending.type === 'string') pending.resolve(null)
     else pending.resolve({ kind: 'cancel' })
@@ -442,6 +463,7 @@ export class CommandEngine {
       return
     }
     this.activeCommand = cmd
+    this.escaped = false
     this.lastPoint = null
     this.lastCmdName = cmd.name
     if (this.history[this.history.length - 1] !== cmd.name) this.history.push(cmd.name)
@@ -456,13 +478,18 @@ export class CommandEngine {
     const u = this.deps.currentUcs()
     const ctx = cmd.planar && !isWorldAligned(u) ? frameContext(this.ctx, u) : this.ctx
     try {
-      await cmd.run(ctx)
+      try {
+        await cmd.run(ctx)
+      } catch (err) {
+        if (!(err instanceof CommandCancelled)) throw err
+      }
       if (ctx !== this.ctx) flushFrame(ctx)
     } catch (err) {
       this.deps.onPrint(`Error: ${err instanceof Error ? err.message : String(err)}`)
       reportError(`${cmd.name} failed`, err)
     } finally {
       this.activeCommand = null
+      this.escaped = false
       this.pending = null
       // Como el CAD clásico: terminado un comando que pidió objetos, la selección se vacía (sigue disponible
       // como `Previous`); SELECT la deja armada para el comando siguiente.
@@ -506,10 +533,24 @@ export class CommandEngine {
    * coordenadas (absolutas/relativas), con ORTHO/snap y preview del fantasma. ESC lo cancela. Al
    * resolverse limpia el prompt. Reutiliza toda la maquinaria de `getPoint`.
    */
-  async requestGripPoint(prompt: string, base: Pt, preview: PreviewFn): Promise<PointResult> {
-    const r = await this.requestPoint(prompt, { base, preview })
+  async requestGripPoint(prompt: string, base: Pt, preview: PreviewFn, opts: { keywords?: string[]; enterKeyword?: string } = {}): Promise<PointResult> {
+    const r = await this.requestPoint(prompt, { base, preview, ...opts })
     this.setPrompt('')
     return r
+  }
+
+  /** Como `requestGripPoint`, para un ángulo (ROTATE de los grips) o un factor/distancia (SCALE). */
+  async requestGripValue<K extends 'angle' | 'distance'>(
+    kind: K,
+    prompt: string,
+    base: Pt,
+    preview: PreviewFn,
+    opts: { keywords?: string[]; enterKeyword?: string } = {},
+  ): Promise<K extends 'angle' ? AngleResult : DistanceResult> {
+    const o = { base, preview, ...opts }
+    const r = kind === 'angle' ? await this.requestAngle(prompt, o) : await this.requestDistance(prompt, o)
+    this.setPrompt('')
+    return r as K extends 'angle' ? AngleResult : DistanceResult
   }
 
   private requestPoint(prompt: string, opts?: GetPointOptions): Promise<PointResult> {
@@ -540,6 +581,7 @@ export class CommandEngine {
         relativeTo: opts.relativeTo,
         keywords: opts.keywords ?? [],
         def: opts.default,
+        enterKeyword: opts.enterKeyword,
         preview: opts.preview,
         resolve,
       }
@@ -555,6 +597,7 @@ export class CommandEngine {
         measure: opts.measure,
         keywords: opts.keywords ?? [],
         def: opts.default,
+        enterKeyword: opts.enterKeyword,
         preview: opts.preview,
         resolve,
       }
@@ -636,6 +679,17 @@ export class CommandEngine {
     this.deps.onSelectionChange([...sel.ids])
   }
 
+  /** Como el CAD clásico: cuántos de los que tomaría la ventana o el borde quedaron afuera por estar bloqueados. */
+  private reportLocked(pick: (ents: Entity[]) => string[]): void {
+    const layers = new Map(this.deps.doc.layers.map((l) => [l.id, l]))
+    const locked = this.deps.doc.entities.filter((e) => {
+      const l = layers.get(e.layer)
+      return !!l && l.locked && l.visible && !l.frozen
+    })
+    const n = locked.length ? pick(locked).length : 0
+    if (n) this.deps.onPrint(`${n} ${n === 1 ? 'was' : 'were'} on a locked layer.`)
+  }
+
   /** Punto de una ventana/cruce/polígono/borde en curso; al completarse, selecciona. */
   private addSelPoint(sel: Extract<Pending, { type: 'selection' }>, p: Pt): void {
     const sub = sel.sub!
@@ -643,7 +697,9 @@ export class CommandEngine {
     const ents = selectableEntities(this.deps.doc)
     if ((sub.kind === 'Window' || sub.kind === 'Crossing') && sub.pts.length === 2) {
       sel.sub = undefined
-      this.applySel(sel, inPolygon(ents, rectPolygon(sub.pts[0], sub.pts[1]), sub.kind === 'Crossing'), !!sel.remove)
+      const pick = (list: Entity[]) => inPolygon(list, rectPolygon(sub.pts[0], sub.pts[1]), sub.kind === 'Crossing')
+      this.applySel(sel, pick(ents), !!sel.remove)
+      this.reportLocked(pick)
       this.setPrompt(sel.prompt)
       return
     }
@@ -658,8 +714,16 @@ export class CommandEngine {
         // Fin del polígono / borde.
         sel.sub = undefined
         const ents = selectableEntities(this.deps.doc)
-        if (sub.kind === 'Fence' && sub.pts.length >= 2) this.applySel(sel, byFence(ents, sub.pts), !!sel.remove)
-        else if ((sub.kind === 'WPolygon' || sub.kind === 'CPolygon') && sub.pts.length >= 3) this.applySel(sel, inPolygon(ents, sub.pts, sub.kind === 'CPolygon'), !!sel.remove)
+        const pick =
+          sub.kind === 'Fence' && sub.pts.length >= 2
+            ? (list: Entity[]) => byFence(list, sub.pts)
+            : (sub.kind === 'WPolygon' || sub.kind === 'CPolygon') && sub.pts.length >= 3
+              ? (list: Entity[]) => inPolygon(list, sub.pts, sub.kind === 'CPolygon')
+              : null
+        if (pick) {
+          this.applySel(sel, pick(ents), !!sel.remove)
+          this.reportLocked(pick)
+        }
         this.setPrompt(sel.prompt)
         return
       }
@@ -667,7 +731,7 @@ export class CommandEngine {
         sub.pts.pop()
         return
       }
-      const p = parseCoordinate(trimmed, sub.pts[sub.pts.length - 1] ?? this.lastPoint, this.deps.currentUcs())
+      const p = parseCoordinate(trimmed, sub.pts[sub.pts.length - 1] ?? this.lastPoint, this.deps.currentUcs(), this.dyn())
       if (p) this.addSelPoint(sel, p)
       else this.deps.onPrint('*Invalid point*')
       return
@@ -763,7 +827,7 @@ export class CommandEngine {
       if (pending.type === 'distance' && pending.def !== undefined) pending.resolve({ kind: 'distance', value: pending.def })
       else if (pending.type === 'angle' && pending.def !== undefined) pending.resolve({ kind: 'angle', deg: pending.def })
       else {
-        const enterKw = pending.type === 'point' ? pending.enterKeyword : undefined
+        const enterKw = pending.type === 'point' || pending.type === 'distance' || pending.type === 'angle' ? pending.enterKeyword : undefined
         pending.resolve(enterKw ? { kind: 'keyword', keyword: enterKw } : { kind: 'cancel' })
       }
       return
@@ -808,7 +872,7 @@ export class CommandEngine {
         return
       }
 
-      const p = parseCoordinate(trimmed, pending.base, this.deps.currentUcs())
+      const p = parseCoordinate(trimmed, this.relBase(pending.base, trimmed), this.deps.currentUcs(), this.dyn())
       if (!p) {
         // Mensajes del CAD clásico: con opciones, pide punto u opción; sin ellas, sólo punto.
         this.deps.onPrint(pending.keywords?.length ? 'Point or option keyword required.' : 'Invalid point.')
@@ -829,7 +893,7 @@ export class CommandEngine {
         pending.resolve({ kind: 'angle', deg })
         return
       }
-      const ap = parseCoordinate(trimmed, pending.base, this.deps.currentUcs())
+      const ap = parseCoordinate(trimmed, this.relBase(pending.base, trimmed), this.deps.currentUcs(), this.dyn())
       if (ap) {
         const next = this.directedAngle(pending.base, ap, pending.relativeTo)
         this.pending = null
@@ -847,7 +911,7 @@ export class CommandEngine {
       pending.resolve({ kind: 'distance', value: n })
       return
     }
-    const p = parseCoordinate(trimmed, pending.base, this.deps.currentUcs())
+    const p = parseCoordinate(trimmed, this.relBase(pending.base, trimmed), this.deps.currentUcs(), this.dyn())
     if (p) {
       const base = pending.base
       this.pending = null

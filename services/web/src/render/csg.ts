@@ -408,6 +408,15 @@ function loftGeometry(sections: Vec3[][]): THREE.BufferGeometry {
   // Tapa final (fan).
   const last = (sections.length - 1) * n
   for (let j = 1; j < n - 1; j++) indices.push(last, last + j, last + j + 1)
+  // El sentido de las caras depende del de los anillos respecto del avance del loft: si el volumen sale negativo
+  // (anillos horarios vistos desde la última sección), se dan vuelta todas para que miren hacia afuera.
+  let vol = 0
+  const P = (k: number) => [positions[3 * k], positions[3 * k + 1], positions[3 * k + 2]]
+  for (let t = 0; t < indices.length; t += 3) {
+    const [a, b, c] = [P(indices[t]), P(indices[t + 1]), P(indices[t + 2])]
+    vol += a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])
+  }
+  if (vol < 0) for (let t = 0; t < indices.length; t += 3) [indices[t + 1], indices[t + 2]] = [indices[t + 2], indices[t + 1]]
 
   const geom = new THREE.BufferGeometry()
   geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))

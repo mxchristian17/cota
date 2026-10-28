@@ -17,7 +17,6 @@ test.describe('Cota POINT and DIVIDE', () => {
     await page.mouse.click(lx, ly)
     await cmd('5')
     expect(await st("return s.doc.entities.filter((e) => e.type === 'POINT').length")).toBe(4)
-    await page.screenshot({ path: '/tmp/claude-1000/-home-christian-Desktop-Christian-repositorios-ccad/c39e7fe9-05f2-44f5-899d-488f3aef36c1/scratchpad/points.png' })
     // Un clic sobre un punto lo selecciona.
     const [px, py] = await scr(40, 0)
     await st('s.clearSelection()')

@@ -13,7 +13,6 @@ test.describe('Cota OPTIONS', () => {
     await page.getByTestId('options-tab-editing').click()
     await page.getByTestId('sysvar-PROJMODE').selectOption('View')
     await page.getByTestId('sysvar-EDGEMODE').check()
-    await page.screenshot({ path: '/tmp/claude-1000/-home-christian-Desktop-Christian-repositorios-ccad/c39e7fe9-05f2-44f5-899d-488f3aef36c1/scratchpad/options.png' })
     await page.getByTestId('options-dialog').click({ position: { x: 5, y: 5 } }) // clic afuera: cierra
     await expect(page.getByTestId('options-dialog')).toHaveCount(0)
     await input.fill('ZOOMFACTOR')

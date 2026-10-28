@@ -19,6 +19,13 @@ describe('comandos de cota por tipo', () => {
     expect(formatDim(last(h))).toMatch(/^49,5\d* TYP$|^49,5 TYP$/)
   })
 
+  it('DIMLINEAR acepta la ubicación de la línea de cota relativa al último punto (@)', async () => {
+    const h = makeEngine()
+    await h.run('DIMLINEAR', '0,0', '40,0', '@-20,-15')
+    expect(measureDim(last(h))).toBeCloseTo(40, 9)
+    expect(last(h).textPos[1]).toBeCloseTo(-15, 9)
+  })
+
   it('DIMLINEAR con <select object>: una línea da sus extremos y queda asociada', async () => {
     const h = makeEngine()
     const l = h.add('LINE', { start: [0, 0, 0], end: [25, 0, 0] })

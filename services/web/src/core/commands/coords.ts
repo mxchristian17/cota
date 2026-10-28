@@ -4,17 +4,17 @@ import { ucsDirToWorld, ucsToWorld, WORLD_UCS, type Ucs } from '../ucs'
 /**
  * Parsea una coordenada tecleada en la línea de comandos, en los ejes de la UCS activa.
  *
- * Al **continuar desde un punto** (hay `base`), las coordenadas son **relativas** a ese punto (como la
- * entrada dinámica del CAD clásico). Para el **primer punto** (sin `base`) son absolutas.
+ * Como en la línea de comandos del CAD clásico, las coordenadas son **absolutas** y `@` las hace relativas al
+ * punto anterior (`base`). Con la **entrada dinámica** (`dynamic`, F12) el segundo punto y los siguientes son
+ * relativos sin `@`, como en el cuadro junto al cursor del CAD clásico; `#` fuerza absoluta.
  * Formatos (la Z omitida vale 0 en la UCS):
- *   - Relativa (default con base):  "dx,dy[,dz]" · "dist<ang" (polar en el XY de la UCS)
- *   - Relativa explícita:           "@dx,dy[,dz]" · "@dist<ang" · "@dist<ang,dz" (cilíndrica) ·
+ *   - Absoluta en la UCS:           "x,y[,z]" · "dist<ang" (polar en el XY de la UCS) · "#x,y[,z]"
+ *   - Relativa:                     "@dx,dy[,dz]" · "@dist<ang" · "@dist<ang,dz" (cilíndrica) ·
  *                                   "@dist<angXY<angZ" (esférica: ángulo sobre el XY)
- *   - Absoluta en la UCS:           "#x,y[,z]" · "#dist<ang" (y sin base: "x,y[,z]", "dist<ang"…)
  *   - Absoluta en el mundo (WCS):   "*x,y[,z]"
  * `base` está en coordenadas de mundo. Devuelve el punto en mundo, o null si es inválido.
  */
-export function parseCoordinate(text: string, base: Pt | null, ucs: Ucs = WORLD_UCS): Pt | null {
+export function parseCoordinate(text: string, base: Pt | null, ucs: Ucs = WORLD_UCS, dynamic = false): Pt | null {
   const s = text.trim()
   if (!s) return null
 
@@ -30,8 +30,8 @@ export function parseCoordinate(text: string, base: Pt | null, ucs: Ucs = WORLD_
   const body = absolute || explicitRel ? s.slice(1) : s
   // '@' solo = el punto base (en el CAD clásico: "@" repite el último punto; BREAK lo usa para cortar sin quitar).
   if (explicitRel && body.trim() === '') return base ? pt(base.x, base.y, base.z) : null
-  // Relativo: por '@', o cuando hay un punto base (se continúa desde una geometría).
-  const relative = !absolute && (explicitRel || base != null)
+  // Relativo: por '@', o con la entrada dinámica cuando hay un punto base (se continúa desde una geometría).
+  const relative = !absolute && (explicitRel || (dynamic && base != null))
   if (relative && base == null) return null // '@' sin base
 
   const local = body.includes('<') ? parsePolar(body) : parseCartesian(body)

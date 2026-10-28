@@ -1,9 +1,32 @@
 import type { Command } from '../types'
+import type { PlotArea } from '../../io/pdf'
 
 export const plotCommand: Command = {
   name: 'PLOT',
   aliases: ['PRINT'],
-  description: 'Export the drawing (or the active layout sheet at 1:1) to a vector PDF',
+  description: 'Plot to a vector PDF from a dialog with preview: paper, orientation, area (Extents/Display/Window), scale, plot style; a layout plots 1:1 with its page setup',
+  async run(ctx) {
+    if (!ctx.app.plotDialog) return ctx.app.exportPdf()
+    let window: PlotArea | null = null
+    for (;;) {
+      const r = await ctx.app.plotDialog(window)
+      if (r !== 'window') return
+      // Window <: el diálogo se esconde mientras se marcan las dos esquinas.
+      const a = await ctx.getPoint('Specify first corner: ', { base: null })
+      if (a.kind !== 'point') return
+      const b = await ctx.getPoint('Specify opposite corner: ', { base: a.point, corner: true })
+      if (b.kind !== 'point') return
+      const [p, q] = [a.point, b.point]
+      window = { minX: Math.min(p.x, q.x), minY: Math.min(p.y, q.y), maxX: Math.max(p.x, q.x), maxY: Math.max(p.y, q.y) }
+    }
+  },
+}
+
+/** -PLOT: plotea directamente con las últimas opciones (para scripts y macros). */
+export const plotNowCommand: Command = {
+  name: '-PLOT',
+  aliases: ['-PRINT'],
+  description: 'Plot to PDF right away with the last PLOT settings (no dialog)',
   async run(ctx) {
     ctx.app.exportPdf()
   },

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { exportDxf, importDxf } from './dxf'
+import { exportDxf, importDxf, plainMtext } from './dxf'
+import { textTop } from '../geom/text'
+import type { TextProps } from '../document/types'
 import { DEFAULT_DIM_STYLE } from '../dimension/dimGeometry'
 import type { DimensionProps, Entity, Layer } from '../document/types'
 import { formatDim, measureDim } from '../dimension/dimGeometry'
@@ -258,10 +260,48 @@ describe('DXF con OCS del CAD clásico', () => {
     expect(back.type).toBe('POLYLINE')
     ;(back.props.vertices as number[][]).forEach((v, i) => near(v, (pl.props as { vertices: number[][] }).vertices[i]))
     near(back.props.normal as number[], [0, -1, 0])
+    // Un texto anclado arriba (dibujos anteriores) vuelve como TEXT sobre su línea base, en el mismo lugar.
     const t = ent('TEXT', { position: [1, 0, 2], text: 'A', height: 2.5, rotation: 0.3, justify: 'left', normal: [0, -1, 0] })
     const bt = roundTrip(t)
-    near(bt.props.position as number[], [1, 0, 2])
+    expect(bt.props.kind).toBe('text')
+    near(textTop(bt.props as unknown as TextProps), [1, 0, 2])
     expect(bt.props.rotation as number).toBeCloseTo(0.3, 9)
+    const b = ent('TEXT', { position: [1, 0, 2], text: 'A', height: 2.5, rotation: 0.3, justify: 'left', normal: [0, -1, 0], kind: 'text' })
+    near(roundTrip(b).props.position as number[], [1, 0, 2])
+  })
+})
+
+describe('DXF: TEXT y MTEXT del CAD clásico', () => {
+  const ent = (props: Partial<TextProps>): Entity =>
+    ({ id: 't', type: 'TEXT', layer: '0', props: { position: [0, 0, 0], text: 'A', height: 2, rotation: 0, justify: 'left', normal: [0, 0, 1], ...props } }) as Entity
+  const one = (dxf: string) => importDxf(dxf).entities[0].props as unknown as TextProps
+  const body = (codes: Array<[number, string | number]>) =>
+    ['0', 'SECTION', '2', 'ENTITIES', ...codes.flatMap(([c, v]) => [String(c), String(v)]), '0', 'ENDSEC', '0', 'EOF'].join('\n')
+
+  it('TEXT centrado o a la derecha guarda el punto en 11/21/31 y vuelve igual; los símbolos van como %%c %%d %%p', () => {
+    for (const justify of ['center', 'right'] as const) {
+      const dxf = exportDxf([ent({ position: [10, 5, 0], justify, kind: 'text', text: 'Ø20 ±0.1 45°' })], [])
+      expect(dxf).toContain('%%c20 %%p0.1 45%%d')
+      const back = one(dxf)
+      expect(back.justify).toBe(justify)
+      expect(back.position).toEqual([10, 5, 0])
+      expect(back.text).toBe('Ø20 ±0.1 45°')
+    }
+  })
+
+  it('TEXT con justificación vertical (73) se baja a la línea base; MTEXT anclado al medio o abajo se sube', () => {
+    const top = one(body([[0, 'TEXT'], [10, 0], [20, 0], [30, 0], [40, 2], [1, 'X'], [72, 0], [11, 5], [21, 8], [31, 0], [73, 3]]))
+    expect(top.position).toEqual([5, 6, 0])
+    const mid = one(body([[0, 'MTEXT'], [10, 0], [20, 10], [30, 0], [40, 2], [71, 5], [1, 'A\\PB']]))
+    expect(mid.justify).toBe('center')
+    expect(mid.kind).toBe('mtext')
+    expect(mid.position[1]).toBeCloseTo(10 + 2 * 2 * 1.35 * 0.5, 9)
+  })
+
+  it('el MTEXT llega como texto plano: sin códigos de formato, con renglones y Unicode', () => {
+    expect(plainMtext('{\\fArial|b1|i0;\\H2.5;Hola}\\Pmundo \\U+2205 20 \\S1/2; \\{x\\}')).toBe('Hola\nmundo ∅ 20 1/2 {x}')
+    const m = one(body([[0, 'MTEXT'], [10, 0], [20, 0], [30, 0], [40, 2], [1, '%%c10\\P{\\C1;rojo}']]))
+    expect(m.text).toBe('Ø10\nrojo')
   })
 })
 

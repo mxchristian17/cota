@@ -32,16 +32,23 @@ describe('parseCoordinate', () => {
     expect(parseCoordinate('@10,10', null)).toBeNull()
   })
 
-  it('con base, las coordenadas planas son RELATIVAS (continuar desde un punto)', () => {
-    expect(parseCoordinate('30,0', pt(10, 10, 0))).toEqual(pt(40, 10, 0))
+  it('con base, "x,y" es ABSOLUTO (línea de comandos del CAD clásico); "@x,y" es relativo', () => {
+    expect(parseCoordinate('30,0', pt(10, 10, 0))).toEqual(pt(30, 0, 0))
+    expect(parseCoordinate('@30,0', pt(10, 10, 0))).toEqual(pt(40, 10, 0))
+  })
+
+  it('con la entrada dinámica (F12), "x,y" tras el primer punto es RELATIVO y "#x,y" absoluto', () => {
+    expect(parseCoordinate('30,0', pt(10, 10, 0), undefined, true)).toEqual(pt(40, 10, 0))
+    expect(parseCoordinate('#30,0', pt(10, 10, 0), undefined, true)).toEqual(pt(30, 0, 0))
+    expect(parseCoordinate('30,0', null, undefined, true)).toEqual(pt(30, 0, 0))
   })
 
   it('con base, "#x,y" fuerza ABSOLUTO', () => {
     expect(parseCoordinate('#30,0', pt(10, 10, 0))).toEqual(pt(30, 0, 0))
   })
 
-  it('con base, la forma polar plana "dist<ang" es relativa', () => {
-    const r = parseCoordinate('50<90', pt(0, 0, 0))!
+  it('con la entrada dinámica, la forma polar plana "dist<ang" es relativa', () => {
+    const r = parseCoordinate('50<90', pt(0, 0, 0), undefined, true)!
     expect(r.x).toBeCloseTo(0, 6)
     expect(r.y).toBeCloseTo(50, 6)
   })

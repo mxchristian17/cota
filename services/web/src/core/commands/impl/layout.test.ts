@@ -78,7 +78,7 @@ describe('MVIEW / VPORTS en layout', () => {
 
   it('dos esquinas y Fit (Enter) crean viewports a extensiones', async () => {
     const h = inLayout()
-    await h.run('MV', '#20,20', '200,100')
+    await h.run('MV', '#20,20', '@200,100')
     expect(vps(h)[0].props).toMatchObject({ center: [120, 70, 0], width: 200, height: 100 })
     expect(vps(h)[0].props.target).toEqual([2000, 1500, 0])
     await h.run('MV', '')
@@ -113,7 +113,7 @@ describe('MVIEW / VPORTS en layout', () => {
 
   it('Polygonal y Object crean viewports recortados', async () => {
     const h = inLayout()
-    await h.run('MV', 'P', '#10,10', '100,0', '0,50', '')
+    await h.run('MV', 'P', '#10,10', '@100,0', '@0,50', '')
     const [poly] = vps(h)
     expect(poly.props.clip).toEqual([[10, 10], [110, 10], [110, 60]])
     expect(poly.props).toMatchObject({ width: 100, height: 50, center: [60, 35, 0] })

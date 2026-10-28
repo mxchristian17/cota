@@ -151,11 +151,11 @@ export function templateSheetInit(tpl: LayoutTemplate): SheetInit {
 
 /** Plantillas incluidas: marco + rótulo IRAM + viewport (como Layout1) en A4 vertical y A3–A0 apaisado. */
 export const BUILTIN_TEMPLATES: { id: string; name: string; pageSetup: () => PageSetup }[] = [
-  { id: 'builtin:A4P', name: 'IRAM A4 vertical', pageSetup: () => ({ ...defaultPageSetup('A4'), orientation: 'portrait' }) },
-  { id: 'builtin:A3', name: 'IRAM A3 apaisado', pageSetup: () => defaultPageSetup('A3') },
-  { id: 'builtin:A2', name: 'IRAM A2 apaisado', pageSetup: () => defaultPageSetup('A2') },
-  { id: 'builtin:A1', name: 'IRAM A1 apaisado', pageSetup: () => defaultPageSetup('A1') },
-  { id: 'builtin:A0', name: 'IRAM A0 apaisado', pageSetup: () => defaultPageSetup('A0') },
+  { id: 'builtin:A4P', name: 'IRAM A4 portrait', pageSetup: () => ({ ...defaultPageSetup('A4'), orientation: 'portrait' }) },
+  { id: 'builtin:A3', name: 'IRAM A3 landscape', pageSetup: () => defaultPageSetup('A3') },
+  { id: 'builtin:A2', name: 'IRAM A2 landscape', pageSetup: () => defaultPageSetup('A2') },
+  { id: 'builtin:A1', name: 'IRAM A1 landscape', pageSetup: () => defaultPageSetup('A1') },
+  { id: 'builtin:A0', name: 'IRAM A0 landscape', pageSetup: () => defaultPageSetup('A0') },
 ]
 
 /** Plantilla predeterminada de fábrica para layouts nuevos. */

@@ -56,7 +56,7 @@ import { chamferCommand, filletCommand } from './impl/fillet'
 import { chamferEdgeCommand, filletEdgeCommand } from './impl/filletEdge'
 import { alignCommand } from './impl/align'
 import { vportsCommand } from './impl/vports'
-import { plotCommand, publishCommand } from './impl/plot'
+import { plotCommand, plotNowCommand, publishCommand } from './impl/plot'
 import { layoutCommand, pagesetupCommand } from './impl/layout'
 import { mviewCommand } from './impl/mview'
 import { mspaceCommand, pspaceCommand, vpmaxCommand, vpminCommand } from './impl/mspace'
@@ -193,6 +193,7 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   engine.register(navvcubeCommand)
   engine.register(promptCommand)
   engine.register(plotCommand)
+  engine.register(plotNowCommand)
   engine.register(publishCommand)
   engine.register(layoutCommand)
   engine.register(pagesetupCommand)

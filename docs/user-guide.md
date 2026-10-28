@@ -43,22 +43,25 @@ typing in another field or a dialog is open).
 
 ## Entering points and distances
 
-Click in the drawing, or type coordinates. The **first point** of a command is absolute; **after that,
-coordinates are relative to the previous point** unless you mark them as absolute.
+Click in the drawing, or type coordinates. Typed coordinates are **absolute**; put `@` in front to make them
+**relative to the previous point**.
 
 | You type | Meaning |
 | --- | --- |
-| `10,20` | First point: X = 10, Y = 20. Next points: 10 to the right and 20 up from the last point |
+| `10,20` | X = 10, Y = 20 |
 | `10,20,5` | The same with Z |
-| `@10,20` | Always relative to the last point |
-| `50<30` / `@50<30` | Polar: 50 units at 30° (counterclockwise from the X axis) |
+| `@10,20` | 10 to the right and 20 up from the last point |
+| `50<30` / `@50<30` | Polar: 50 units at 30° (counterclockwise from the X axis), from the origin / from the last point |
 | `@50<30,10` | Cylindrical: polar in XY plus Z |
 | `@50<30<45` | Spherical: 45° above the XY plane |
-| `#10,20` | Absolute in the current UCS, even after the first point |
+| `#10,20` | Absolute in the current UCS (also with dynamic input) |
 | `*10,20` | Absolute in the world coordinate system (ignores the UCS) |
 | `40` | **Direct distance**: 40 units in the direction of the cursor (great with ORTHO) |
 
 Angles are in degrees. Coordinates are in the current **UCS** (user coordinate system); see [UCS](#ucs).
+
+With **dynamic input** on (<kbd>F12</kbd> or **DYN** in the status bar), `10,20` after the first point is
+relative to the last point, as in the input box next to the cursor of classic CAD; `#10,20` stays absolute.
 
 ## Selecting objects
 
@@ -75,7 +78,11 @@ You can also select **before** the command: click or drag with no command runnin
 <kbd>Ctrl</kbd>+<kbd>A</kbd> selects everything, <kbd>Esc</kbd> clears the selection and <kbd>Delete</kbd> erases it.
 
 **Grips:** selected objects show grips. Click a grip, then click its new position to stretch a corner, move a
-center, change a radius or move a dimension text.
+center, change a radius or move a dimension text. Press <kbd>Space</kbd> (or <kbd>Enter</kbd>) to switch the grip
+to **MOVE**, **ROTATE**, **SCALE** and **MIRROR**, which act on everything selected from that grip; `Base point`
+picks another base, `Copy` leaves copies until you exit, `eXit` or <kbd>Esc</kbd> ends.
+
+<kbd>Esc</kbd> cancels the whole command (the command line shows `*Cancel*`).
 
 ## Drawing aids
 
@@ -85,6 +92,7 @@ center, change a radius or move a dimension text.
 | **ORTHO** | <kbd>F8</kbd> | Restricts the cursor to horizontal and vertical directions |
 | **SNAP** | <kbd>F9</kbd> | Snaps the cursor to a grid of fixed spacing |
 | **OTRACK** (object snap tracking) | <kbd>F11</kbd> | Hover a snap point to acquire it; dashed tracking lines show alignments with it |
+| **DYN** (dynamic input) | <kbd>F12</kbd> | After the first point, typed `x,y` is relative without `@` |
 
 Measure distances with `DIST`.
 
@@ -117,7 +125,9 @@ there. `MATCHPROP` copies properties from one object to others.
 - **Blocks:** `BLOCK` turns a group of objects into a reusable definition; `INSERT` places it (with scale and
   rotation). `ATTDEF` adds attributes (text fields asked on insertion); `ATTEDIT` / `EATTEDIT` edit their
   values, `ATTSYNC` updates references after a block changes. `EXPLODE` breaks a block into its parts.
-- **Text:** `TEXT` for single lines, `MTEXT` for multiline text. Double-click a text to edit it.
+- **Text:** `TEXT` writes single lines on their **baseline** (`Justify` for center or right; every <kbd>Enter</kbd>
+  starts the next line, an empty line ends), `MTEXT` multiline text from its top-left corner. `%%c`, `%%d` and
+  `%%p` give Ø, ° and ±. Double-click a text to edit it.
   `FIELD` inserts live fields (date, file name, drawing properties set with `DWGPROPS`, sheet number…).
 - **Hatches:** `HATCH`, then click inside a closed area. The *Hatch Creation* panel sets pattern, scale, angle,
   solid fill and island detection. Hatches are associative: they follow when their boundary moves.
@@ -196,8 +206,11 @@ A **layout** is a drawing sheet. Click the **Layout1** tab (or **+** to add one;
   and isometric), with hidden lines and optional shading; choose first- or third-angle projection with
   `VIEWSTD`. `VIEWPROJ` adds more projected views, `VIEWEDIT` changes a view (scale, hidden lines) and
   `VIEWUPDATE` regenerates views after the model changes.
-- **Plot:** `PLOT` exports the current layout (at 1:1) or the model to a **vector PDF** with lineweights,
-  linetypes, hatches and shading. `PUBLISH` exports several layouts to one multi-page PDF.
+- **Plot:** `PLOT` opens the plot dialog with a **preview** of the sheet and exports a **vector PDF** with
+  lineweights, linetypes, hatches and shading. For the model choose paper size, orientation, plot area (Extents,
+  Display or a Window you pick), scale (fit to paper or 1:n), centering, plot style (color, monochrome, grayscale)
+  and lineweights; a layout plots at 1:1 with its page setup. `-PLOT` plots right away with the last settings, and
+  `PUBLISH` exports several layouts to one multi-page PDF.
 
 ## Files
 
@@ -282,6 +295,7 @@ published. If you turned full screen on, it comes back with your first click aft
 | <kbd>F8</kbd> | Ortho on/off |
 | <kbd>F9</kbd> | Snap on/off |
 | <kbd>F11</kbd> | Object snap tracking on/off |
+| <kbd>F12</kbd> | Dynamic input on/off |
 | <kbd>Ctrl</kbd>+<kbd>Z</kbd> | Undo |
 | <kbd>Ctrl</kbd>+<kbd>Y</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> | Redo |
 | <kbd>Ctrl</kbd>+<kbd>A</kbd> | Select all |

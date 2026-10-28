@@ -1030,7 +1030,7 @@ select.prop-value {
   background: rgba(14, 99, 156, 0.18);
 }
 .layer-name-input {
-  width: 160px;
+  width: clamp(96px, 16vw, 160px);
   padding: 2px 4px;
 }
 .layer-select {
@@ -1954,7 +1954,25 @@ div.lt-row {
 }
 .options-tab:hover { opacity: 1; }
 .options-tab.active { opacity: 1; border-color: var(--border, #3c3c3c); background: var(--panel, #252526); margin-bottom: -1px; }
-.options-body { min-height: 320px; max-height: min(60vh, 520px); overflow-y: auto; }
+.options-body { height: min(60vh, 420px); overflow-y: auto; } /* el mismo alto en todas las pestañas */
 .options-note { margin: 2px 0 6px; opacity: 0.75; font-size: 12px; }
 .options-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .open-empty { padding: 4px 16px 12px; }
+
+/* PLOT: opciones a la izquierda y la hoja a la derecha; en pantallas angostas, una debajo de la otra. */
+.plot-modal { width: min(860px, calc(100vw - 32px)); }
+.plot-body { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 16px; }
+.plot-options { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
+.plot-row { display: flex; flex-direction: column; gap: 3px; }
+.plot-row > span:first-child { color: var(--muted); font-size: 11.5px; }
+.plot-check { flex-direction: row; align-items: center; gap: 6px; }
+.plot-inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.plot-inline .field { flex: 1; min-width: 0; }
+.plot-note { font-size: 12px; margin: 4px 0; }
+.plot-preview { position: relative; min-height: 300px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.plot-preview canvas { display: block; }
+.plot-caption { position: absolute; left: 8px; bottom: 6px; font-size: 11px; }
+@media (max-width: 640px) {
+  .plot-body { grid-template-columns: 1fr; }
+  .plot-preview { min-height: 220px; }
+}

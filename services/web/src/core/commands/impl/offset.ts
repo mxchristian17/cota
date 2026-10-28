@@ -71,9 +71,10 @@ async function multiple(ctx: CommandContext, log: EditLog, first: Entity): Promi
   const stack: Entity[] = [first]
   const what = through() ? 'Specify through point' : 'Specify point on side to offset'
   for (;;) {
-    const r = await ctx.getPoint(`${what} or [Exit/Undo] <next object>: `, { keywords: ['Exit', 'Undo'] })
-    if (r.kind === 'cancel') return true
+    const r = await ctx.getPoint(`${what} or [Exit/Undo] <next object>: `, { keywords: ['Exit', 'Undo'], enterKeyword: 'next' })
+    if (r.kind === 'cancel') return false // Esc termina el comando; Enter pasa al objeto siguiente
     if (r.kind === 'keyword') {
+      if (r.keyword === 'next') return true
       if (r.keyword === 'Exit') return false
       if (stack.length > 1 && log.undo()) stack.pop()
       continue

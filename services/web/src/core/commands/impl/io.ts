@@ -12,9 +12,10 @@ export const importCommand: Command = {
 export const exportCommand: Command = {
   name: 'EXPORT',
   aliases: ['EXP'],
-  description: 'Export the drawing to OBJ (3D mesh), DXF (2D) or DWG (2D, needs server)',
+  description: 'Export the drawing to OBJ (3D mesh), DXF (2D) or DWG (2D)',
   async run(ctx) {
-    const r = await ctx.getPoint('Format [OBJ/DXF/DWG] <OBJ>: ', { keywords: ['OBJ', 'DXF', 'DWG'] })
+    const r = await ctx.getPoint('Format [OBJ/DXF/DWG] <OBJ>: ', { keywords: ['OBJ', 'DXF', 'DWG'], enterKeyword: 'OBJ' })
+    if (r.kind === 'cancel') return // Esc cancela; Enter elige el formato por defecto
     if (r.kind === 'point') {
       ctx.print('Type OBJ, DXF or DWG.')
       return

@@ -596,6 +596,7 @@ describe('CommandEngine', () => {
     await flush()
     expect(engine.pendingKind()).toBe('point')
     engine.cancel()
+    await flush()
     const ctxAny = (engine as unknown as { ctx: import('./types').CommandContext }).ctx
     void ctxAny.getString('Name: ')
     expect(engine.pendingKind()).toBe('string')

@@ -51,7 +51,8 @@ async function polarArray(ctx: CommandContext, ids: string[]): Promise<void> {
   if (count === null) return
   const fill = await askNum(ctx, 'ARRAY.fill', 'Enter angle to fill (deg)', 360)
   if (fill === null) return
-  const rot = await ctx.getPoint('Rotate items as copied? [Yes/No] <Yes>: ', { keywords: ['Yes', 'No'] })
+  const rot = await ctx.getPoint('Rotate items as copied? [Yes/No] <Yes>: ', { keywords: ['Yes', 'No'], enterKeyword: 'Yes' })
+  if (rot.kind === 'cancel') return
   const rotate = !(rot.kind === 'keyword' && rot.keyword.toLowerCase() === 'no')
 
   const c: Vec3 = [center.point.x, center.point.y, center.point.z]

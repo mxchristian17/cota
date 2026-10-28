@@ -47,8 +47,8 @@ export const dimReassociateCommand: Command = {
       const p = d.props
       const assoc = [...(p.assoc ?? p.points.map(() => null))]
       for (let i = 0; i < p.points.length; i++) {
-        const r = await ctx.getPoint(`Specify point ${i + 1} of ${p.points.length} on an object <next>: `, { base: null })
-        if (r.kind === 'cancel') break
+        const r = await ctx.getPoint(`Specify point ${i + 1} of ${p.points.length} on an object <next>: `, { base: null, enterKeyword: 'next' })
+        if (r.kind === 'cancel') return // Esc cancela; Enter deja el punto como está
         if (r.kind !== 'point') continue
         const e = r.pick?.id ? ctx.doc.getEntity(r.pick.id) : undefined
         const ref = e && e.type !== 'DIMENSION' ? refFor(e, toVec3(r.point)) : null

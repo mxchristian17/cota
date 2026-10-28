@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { makeEngine } from '../../../test/engineHarness'
 import type { PointProps } from '../../document/types'
 import { importDxf, exportDxf } from '../../io/dxf'
+import { applySysvars, persistedSysvars, resetSysvars, sysvars } from '../sysvars'
 
 const pts = (h: ReturnType<typeof makeEngine>) => h.ofType('POINT').map((e) => (e.props as PointProps).position)
 
@@ -54,5 +55,18 @@ describe('POINT, DIVIDE y MEASURE', () => {
     const dxf = exportDxf([{ id: 'p', type: 'POINT', layer: '0', props: { position: [1, 2, 3] } }] as never, [{ id: '0', name: '0', color: '#ffffff', visible: true, locked: false, frozen: false, printable: true, lineWeight: 0.25, lineType: 'CONTINUOUS' }] as never, '0')
     const back = importDxf(dxf).entities.find((e) => e.type === 'POINT')!
     expect((back.props as PointProps).position).toEqual([1, 2, 3])
+  })
+
+  it('PDMODE y PDSIZE se guardan con las preferencias y vuelven en la próxima visita', () => {
+    resetSysvars()
+    sysvars.PDMODE = 35
+    sysvars.PDSIZE = -8
+    const saved = JSON.parse(JSON.stringify(persistedSysvars()))
+    resetSysvars()
+    applySysvars(saved)
+    expect([sysvars.PDMODE, sysvars.PDSIZE]).toEqual([35, -8])
+    applySysvars({ PDMODE: 7 })
+    expect(sysvars.PDMODE).toBe(35) // inválido: se ignora
+    resetSysvars()
   })
 })

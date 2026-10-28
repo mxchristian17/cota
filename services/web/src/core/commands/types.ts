@@ -61,6 +61,8 @@ export interface GetDistanceOptions {
   keywords?: string[]
   /** Valor que devuelve un **Enter vacío** (el `<valor>` del prompt); sin él, Enter cancela. */
   default?: number
+  /** Keyword que devuelve un Enter vacío cuando no hay `default`. */
+  enterKeyword?: string
   preview?: (cursor: Pt) => PreviewShape[]
 }
 
@@ -76,12 +78,18 @@ export interface GetAngleOptions {
   keywords?: string[]
   /** Ángulo (grados) que devuelve un Enter vacío; sin él, Enter cancela. */
   default?: number
+  /** Keyword que devuelve un Enter vacío cuando no hay `default`. */
+  enterKeyword?: string
   preview?: (cursor: Pt) => PreviewShape[]
 }
 
 /** Hooks de nivel de aplicación (auth, persistencia, undo) que exponen diálogos/acciones. */
 export interface AppHooks {
   newDocument(): void
+  /** ¿El dibujo tiene cambios sin guardar? */
+  isDirty?(): boolean
+  /** Guarda ya (como SAVE, sin preguntar el nombre); false si no se pudo. */
+  saveNow?(): Promise<boolean>
   openDialog(): void
   /** Guarda el dibujo; si se pasa `name`, lo renombra antes de guardar. */
   save(name?: string): void
@@ -153,6 +161,8 @@ export interface AppHooks {
   setViewportLayout(n: number): void
   /** Exporta el dibujo a PDF vectorial (descarga en el navegador). */
   exportPdf(): void
+  /** PLOT: diálogo con vista previa; 'window' = el usuario pidió marcar una ventana (se vuelve a abrir con ella). */
+  plotDialog?(window?: import('../io/pdf').PlotArea | null): Promise<'plot' | 'window' | 'cancel'>
   /** PUBLISH: un PDF multipágina con los layouts indicados. */
   publish(layoutIds: string[]): void
   /** Abre un selector de archivo para importar OBJ/DXF al dibujo. */

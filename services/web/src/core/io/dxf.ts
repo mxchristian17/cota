@@ -1,6 +1,7 @@
-import { attdefText } from '../geom/text'
+import { BASELINE_DROP, LINE_SPACING, attdefText, textAxes, textSize } from '../geom/text'
+import { decodeTextCodes, encodeTextCodes } from '../text/codes'
 import type { Vec3 } from '../math'
-import type { DrawingVars, Entity, EntityProps, EntityType, InsertProps, Layer, LineType, LinetypeDefData, RectangleProps } from '../document/types'
+import type { DrawingVars, Entity, EntityProps, EntityType, InsertProps, Layer, LineType, LinetypeDefData, RectangleProps, TextProps } from '../document/types'
 import { transformEntity as transformInsertEntity } from '../editing/block'
 import { BYBLOCK, BYLAYER, CONTINUOUS, linetypeLabel, patternLength } from '../linetype/linetypes'
 import { hatchDxf, parseHatch } from './dxfHatch'
@@ -90,19 +91,25 @@ function entityDxf(e: Entity, layerName: string): string | null {
     }
     case 'TEXT': {
       const { position, text, height: th, rotation, justify, normal } = e.props
-      if (text.includes('\n')) {
-        // MTEXT: punto de inserción en el mundo; dirección del texto (11/21/31) en el mundo.
+      if (text.includes('\n') || e.props.kind === 'mtext') {
+        // MTEXT: punto de inserción (arriba, a la izquierda/centro/derecha) en el mundo; \P = salto de renglón.
         const deg = (rotation * 180) / Math.PI
-        const mt = text.split('\n').join('\\P')
+        const mt = encodeTextCodes(text.replace(/[\\{}]/g, (c) => '\\' + c)).split('\n').join('\\P')
         const ins = p(10, position[0]) + p(20, position[1]) + p(30, position[2]) + p(40, th) + p(50, deg)
         return p(0, 'MTEXT') + h + ins + p(71, justify === 'right' ? 3 : justify === 'center' ? 2 : 1) + p(1, mt) + extrusion(normal)
       }
-      // TEXT: inserción y rotación en el OCS de la extrusión.
-      const q = toOcs(position, normal)
+      // TEXT: punto de la línea base (el de los rótulos y dibujos anteriores va arriba: se baja una línea base),
+      // inserción y rotación en el OCS de la extrusión. Centrado o a la derecha: el punto va en 11/21/31.
+      const { u, v } = textAxes(e.props)
+      const drop = e.props.kind === 'text' ? 0 : th * BASELINE_DROP
+      const at: Vec3 = [0, 1, 2].map((i) => position[i] - v[i] * drop) as Vec3
+      const back = justify === 'center' ? textSize(e.props).width / 2 : justify === 'right' ? textSize(e.props).width : 0
+      const q = toOcs([0, 1, 2].map((i) => at[i] - u[i] * back) as Vec3, normal)
       const deg = (((angleToOcs(rotation, normal) * 180) / Math.PI) % 360 + 360) % 360
       const ins = p(10, q[0]) + p(20, q[1]) + p(30, q[2]) + p(40, th) + p(50, deg)
-      const jc = justify === 'center' ? p(72, 1) : justify === 'right' ? p(72, 2) : ''
-      return p(0, 'TEXT') + h + ins + p(1, text) + jc + extrusion(normal)
+      const a = toOcs(at, normal)
+      const jc = justify === 'left' ? '' : p(72, justify === 'center' ? 1 : 2) + p(11, a[0]) + p(21, a[1]) + p(31, a[2])
+      return p(0, 'TEXT') + h + ins + p(1, encodeTextCodes(text)) + jc + extrusion(normal)
     }
     case 'RECTANGLE': {
       const [x, y, z] = e.props.corner
@@ -296,6 +303,21 @@ export interface DxfImportResult {
 interface Rec {
   type: string
   codes: Array<[number, string]>
+}
+
+/**
+ * Texto plano de un MTEXT: sin los códigos de formato (fuente, alto, color, ancho, apilado…), con sus saltos de
+ * renglón y los caracteres escapados o Unicode (`\U+2205`).
+ */
+export function plainMtext(raw: string): string {
+  return raw
+    .replace(/\\U\+([0-9a-f]{4})/gi, (_, h: string) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/\\[Pp]/g, '\n')
+    .replace(/\\S([^;]*);/g, (_, s: string) => s.replace(/[#^]/, '/'))
+    .replace(/\\[ACcFfHhQTWp][^;]*;/g, '')
+    .replace(/\\[LlOoKkNX]/g, '')
+    .replace(/\\~/g, ' ')
+    .replace(/\\([\\{}])|[{}]/g, (_, e?: string) => e ?? '')
 }
 
 function num(codes: Array<[number, string]>, code: number, def = 0): number {
@@ -609,34 +631,53 @@ function parseEntity(rec: Rec): { type: EntityType; props: EntityProps } | null 
       }
     }
     case 'TEXT': {
+      // Punto de la línea base: 10/20/30, o el de alineación 11/21/31 si el texto está justificado (72/73).
       const normal = extrusionOf(c)
-      return {
-        type: 'TEXT',
-        props: {
-          position: fromOcs([num(c, 10), num(c, 20), num(c, 30)], normal),
-          text: str(c, 1) ?? '',
-          height: num(c, 40, 2.5),
-          rotation: angleFromOcs((num(c, 50) * Math.PI) / 180, normal),
-          justify: num(c, 72) === 1 ? 'center' : num(c, 72) === 2 ? 'right' : 'left',
-          normal,
-        },
+      const h72 = num(c, 72)
+      const v73 = num(c, 73)
+      const aligned = (h72 === 1 || h72 === 2 || h72 === 4 || v73 > 0) && c.some(([code]) => code === 11)
+      const height = num(c, 40, 2.5)
+      const props: TextProps = {
+        position: fromOcs(aligned ? [num(c, 11), num(c, 21), num(c, 31)] : [num(c, 10), num(c, 20), num(c, 30)], normal),
+        text: decodeTextCodes(str(c, 1) ?? ''),
+        height,
+        rotation: angleFromOcs((num(c, 50) * Math.PI) / 180, normal),
+        justify: aligned && (h72 === 1 || h72 === 4) ? 'center' : aligned && h72 === 2 ? 'right' : 'left',
+        normal,
+        kind: 'text',
       }
+      // Arriba (73 = 3) o al medio (73 = 2, o 72 = 4 "Middle") del alto: se baja a la línea base.
+      const down = !aligned ? 0 : v73 === 3 ? height : v73 === 2 || h72 === 4 ? height / 2 : 0
+      if (down) {
+        const { v } = textAxes(props)
+        props.position = [0, 1, 2].map((i) => props.position[i] - v[i] * down) as Vec3
+      }
+      return { type: 'TEXT', props }
     }
     case 'MTEXT': {
       // El texto de MTEXT puede venir partido en códigos 3 (continuación) + 1 (final); \P = salto.
       const raw = c.filter(([code]) => code === 3 || code === 1).map(([, v]) => v).join('')
-      const j71 = num(c, 71)
-      return {
-        type: 'TEXT',
-        props: {
-          position: [num(c, 10), num(c, 20), num(c, 30)],
-          text: raw.replace(/\\P/g, '\n'),
-          height: num(c, 40, 2.5),
-          rotation: (num(c, 50) * Math.PI) / 180,
-          justify: j71 === 2 ? 'center' : j71 === 3 ? 'right' : 'left',
-          normal: extrusionOf(c),
-        },
+      const j71 = num(c, 71) || 1
+      const text = decodeTextCodes(plainMtext(raw))
+      const height = num(c, 40, 2.5)
+      const rotation = c.some(([code]) => code === 50) || !c.some(([code]) => code === 11) ? (num(c, 50) * Math.PI) / 180 : Math.atan2(num(c, 21), num(c, 11, 1))
+      const props: TextProps = {
+        position: [num(c, 10), num(c, 20), num(c, 30)],
+        text,
+        height,
+        rotation,
+        justify: (['left', 'center', 'right'] as const)[(j71 - 1) % 3],
+        normal: extrusionOf(c),
+        kind: 'mtext',
       }
+      // Anclado al medio o abajo (71 = 4…9): el punto de Cota es el de arriba.
+      const row = Math.floor((j71 - 1) / 3)
+      if (row > 0) {
+        const up = (text.split('\n').length * height * LINE_SPACING * row) / 2
+        const { v } = textAxes(props)
+        props.position = [0, 1, 2].map((i) => props.position[i] + v[i] * up) as Vec3
+      }
+      return { type: 'TEXT', props }
     }
     case 'LWPOLYLINE': {
       const verts: Vec3[] = []

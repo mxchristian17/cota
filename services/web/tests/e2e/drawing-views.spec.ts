@@ -416,7 +416,7 @@ test.describe('Cota units and default template', () => {
     await typeCmd(page, '-LAYER', 'M', 'Ejes', '', 'LINE', '#0,0', '#10,0', '')
     await typeCmd(page, 'TEMPLATE', 'Default')
     await expect(page.locator('.cmd-output')).toContainText('now the default template')
-    await typeCmd(page, 'NEW')
+    await typeCmd(page, 'NEW', 'N') // hay cambios sin guardar: NEW pregunta
     expect(await store(page, 'return [s.doc.units, s.doc.layers.map((l) => l.name).includes("Ejes"), s.doc.entities.length]')).toEqual(['cm', true, 0])
     await typeCmd(page, 'TEMPLATE', 'Clear', 'NEW')
     expect(await store(page, 'return [s.doc.units, s.doc.layers.map((l) => l.name).includes("Ejes")]')).toEqual(['mm', false])

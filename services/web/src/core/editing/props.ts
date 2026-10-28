@@ -2,6 +2,7 @@ import { PATTERN_NAMES, USER } from '../hatch/patterns'
 import { hatchArea } from '../hatch/geometry'
 import type { Vec3 } from '../math'
 import type { Entity, ShadePlot } from '../document/types'
+import { decodeTextCodes } from '../text/codes'
 import { VIEW_NAMES, VISUAL_STYLES, type ViewName, type VisualStyle } from '../view'
 import { STANDARD_SCALES, standardScale } from '../layout/scale'
 import { viewAngles, viewNameOf } from '../layout/viewport'
@@ -94,6 +95,11 @@ function solidFields(e: Extract<Entity, { type: 'SOLID3D' }>): PropField[] {
 }
 
 /** Lista de campos editables (y algunos derivados de solo lectura) de una entidad, según su tipo. */
+/** Nombre del tipo de un objeto para Propiedades y LIST: un párrafo de texto es MTEXT. */
+export function typeLabel(e: Entity): string {
+  return e.type === 'TEXT' && (e.props.kind === 'mtext' || e.props.text.includes('\n')) ? 'MTEXT' : e.type
+}
+
 export function entityFields(e: Entity): PropField[] {
   switch (e.type) {
     case 'POINT':
@@ -162,7 +168,8 @@ export function entityFields(e: Entity): PropField[] {
     case 'TEXT':
       return [
         ...vecFields('position', 'Insertion', e.props.position),
-        { key: 'text', label: 'Text', kind: 'text', value: e.props.text },
+        // Los renglones de un MTEXT, con el `\P` del CAD clásico (el campo es de un renglón).
+        { key: 'text', label: 'Text', kind: 'text', value: e.props.text.split('\n').join('\\P') },
         { key: 'height', label: 'Height', kind: 'number', value: e.props.height },
         { key: 'rotationDeg', label: 'Rotation°', kind: 'number', value: e.props.rotation * R2D },
         { key: 'justify', label: 'Justify', kind: 'enum', value: e.props.justify, options: ['left', 'center', 'right'] },
@@ -326,7 +333,7 @@ export function applyField(e: Entity, key: string, value: number | string | bool
       break
     case 'TEXT':
       if (setComp(e.props.position, 'position')) break
-      if (key === 'text') e.props.text = String(value)
+      if (key === 'text') e.props.text = decodeTextCodes(String(value).replace(/\\P/g, '\n'))
       else if (key === 'height') e.props.height = Math.max(1e-6, num)
       else if (key === 'rotationDeg') e.props.rotation = num * D2R
       else if (key === 'justify' && (value === 'left' || value === 'center' || value === 'right')) e.props.justify = value

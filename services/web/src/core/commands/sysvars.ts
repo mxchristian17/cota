@@ -155,4 +155,7 @@ export function applySysvars(data: Record<string, unknown>): void {
   if (typeof zf === 'number' && zf >= 3 && zf <= 100) sysvars.ZOOMFACTOR = zf
   if (nonNegative(data.RENDERMINPX)) sysvars.RENDERMINPX = data.RENDERMINPX
   if (data.PROJMODE === 'None' || data.PROJMODE === 'Ucs' || data.PROJMODE === 'View') sysvars.PROJMODE = data.PROJMODE
+  const pd = data.PDMODE
+  if (typeof pd === 'number' && Number.isInteger(pd) && (pd & 31) <= 4 && (pd & ~(31 | 32 | 64)) === 0) sysvars.PDMODE = pd
+  if (typeof data.PDSIZE === 'number' && Number.isFinite(data.PDSIZE)) sysvars.PDSIZE = data.PDSIZE
 }

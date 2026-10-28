@@ -2,7 +2,7 @@ import { assocState } from '../core/dimension/assoc'
 import { useState } from 'react'
 import { useStore } from '../store/store'
 import type { DimensionEntity, Entity } from '../core/document/types'
-import { entityFields, type PropField } from '../core/editing/props'
+import { entityFields, typeLabel, type PropField } from '../core/editing/props'
 import { DIM_TABS, DIM_VAR_INFO, type DimTab } from '../core/dimension/style'
 import { formatDim } from '../core/dimension/dimGeometry'
 import { DimVarInput } from './DimVarInput'
@@ -70,29 +70,31 @@ function NumberField(props: { label: string; value: number; readOnly?: boolean; 
       </div>
     )
   }
+  // Sin ruido de punto flotante (0.832572 y no 0.8325718347040308); Enter sin tocar el valor no lo redondea.
+  const shown = Number(props.value.toFixed(6))
   return (
     <label className="prop-row">
       <span className="prop-key">{props.label}</span>
       <input
         className="field prop-value"
         type="number"
-        defaultValue={props.value}
+        defaultValue={shown}
         key={props.value}
         // Enter fija el valor sin tener que sacar el foco; Esc descarta y vuelve al valor actual.
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault()
             const v = Number(e.currentTarget.value)
-            if (isFinite(v) && v !== props.value) props.onCommit(v)
+            if (isFinite(v) && v !== shown) props.onCommit(v)
           } else if (e.key === 'Escape') {
             e.preventDefault()
             e.stopPropagation() // Esc cancela la edición del campo, no la selección del dibujo
-            e.currentTarget.value = String(props.value)
+            e.currentTarget.value = String(shown)
           }
         }}
         onBlur={(e) => {
           const v = Number(e.target.value)
-          if (isFinite(v) && v !== props.value) props.onCommit(v)
+          if (isFinite(v) && v !== shown) props.onCommit(v)
         }}
       />
     </label>
@@ -296,7 +298,7 @@ export function PropertiesPanel() {
             <div className="props" data-testid="properties">
               <div className="prop-row">
                 <span className="prop-key">Type</span>
-                <span className="prop-value mono">{e.type}</span>
+                <span className="prop-value mono">{typeLabel(e)}</span>
               </div>
               <label className="prop-row">
                 <span className="prop-key">Layer</span>

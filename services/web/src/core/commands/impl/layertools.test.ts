@@ -97,6 +97,15 @@ describe('Freeze de capas', () => {
     expect(h.prints.at(-1)).toMatch(/No layers have been isolated/)
   })
 
+  it('una ventana sobre objetos de una capa bloqueada no los toma y lo avisa', async () => {
+    const { h, lay } = setup()
+    new LayerService(h.doc).setLocked(lay('B').id, true)
+    await h.run('ERASE', 'C', '-1,-1', '20,30')
+    expect(h.prints.some((p) => /1 was on a locked layer/.test(p))).toBe(true)
+    await h.run('')
+    expect(h.doc.entities.filter((e) => e.layer === lay('B').id)).toHaveLength(1)
+  })
+
   it('el estado congelado viaja en el DXF (bit 1 del código 70)', () => {
     const { h } = setup()
     const svc = new LayerService(h.doc)

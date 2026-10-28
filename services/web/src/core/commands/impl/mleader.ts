@@ -99,7 +99,8 @@ export const mleaderCommand: Command = {
     } else {
       leader.push(first)
       for (let i = 2; i < opts.maxPoints; i++) {
-        const nxt = await ctx.getPoint('Specify next leader point or <landing>: ', { base: toPt(leader[leader.length - 1]) })
+        const nxt = await ctx.getPoint('Specify next leader point or <landing>: ', { base: toPt(leader[leader.length - 1]), enterKeyword: 'landing' })
+        if (nxt.kind === 'cancel') return // Esc cancela; Enter pasa al apoyo
         if (nxt.kind !== 'point') break
         leader.push(toVec3(nxt.point))
       }

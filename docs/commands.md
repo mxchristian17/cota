@@ -6,15 +6,15 @@ Every command can be typed in the command line (aliases too) or picked from the 
 
 | Command | Aliases | What it does |
 | --- | --- | --- |
-| `NEW` | — | Start a new empty drawing |
+| `NEW` | — | Start a new empty drawing (asks to save the changes first) |
 | `OPEN` | — | Open a drawing: from the working folder / cloud list, or from the device (.cota, .dxf, .dwg, .stl, .obj, .step, .iges) |
 | `OPENFOLDER` | `FOLDER`, `WORKSPACE` | Choose a system folder to open and save drawings as files |
 | `SAVE` | `QSAVE`, `SAVEAS` | Save the current drawing: working folder, your account, or a downloaded .cota file |
 | `CLOUD` | `CLOUDSTORAGE` | Store drawings in your account again (detach the local folder) |
 | `IMPORT` | `IMP` | Import geometry from an OBJ or DXF file |
-| `EXPORT` | `EXP` | Export the drawing to OBJ (3D mesh), DXF (2D) or DWG (2D, needs server) |
+| `EXPORT` | `EXP` | Export the drawing to OBJ (3D mesh), DXF (2D) or DWG (2D) |
 | `PAGESETUP` | — | Page setup of the current layout (paper, orientation, margins, plot style) |
-| `PLOT` | `PRINT` | Export the drawing (or the active layout sheet at 1:1) to a vector PDF |
+| `PLOT` | `PRINT` | Plot to a vector PDF from a dialog with preview: paper, orientation, area (Extents/Display/Window), scale, plot style; a layout plots 1:1 with its page setup |
 | `PUBLISH` | — | Publish layouts to a multi-page PDF [All/Current or layout names] |
 | `DWGPROPS` | — | Drawing properties: title, subject, author, keywords and custom properties (used by fields) |
 | `UNITS` | `UN` | Set the drawing units: millimeters, centimeters, meters, inches or feet |
@@ -138,8 +138,8 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | `BLOCK` | `B` | Create a block definition from selected objects (and insert a reference) |
 | `ATTDEF` | `ATT`, `-ATTDEF` | Define a block attribute (tag, prompt, default value, Invisible/Constant/Preset) |
 | `HATCH` | `H`, `BH`, `BHATCH` | Fill an enclosed area with a hatch pattern, solid fill or user lines |
-| `TEXT` | `DT`, `DTEXT` | Create single-line text |
-| `MTEXT` | `MT`, `T` | Create multiline text (enter lines; empty line finishes) |
+| `TEXT` | `DT`, `DTEXT` | Create single-line text on its baseline (Justify: Left/Center/Right); each Enter starts a new line, an empty line finishes. %%c = Ø, %%d = °, %%p = ± |
+| `MTEXT` | `MT`, `T` | Create multiline text from its top-left corner (enter lines; empty line finishes). %%c = Ø, %%d = °, %%p = ± |
 | `BOX` | — | Create a parametric box (two base corners + height) |
 | `CYLINDER` | `CYL` | Create a parametric cylinder (base center + radius + height) |
 | `CONE` | — | Create a parametric cone or truncated cone (base center + radius + height + top radius) |
@@ -234,6 +234,7 @@ Dash versions run without dialogs, for scripts and power users.
 | Command | Aliases | What it does |
 | --- | --- | --- |
 | `-TOOLBAR` | `-TO` | Show, hide, dock or float a toolbar from the command line (or ALL toolbars) |
+| `-PLOT` | `-PRINT` | Plot to PDF right away with the last PLOT settings (no dialog) |
 | `-DIMSTYLE` | — | Dimension styles from the command line [ANnotative/Save/Restore/STatus/Variables/Apply/?] |
 | `-LAYER` | `-LA` | Layers from the command line: ?/Make/Set/New/Rename/ON/OFF/Color/Ltype/LWeight/Plot/Freeze/Thaw/LOck/Unlock |
 | `-LINETYPE` | `-LT` | Linetypes from the command line: ?, Create, Load, Set |
