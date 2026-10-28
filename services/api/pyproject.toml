@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cota-api"
-version = "2.7.0"
+version = "2.8.0"
 description = "Cota optional server: accounts, document storage, DWG conversion and natural-language modeling"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Christian Orengia" }]
@@ -20,7 +20,7 @@ dependencies = [
   "email-validator>=2.2",
   "alembic>=1.14",
   "psycopg[binary]>=3.2",
-  "pydantic-ai-slim[openai]>=0.0.14",
+  "pydantic-ai-slim[openai,anthropic,google]>=1.0",
 ]
 
 [project.optional-dependencies]

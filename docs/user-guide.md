@@ -284,6 +284,9 @@ remember it in this browser, explaining the risk, and keeps that choice.
 - Conversations are kept in the browser and listed at the top of the panel.
 - The bar shows how much of the model's context is used; **Compact** (or the **COMPACT** command) replaces the
   conversation with a summary to free it.
+- **With the optional server (Docker)** and signed in, the panel uses it: your key is saved on the server for your
+  account (encrypted, it never comes back to the browser), the server calls the model with pydantic-ai, and the
+  conversations are stored in its database. The commands still run in your browser, on the open drawing.
 
 ## Natural-language modeling
 

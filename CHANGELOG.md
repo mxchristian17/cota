@@ -4,6 +4,17 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.8.0] — 2026-10-28
+
+### Added
+- **Modeling agent with the optional server (Docker)**: signed in, the AGENT panel uses the server, which calls the
+  model with pydantic-ai and your key saved on the server (it never comes back to the browser) and stores the
+  conversations in its database; the commands still run in the browser on the open drawing. Anthropic joins OpenAI
+  and Gemini as a server provider.
+
+### Fixed
+- The agent finds the command lists of the menus whatever the interface language.
+
 ## [2.7.0] — 2026-10-28
 
 ### Added

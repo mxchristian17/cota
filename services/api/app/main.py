@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.db.session import init_db
-from app.routers import ai, auth, config, convert, documents
+from app.routers import agent, ai, auth, config, convert, documents
 
 
 @asynccontextmanager
@@ -20,7 +20,7 @@ def create_app(api_prefix: str = "") -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title="Cota API",
-        version="2.7.0",
+        version="2.8.0",
         docs_url=None if settings.is_hardened else f"{api_prefix}/docs",
         redoc_url=None,
         openapi_url=None if settings.is_hardened else f"{api_prefix}/openapi.json",
@@ -61,7 +61,7 @@ def create_app(api_prefix: str = "") -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    for router in (auth.router, documents.router, config.router, convert.router, ai.router):
+    for router in (auth.router, documents.router, config.router, convert.router, ai.router, agent.router):
         app.include_router(router, prefix=api_prefix)
     return app
 

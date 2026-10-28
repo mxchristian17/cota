@@ -2,7 +2,9 @@ import { create } from 'zustand'
 import { useStore } from '../store/store'
 import { idbGet, idbSet } from '../core/io/idb'
 import { agentBridge } from '../core/agentBridge'
-import { PROVIDERS, ProviderError, type ChatMessage, type ProviderConfig, type ProviderId } from './providers'
+import { OPENAI_BASE, PROVIDERS, ProviderError, type ChatMessage, type ProviderConfig, type ProviderId } from './providers'
+import { api } from '../core/io/apiClient'
+import { CLOUD_ENABLED } from '../core/io/backend'
 import { compactConversation, runAgentTurn, type AgentEvent, type ApplyMode } from './loop'
 import type { AgentHost } from './tools'
 
@@ -53,6 +55,16 @@ const write = (k: string, v: unknown) => {
     /* almacenamiento bloqueado: queda en memoria */
   }
 }
+
+/**
+ * Modo servidor (Docker): hay backend y sesión iniciada. La key vive en el servidor (nunca vuelve al navegador), el
+ * modelo lo llama el backend con pydantic-ai y las conversaciones se guardan en su base de datos.
+ */
+export const serverMode = (): boolean => CLOUD_ENABLED && !!useStore.getState().email
+
+/** Proveedor del panel → configuración del backend (OpenRouter y los compatibles van por la API de OpenAI). */
+const serverProvider = (p: ProviderId, baseUrl: string): { provider: string; api_base: string | null } =>
+  p === 'anthropic' ? { provider: 'anthropic', api_base: null } : p === 'gemini' ? { provider: 'google', api_base: null } : { provider: 'openai', api_base: p === 'openrouter' ? OPENAI_BASE.openrouter! : p === 'compatible' ? baseUrl.trim() || null : null }
 
 /** Keys sólo en memoria (si el usuario eligió no guardarlas). */
 const sessionKeys = new Map<ProviderId, string>()
@@ -127,13 +139,22 @@ function feedOf(messages: ChatMessage[]): FeedItem[] {
 }
 
 export const useAgentStore = create<AgentState>((set, get) => {
-  const saveConvs = (list: Conversation[]) => {
+  const saveConvs = (list: Conversation[], changed?: Conversation) => {
     set({ conversations: list })
-    void idbSet(CONV_KEY, list)
+    if (!serverMode()) return void idbSet(CONV_KEY, list)
+    const c = changed ?? list[0]
+    if (c) void api.putAgentConversation(c.id, { title: c.title, messages: c.messages, context: c.context }).catch(() => undefined)
   }
   const current = (): Conversation | undefined => get().conversations.find((c) => c.id === get().currentId)
-  const refreshKey = async () => set({ hasKey: !!(await storedKey(get().settings.provider)) })
+  const refreshKey = async () => {
+    if (serverMode()) {
+      const c = await api.getAiConfig().catch(() => null)
+      return set({ hasKey: !!c?.has_key && !!c.model })
+    }
+    set({ hasKey: !!(await storedKey(get().settings.provider)) })
+  }
   const cfg = async (): Promise<ProviderConfig | null> => {
+    if (serverMode()) return get().hasKey ? { provider: 'server', model: '', apiKey: '' } : null
     const { provider, model, baseUrl } = get().settings
     const apiKey = await storedKey(provider)
     return apiKey ? { provider, model, baseUrl, apiKey } : null
@@ -156,7 +177,9 @@ export const useAgentStore = create<AgentState>((set, get) => {
       if (next) void get().load()
     },
     load: async () => {
-      const list = (await idbGet<Conversation[]>(CONV_KEY)) ?? []
+      const list = serverMode()
+        ? ((await api.agentConversations().catch(() => [])) as Array<Conversation & { updated_at: string }>).map((c) => ({ ...c, updatedAt: Date.parse(c.updated_at) || Date.now() }))
+        : ((await idbGet<Conversation[]>(CONV_KEY)) ?? [])
       const cur = list.find((c) => c.id === get().currentId) ?? list[0]
       set({ conversations: list, currentId: cur?.id ?? null, feed: cur ? feedOf(cur.messages) : [] })
       await refreshKey()
@@ -170,6 +193,12 @@ export const useAgentStore = create<AgentState>((set, get) => {
     },
     setKey: async (key) => {
       const k = key.trim()
+      if (serverMode()) {
+        const { provider, model, baseUrl } = get().settings
+        if (!k || !model.trim()) return
+        await api.putAiConfig({ ...serverProvider(provider, baseUrl), model: model.trim(), api_key: k })
+        return refreshKey()
+      }
       if (!k) return
       // La primera vez se pregunta si se guarda; la decisión queda para las próximas keys.
       if (!get().keyDecision) return set({ keyAwaitingDecision: k })
@@ -199,7 +228,7 @@ export const useAgentStore = create<AgentState>((set, get) => {
       let conv = current()
       if (!conv) {
         conv = { id: `c${Date.now()}`, title: t.slice(0, 50), updatedAt: Date.now(), messages: [], context: 0 }
-        saveConvs([conv, ...get().conversations])
+        saveConvs([conv, ...get().conversations], conv)
         set({ currentId: conv.id })
       }
       abort = new AbortController()
@@ -218,7 +247,8 @@ export const useAgentStore = create<AgentState>((set, get) => {
           onEvent,
           signal: abort.signal,
         })
-        saveConvs(get().conversations.map((x) => (x.id === id ? { ...x, messages: r.messages, context: r.context, updatedAt: Date.now() } : x)))
+        const done = { ...conv, messages: r.messages, context: r.context, updatedAt: Date.now() }
+        saveConvs(get().conversations.map((x) => (x.id === id ? done : x)), done)
       } catch (err) {
         if ((err as Error).name !== 'AbortError') set({ feed: [...get().feed, { kind: 'error', text: err instanceof ProviderError ? err.message : String((err as Error).message ?? err) }] })
       } finally {
@@ -247,7 +277,8 @@ export const useAgentStore = create<AgentState>((set, get) => {
       set({ running: true })
       try {
         const messages = await compactConversation(conv.messages, c)
-        saveConvs(get().conversations.map((x) => (x.id === conv.id ? { ...x, messages, context: 0, updatedAt: Date.now() } : x)))
+        const done = { ...conv, messages, context: 0, updatedAt: Date.now() }
+        saveConvs(get().conversations.map((x) => (x.id === conv.id ? done : x)), done)
         set({ feed: [...feedOf(messages)] })
       } catch (err) {
         set({ feed: [...get().feed, { kind: 'error', text: `COMPACT failed: ${(err as Error).message}` }] })

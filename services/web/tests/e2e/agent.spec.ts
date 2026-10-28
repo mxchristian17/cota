@@ -97,4 +97,46 @@ test.describe('Cota agent panel (browser mode, own API key)', () => {
     await input.press('Enter')
     await expect(page.getByTestId('agent-feed')).toContainText('Summary: plate and hole built.')
   })
+
+  test('with the server (Docker): the model is called by the backend with the saved key; conversations are stored there', async ({ page }) => {
+    const steps: Array<{ messages: unknown[]; tools: Array<{ name: string }> }> = []
+    const saved: Record<string, { title: string }> = {}
+    await page.route('**/api/auth/me', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 1, email: 'demo@example.com' }) }))
+    await page.route('**/api/config', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: {} }) }))
+    await page.route('**/api/ai/config', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ provider: 'anthropic', api_base: null, model: 'claude', has_key: true }) }))
+    await page.route('**/api/agent/conversations', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(Object.entries(saved).map(([id, c]) => ({ id, ...c, updated_at: new Date().toISOString() }))) }))
+    await page.route('**/api/agent/conversations/*', async (r) => {
+      saved[decodeURIComponent(r.request().url().split('/').pop()!)] = JSON.parse(r.request().postData() ?? '{}')
+      await r.fulfill({ status: 200, contentType: 'application/json', body: '{"id":"x"}' })
+    })
+    await page.route('**/api/agent/step', async (r) => {
+      steps.push(JSON.parse(r.request().postData() ?? '{}'))
+      const first = steps.length === 1
+      await r.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(first ? { text: 'Drawing.', tool_calls: [{ id: 't1', name: 'run_commands', args: { script: 'CIRCLE 0,0 12' } }], usage: { input: 3000, output: 20 } } : { text: 'Circle done.', tool_calls: [], usage: { input: 3100, output: 5 } }),
+      })
+    })
+    let direct = 0
+    await page.route('https://api.anthropic.com/**', (r) => {
+      direct++
+      return r.abort()
+    })
+    await page.goto('/')
+    const input = page.getByTestId('command-input')
+    await expect(input).toBeVisible()
+    await input.fill('AGENT')
+    await input.press('Enter')
+    await expect(page.getByTestId('agent-settings')).toHaveCount(0) // la key ya está en el servidor
+    await page.getByTestId('agent-mode').selectOption('auto')
+    await page.getByTestId('agent-input').fill('a circle of radius 12')
+    await page.getByTestId('agent-send').click()
+    await expect(page.getByTestId('agent-feed')).toContainText('Circle done.')
+    expect(await st<number>(page, "return s.doc.entities.filter((e) => e.type === 'CIRCLE').length")).toBe(1)
+    expect(steps[0].tools.map((t) => t.name)).toContain('query_objects')
+    expect(JSON.stringify(steps[1].messages)).toContain('CIRCLE center 0,0,0 r 12')
+    expect(direct).toBe(0) // el navegador no llamó al proveedor
+    await expect.poll(() => Object.values(saved).map((c) => c.title)).toEqual(['a circle of radius 12'])
+  })
 })

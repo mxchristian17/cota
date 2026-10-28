@@ -136,6 +136,12 @@ export const api = {
     request<{ provider: string; api_base: string | null; model: string; has_key: boolean }>('GET', '/ai/config'),
   putAiConfig: (cfg: { provider: string; api_base: string | null; model: string; api_key: string }) =>
     request<{ provider: string; api_base: string | null; model: string; has_key: boolean }>('PUT', '/ai/config', cfg),
+  // Agente en modo servidor: cada llamada al modelo la hace el backend con la key guardada; las herramientas corren acá.
+  agentStep: (body: { system: string; messages: unknown[]; tools: unknown[] }) =>
+    request<{ text: string; tool_calls: Array<{ id: string; name: string; args: Record<string, unknown> }>; usage: { input: number; output: number } }>('POST', '/agent/step', body),
+  agentConversations: () => request<Array<{ id: string; title: string; messages: unknown[]; context: number; updated_at: string }>>('GET', '/agent/conversations'),
+  putAgentConversation: (id: string, c: { title: string; messages: unknown[]; context: number }) =>
+    request<{ id: string }>('PUT', `/agent/conversations/${encodeURIComponent(id)}`, c),
   aiGenerate: (prompt: string, document: unknown, lod?: number) =>
     request<{ operations: AiOp[]; message: string }>('POST', '/ai/generate', { prompt, document, lod }),
   // Igual que aiGenerate pero con progreso en vivo (SSE): `onEvent` recibe cada evento del pipeline

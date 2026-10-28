@@ -195,14 +195,29 @@ function compact(e: Entity): string {
   return s.length > 4000 ? `${describe(e)} (parameters too long to show: ${s.length} chars)` : s
 }
 
+/** Ids de menú que usa el agente (en inglés) → rótulos de la interfaz (también los de la versión en español). */
+const MENU_IDS: Record<string, string[]> = {
+  file: ['file', 'archivo'],
+  edit: ['edit', 'edición'],
+  view: ['view', 'vista'],
+  insert: ['insert', 'insertar'],
+  format: ['format', 'formato'],
+  tools: ['tools', 'herramientas'],
+  draw: ['draw', 'dibujar'],
+  dimension: ['dimension', 'acotar'],
+  modify: ['modify', 'modificar'],
+  help: ['help', 'ayuda'],
+}
+
 /** Guía o listado de comandos de un menú. */
 function readDoc(host: AgentHost, id: string): ToolResult {
   const key = id.trim().toLowerCase()
   if (GUIDES[key]) return { text: GUIDES[key] }
   const m = /^commands\/(.+)$/.exec(key)
   if (m) {
-    const cat = CATEGORIES.find((c) => c.label.toLowerCase() === m[1])
-    if (!cat) return { text: `No menu "${m[1]}". Menus: ${CATEGORIES.map((c) => c.label.toLowerCase()).join(', ')}.`, isError: true }
+    const want = MENU_IDS[m[1]] ?? [m[1]]
+    const cat = CATEGORIES.find((c) => want.includes(c.label.toLowerCase()))
+    if (!cat) return { text: `No menu "${m[1]}". Menus: ${Object.keys(MENU_IDS).join(', ')}.`, isError: true }
     const byName = new Map(host.commands().map((c) => [c.name, c]))
     const lines = cat.names
       .filter((x) => !x.startsWith('@'))

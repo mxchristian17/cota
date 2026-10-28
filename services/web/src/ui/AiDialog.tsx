@@ -91,6 +91,7 @@ export function AiDialog() {
               <select className="field" value={cProvider} onChange={(e) => setCProvider(e.target.value)} data-testid="ai-provider">
                 <option value="openai">openai (OpenAI / NVIDIA / compatible)</option>
                 <option value="google">google (Gemini)</option>
+                <option value="anthropic">anthropic (Claude)</option>
               </select>
             </label>
             <label>

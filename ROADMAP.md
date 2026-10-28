@@ -38,7 +38,7 @@ discussion.
 
 | Status | Item |
 |---|---|
-| next | **Agent panel**: shipped in 2.7.0 for the browser (your own API key). Next: the same panel against the optional server (Docker), where keys and conversations live on the server. |
+| done | **Agent panel**: in the browser with your own API key (2.7.0) and with the optional server (Docker), where the key and the conversations live on the server (2.8.0). |
 | next | Providers: Anthropic, OpenAI, Google Gemini and OpenRouter or any OpenAI-compatible endpoint shipped in 2.7.0; direct DeepSeek, Kimi (Moonshot) and GLM (Zhipu) presets next. |
 | planned | **Sub-agents**: the main agent can launch helpers for parallel work, each with its own model. |
 | next | **Scene context on demand** (objects in a box with bounding boxes and descriptions shipped in 2.7.0): the agent asks for a list of objects with their bounding boxes and short descriptions, picks what it needs, and can limit its context to one or more virtual boxes in space (on a large scene it only loads the region it is working on). |

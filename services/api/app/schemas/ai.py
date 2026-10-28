@@ -13,7 +13,7 @@ class AiConfigIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    provider: Literal["openai", "google"] = "openai"
+    provider: Literal["openai", "google", "anthropic"] = "openai"
     api_base: str | None = None  # p.ej. https://integrate.api.nvidia.com/v1 (NVIDIA, openai-compatible)
     model: str = Field(min_length=1, max_length=200)
     api_key: str = Field(min_length=1, max_length=512)

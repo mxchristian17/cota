@@ -106,6 +106,13 @@ def _build_model(cfg: dict[str, Any]) -> Any:
     model_name = cfg["model"]
     api_key = cfg["api_key"]
 
+    if provider == "anthropic":
+        # Requiere el extra [anthropic] de pydantic-ai.
+        from pydantic_ai.models.anthropic import AnthropicModel  # type: ignore
+        from pydantic_ai.providers.anthropic import AnthropicProvider  # type: ignore
+
+        return AnthropicModel(model_name, provider=AnthropicProvider(api_key=api_key))
+
     if provider == "google":
         # Requiere el extra [google] de pydantic-ai (google-genai).
         from pydantic_ai.models.google import GoogleModel  # type: ignore

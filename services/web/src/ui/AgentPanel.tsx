@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { CONTEXT_LIMIT, useAgentStore } from '../agent/agentStore'
+import { CONTEXT_LIMIT, serverMode, useAgentStore } from '../agent/agentStore'
 import { PROVIDERS, type ProviderId } from '../agent/providers'
 import { focusCommandLine } from './focus'
 
@@ -27,8 +27,9 @@ function AgentBody() {
     // devolver su función de limpieza.
     feedEnd.current?.scrollIntoView({ block: 'end' })
   }, [s.feed.length, s.pending])
+  // Los ajustes se abren solos mientras no haya key (también al saberse, al cargar, que ya hay una en el servidor).
   useEffect(() => {
-    if (!s.hasKey) setShowSettings(true)
+    setShowSettings(!s.hasKey)
   }, [s.hasKey])
 
   const send = () => {
@@ -144,12 +145,13 @@ function Settings({ onDone }: { onDone: () => void }) {
   const s = useAgentStore()
   const [key, setKey] = useState('')
   const p = PROVIDERS[s.settings.provider]
+  const server = serverMode()
   return (
     <div className="agent-settings form" data-testid="agent-settings">
       <label>
         Provider
         <select className="field" value={s.settings.provider} onChange={(e) => s.setSettings({ provider: e.target.value as ProviderId })} data-testid="agent-provider">
-          {(Object.keys(PROVIDERS) as ProviderId[]).map((id) => (
+          {(Object.keys(PROVIDERS) as ProviderId[]).filter((id) => id !== 'server').map((id) => (
             <option key={id} value={id}>
               {PROVIDERS[id].label}
             </option>
@@ -170,8 +172,10 @@ function Settings({ onDone }: { onDone: () => void }) {
         API key {s.hasKey && <span className="muted">(set)</span>}
         <input className="field" type="password" autoComplete="off" value={key} placeholder={s.hasKey ? '••••••••' : 'Paste your key'} onChange={(e) => setKey(e.target.value)} data-testid="agent-key" />
       </label>
-      <p className="muted agent-small">
-        Your key goes only from this browser to {p.label}. Cota has no key of its own.{' '}
+      <p className="muted agent-small" data-testid="agent-key-note">
+        {server
+          ? 'Your key is saved on the server for your account, encrypted, and never comes back to the browser. Cota has no key of its own.'
+          : `Your key goes only from this browser to ${p.label}. Cota has no key of its own.`}{' '}
         {p.keyUrl && (
           <a href={p.keyUrl} target="_blank" rel="noreferrer">
             Get a key

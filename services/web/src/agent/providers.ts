@@ -1,11 +1,12 @@
 import type { ToolDef } from './tools'
+import { api } from '../core/io/apiClient'
 
 /**
  * Proveedores de LLM llamados DESDE EL NAVEGADOR con la key del usuario (modo demo, sin backend). Formato neutro de
  * mensajes y un adaptador por API: Anthropic, Gemini y OpenAI-compatible (OpenAI, OpenRouter —que da acceso a
  * DeepSeek, Kimi, GLM y otros sin problemas de CORS— o cualquier `baseUrl`).
  */
-export type ProviderId = 'anthropic' | 'openai' | 'gemini' | 'openrouter' | 'compatible'
+export type ProviderId = 'anthropic' | 'openai' | 'gemini' | 'openrouter' | 'compatible' | 'server'
 
 export interface ProviderConfig {
   provider: ProviderId
@@ -21,6 +22,7 @@ export const PROVIDERS: Record<ProviderId, { label: string; model: string; keyUr
   gemini: { label: 'Google Gemini', model: 'gemini-2.5-pro', keyUrl: 'https://aistudio.google.com/apikey' },
   openrouter: { label: 'OpenRouter (DeepSeek, Kimi, GLM…)', model: 'deepseek/deepseek-chat', keyUrl: 'https://openrouter.ai/keys' },
   compatible: { label: 'OpenAI-compatible (base URL)', model: '' },
+  server: { label: 'Server (your account)', model: '' },
 }
 
 export interface ToolCall {
@@ -71,6 +73,7 @@ async function post(url: string, headers: Record<string, string>, body: unknown,
 
 /** Una llamada al modelo con las herramientas; devuelve texto y pedidos de herramientas. */
 export async function callModel(cfg: ProviderConfig, system: string, messages: ChatMessage[], tools: ToolDef[], signal?: AbortSignal): Promise<ModelReply> {
+  if (cfg.provider === 'server') return server(system, messages, tools)
   if (cfg.provider === 'anthropic') return anthropic(cfg, system, messages, tools, signal)
   if (cfg.provider === 'gemini') return gemini(cfg, system, messages, tools, signal)
   return openaiCompatible(cfg, system, messages, tools, signal)
@@ -106,7 +109,17 @@ async function anthropic(cfg: ProviderConfig, system: string, messages: ChatMess
   }
 }
 
-const OPENAI_BASE: Partial<Record<ProviderId, string>> = { openai: 'https://api.openai.com/v1', openrouter: 'https://openrouter.ai/api/v1' }
+export const OPENAI_BASE: Partial<Record<ProviderId, string>> = { openai: 'https://api.openai.com/v1', openrouter: 'https://openrouter.ai/api/v1' }
+
+/** Modo servidor (Docker): el backend llama al modelo con pydantic-ai y la key guardada del usuario. */
+async function server(system: string, messages: ChatMessage[], tools: ToolDef[]): Promise<ModelReply> {
+  try {
+    const r = await api.agentStep({ system, messages, tools })
+    return { text: r.text, toolCalls: r.tool_calls, usage: r.usage }
+  } catch (err) {
+    throw new ProviderError(err instanceof Error ? err.message : String(err))
+  }
+}
 
 async function openaiCompatible(cfg: ProviderConfig, system: string, messages: ChatMessage[], tools: ToolDef[], signal?: AbortSignal): Promise<ModelReply> {
   const base = (cfg.baseUrl?.trim() || OPENAI_BASE[cfg.provider] || '').replace(/\/+$/, '')
