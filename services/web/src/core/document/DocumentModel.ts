@@ -1,3 +1,4 @@
+import { viewDimFactor } from '../drawing/viewDims'
 import type { NamedView } from '../view'
 import { cleanNumbersDeep } from '../geom/clean'
 import { modelToPaperEntity, parseProxyId } from '../layout/transspatial'
@@ -896,6 +897,14 @@ export class DocumentModel {
     else if (entity.color === undefined || entity.color.toUpperCase() === BYLAYER) delete entity.color
     if (input.lineWeight === undefined && v?.CELWEIGHT !== undefined && v.CELWEIGHT >= 0) entity.lineWeight = v.CELWEIGHT
     else if (entity.lineWeight === undefined || entity.lineWeight < 0) delete entity.lineWeight
+    // En una hoja, una cota sobre una vista de dibujo mide la pieza (factor 1/escala de la vista).
+    if (entity.type === 'DIMENSION' && this.activeLayout && !entity.props.overrides?.DIMLFAC) {
+      const f = viewDimFactor(this.entities, this.blocks, entity.props)
+      if (f !== null && Math.abs(f - 1) > 1e-12) {
+        const base = entity.props.style.DIMLFAC || 1
+        entity.props = { ...entity.props, style: { ...entity.props.style, DIMLFAC: base * f }, overrides: { ...(entity.props.overrides ?? {}), DIMLFAC: base * f } }
+      }
+    }
     this.entities.push(entity)
     this._rev++
     return entity

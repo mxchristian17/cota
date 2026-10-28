@@ -3,7 +3,9 @@ import type { Entity } from '../core/document/types'
 import type { Command } from '../core/commands/types'
 import type { ScriptResult } from '../core/commands/CommandEngine'
 import { CATEGORIES } from '../core/ui/menus'
+import { paperSizeMm } from '../core/layout/paper'
 import { GUIDES } from './docs'
+import { parseScript } from '../core/commands/script'
 import { box3, describe, n, objectLine, p3 } from './describe'
 
 /**
@@ -51,7 +53,8 @@ export const AGENT_TOOLS: ToolDef[] = [
   },
   {
     name: 'select',
-    description: 'Set the current selection; the next command that asks for objects uses it. An empty list clears it.',
+    description:
+      'Set the current selection. The next command that asks for objects takes it WITHOUT showing its "Select objects" prompt, so your script must go straight to the prompt that follows (e.g. after select: MOVE 0,0 @10,0). An empty list clears it.',
     parameters: { type: 'object', properties: { ids }, required: ['ids'] },
   },
   {
@@ -109,14 +112,18 @@ export async function runTool(host: AgentHost, name: string, args: Record<string
   switch (name) {
     case 'run_commands': {
       const before = new Map(doc.entities.map((e) => [e.id, JSON.stringify(e)]))
-      const r = await host.runScript(String(args.script ?? ''))
+      const script = String(args.script ?? '')
+      const r = await host.runScript(script)
+      const inputs = parseScript(script)
       const after = doc.entities
       const created = after.filter((e) => !before.has(e.id))
       const changed = after.filter((e) => before.has(e.id) && before.get(e.id) !== JSON.stringify(e))
       const alive = new Set(after.map((e) => e.id))
       const deleted = [...before.keys()].filter((id) => !alive.has(id))
       const t = r.transcript.length > MAX_TRANSCRIPT ? ['…', ...r.transcript.slice(-MAX_TRANSCRIPT)] : r.transcript
-      const out = [r.ok ? 'OK' : `STOPPED at input ${(r.failedAt ?? 0) + 1}: ${r.error ?? 'rejected'}`, ...(r.cancelledAt ? [`The last command was still waiting at "${r.cancelledAt.trim()}" and was cancelled.`] : []), 'Transcript:', ...t]
+      const bad = r.failedAt !== undefined ? inputs[r.failedAt] : undefined
+      const where = r.failedPrompt ? ` at the prompt "${r.failedPrompt}"` : ' (no command was running: it was taken as a command name)'
+      const out = [r.ok ? 'OK' : `STOPPED at input ${(r.failedAt ?? 0) + 1} (${bad === '' ? '""' : JSON.stringify(bad)})${where}: ${r.error ?? 'rejected'}`, ...(r.cancelledAt ? [`The last command was still waiting at "${r.cancelledAt.trim()}" and was cancelled.`] : []), 'Transcript:', ...t]
       if (created.length) out.push('Created:', ...created.slice(0, 50).map((e) => objectLine(e, layerName(doc, e.layer))), ...(created.length > 50 ? [`…and ${created.length - 50} more`] : []))
       if (changed.length) out.push('Changed:', ...changed.slice(0, 30).map((e) => objectLine(e, layerName(doc, e.layer))))
       if (deleted.length) out.push(`Deleted: ${deleted.join(', ')}`)
@@ -127,7 +134,9 @@ export async function runTool(host: AgentHost, name: string, args: Record<string
       for (const e of doc.entities) counts.set(e.type, (counts.get(e.type) ?? 0) + 1)
       const all = doc.entities.map(box3)
       const ext = all.length ? [0, 1, 2].map((k) => [Math.min(...all.map((b) => b[0][k])), Math.max(...all.map((b) => b[1][k]))]) : null
-      const space = doc.activeLayout ? `layout "${doc.activeLayout.name}" (paper mm)` : 'Model'
+      const lay = doc.activeLayout
+      const sheet = lay ? paperSizeMm(lay.pageSetup) : null
+      const space = lay && sheet ? `layout "${lay.name}" (sheet ${n(sheet.width)}×${n(sheet.height)} mm, origin at its lower left corner; the title block sits at the lower right)` : 'Model'
       return {
         text: [
           `Units: ${doc.units}`,
@@ -157,7 +166,7 @@ export async function runTool(host: AgentHost, name: string, args: Record<string
     }
     case 'describe_object': {
       const list = ((args.ids as string[]) ?? []).map((id) => doc.getEntity(id))
-      const out = list.map((e, i) => (e ? compact(e) : `${(args.ids as string[])[i]}: not found`))
+      const out = list.map((e, i) => (!e ? `${(args.ids as string[])[i]}: not found` : e.type === 'INSERT' && e.props.view ? viewGeometry(doc, e) : compact(e)))
       return { text: out.join('\n') }
     }
     case 'select': {
@@ -185,6 +194,37 @@ export async function runTool(host: AgentHost, name: string, args: Record<string
     default:
       return { text: `Unknown tool ${name}.`, isError: true }
   }
+}
+
+const MAX_VIEW_ITEMS = 250
+
+/**
+ * Geometría de una vista de dibujo en coordenadas de la HOJA (lo que hace falta para acotarla): líneas, círculos y
+ * arcos de su bloque, llevados por la posición y la escala de la vista. Las ocultas y las finas (roscas) se marcan.
+ */
+function viewGeometry(doc: DocumentModel, e: Entity): string {
+  if (e.type !== 'INSERT' || !e.props.view) return compact(e)
+  const block = doc.blocks.find((b) => b.name === e.props.name)
+  const [px, py] = e.props.position
+  const k = e.props.scale[0]
+  const rot = ((e.props.rotation ?? 0) * Math.PI) / 180
+  const [c, sn] = [Math.cos(rot), Math.sin(rot)]
+  const P = (v: number[]) => `${n(px + k * (v[0] * c - v[1] * sn))},${n(py + k * (v[0] * sn + v[1] * c))}`
+  const hiddenLayer = doc.layers.find((l) => l.name === 'MD_Hidden')?.id
+  const b = e.props.view.basis
+  const axis = (v: number[]) => ['X', 'Y', 'Z'].map((name, i) => (Math.abs(v[i]) > 0.999 ? `${v[i] > 0 ? '+' : '-'}${name}` : '')).join('') || `(${v.map(n).join(',')})`
+  const lines = [`Drawing view ${e.id} at ${n(px)},${n(py)} scale ${n(k)} (1 model unit = ${n(k)} sheet mm); sheet right = model ${axis(b.right)}, sheet up = model ${axis(b.up)}. Geometry in sheet coordinates:`]
+  for (const g of block?.entities ?? []) {
+    if (lines.length > MAX_VIEW_ITEMS) {
+      lines.push('…more geometry not shown')
+      break
+    }
+    const tag = `${g.layer === hiddenLayer ? ' hidden' : ''}${g.lineWeight !== undefined && g.lineWeight < 0.25 ? ' thin' : ''}`
+    if (g.type === 'LINE') lines.push(`line ${P(g.props.start)} → ${P(g.props.end)}${tag}`)
+    else if (g.type === 'CIRCLE') lines.push(`circle center ${P(g.props.center)} r ${n(g.props.radius * k)}${tag}`)
+    else if (g.type === 'ARC') lines.push(`arc center ${P(g.props.center)} r ${n(g.props.radius * k)}${g.props.thread ? ` thread ${g.props.thread.designation}` : ''}${tag}`)
+  }
+  return lines.join('\n')
 }
 
 /** Propiedades de un objeto en JSON compacto (números cortos). */

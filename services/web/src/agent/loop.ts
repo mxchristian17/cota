@@ -34,7 +34,7 @@ export async function runAgentTurn(history: ChatMessage[], userText: string, o: 
     const r = await callModel(o.cfg, SYSTEM_PROMPT, messages, AGENT_TOOLS, o.signal)
     context = r.usage.input + r.usage.output
     o.onEvent?.({ kind: 'usage', input: r.usage.input, output: r.usage.output })
-    messages.push({ role: 'assistant', text: r.text, toolCalls: r.toolCalls })
+    messages.push({ role: 'assistant', text: r.text, toolCalls: r.toolCalls, ...(r.raw !== undefined ? { raw: r.raw } : {}) })
     if (r.text) o.onEvent?.({ kind: 'assistant', text: r.text })
     if (!r.toolCalls.length) return { messages, context }
     const results: ToolResultMsg[] = []

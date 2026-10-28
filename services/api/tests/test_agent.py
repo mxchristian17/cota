@@ -32,7 +32,7 @@ def test_step_returns_tool_calls_and_then_text(client: TestClient, monkeypatch) 
     assert body["tool_calls"] == [{"id": "t1", "name": "run_commands", "args": {"script": "CIRCLE 0,0 10"}}]
     msgs = [
         {"role": "user", "text": "circle"},
-        {"role": "assistant", "text": "Drawing.", "toolCalls": body["tool_calls"]},
+        {"role": "assistant", "text": "Drawing.", "toolCalls": body["tool_calls"], "raw": body["raw"]},
         {"role": "tool", "results": [{"id": "t1", "name": "run_commands", "text": "OK\nCreated: CIRCLE center 0,0,0 r 10"}]},
     ]
     r2 = client.post("/agent/step", json={"system": "You are a test.", "messages": msgs, "tools": TOOLS}, headers=h)

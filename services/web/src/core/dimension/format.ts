@@ -1,3 +1,4 @@
+import { decodeTextCodes } from '../text/codes'
 import type { DimVars } from './style'
 
 /**
@@ -160,7 +161,8 @@ export function dimTextContent(measured: string, rawLinear: number | null, s: Di
   }
   if (override !== undefined && override !== null && override !== '') {
     // Texto manual: `<>` es la medida; un espacio solo suprime el texto (CAD clásico).
-    const main = override.trim() === '' ? '' : override.replace('<>', value)
+    // Códigos de texto del CAD clásico (%%c = Ø, %%d = °, %%p = ±), como en TEXT.
+    const main = override.trim() === '' ? '' : decodeTextCodes(override.replace('<>', value))
     return { main, stack: override.includes('<>') ? stack : undefined, boxed }
   }
   return { main: value, stack, boxed }

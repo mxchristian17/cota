@@ -1,3 +1,4 @@
+import { decodeTextCodes } from '../text/codes'
 import type { Vec3 } from '../math'
 import type { DimensionProps } from '../document/types'
 import { layoutText, textWidth, type Pt2, type Stroke } from '../text/strokeFont'
@@ -230,7 +231,7 @@ export function dimContent(p: DimensionProps): DimTextContent {
       return dimTextContent(formatLinear(Math.abs(v), s), Math.abs(v), s, p.textOverride)
     case 'LEADER':
     case 'MLEADER':
-      return { main: p.textOverride ?? '', boxed: false }
+      return { main: decodeTextCodes(p.textOverride ?? ''), boxed: false }
     case 'CENTER':
     case 'CENTERLINE':
       return { main: '', boxed: false }

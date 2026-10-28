@@ -19,7 +19,7 @@ export interface ProviderConfig {
 export const PROVIDERS: Record<ProviderId, { label: string; model: string; keyUrl?: string }> = {
   anthropic: { label: 'Anthropic', model: 'claude-sonnet-5-5', keyUrl: 'https://console.anthropic.com/settings/keys' },
   openai: { label: 'OpenAI', model: 'gpt-5', keyUrl: 'https://platform.openai.com/api-keys' },
-  gemini: { label: 'Google Gemini', model: 'gemini-2.5-pro', keyUrl: 'https://aistudio.google.com/apikey' },
+  gemini: { label: 'Google Gemini (free tier: Flash models)', model: 'gemini-3.5-flash', keyUrl: 'https://aistudio.google.com/apikey' },
   openrouter: { label: 'OpenRouter (DeepSeek, Kimi, GLM…)', model: 'deepseek/deepseek-chat', keyUrl: 'https://openrouter.ai/keys' },
   compatible: { label: 'OpenAI-compatible (base URL)', model: '' },
   server: { label: 'Server (your account)', model: '' },
@@ -29,6 +29,8 @@ export interface ToolCall {
   id: string
   name: string
   args: Record<string, unknown>
+  /** Firma de razonamiento de Gemini 3: hay que devolverla tal cual con la llamada en las vueltas siguientes. */
+  signature?: string
 }
 
 export interface ToolResultMsg {
@@ -41,21 +43,59 @@ export interface ToolResultMsg {
 
 export type ChatMessage =
   | { role: 'user'; text: string }
-  | { role: 'assistant'; text: string; toolCalls: ToolCall[] }
+  | { role: 'assistant'; text: string; toolCalls: ToolCall[]; raw?: unknown }
   | { role: 'tool'; results: ToolResultMsg[] }
 
 export interface ModelReply {
   text: string
   toolCalls: ToolCall[]
+  /** Respuesta tal como la guarda el servidor (modo Docker): vuelve en la próxima llamada sin perder nada. */
+  raw?: unknown
   /** Tokens de entrada de esta llamada (el tamaño del contexto) y de salida. */
   usage: { input: number; output: number }
 }
 
-export class ProviderError extends Error {}
+export class ProviderError extends Error {
+  constructor(
+    message: string,
+    readonly status = 0,
+    readonly retryAfterMs = 0,
+  ) {
+    super(message)
+  }
+}
 
 const b64 = (dataUrl: string) => dataUrl.replace(/^data:image\/png;base64,/, '')
 
+/** Esperas ante 429/5xx (cupo por minuto o demanda alta del proveedor, comunes en los niveles gratis). */
+const RETRY_MS = [2000, 6000, 15000, 30000, 45000, 60000]
+/** Más que esto (p. ej. el cupo diario de un nivel gratis) no se espera: se avisa. */
+const MAX_WAIT_MS = 90_000
+
+const sleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const t = setTimeout(resolve, ms)
+    signal?.addEventListener('abort', () => {
+      clearTimeout(t)
+      reject(new DOMException('Aborted', 'AbortError'))
+    })
+  })
+
 async function post(url: string, headers: Record<string, string>, body: unknown, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await postOnce(url, headers, body, signal)
+    } catch (err) {
+      const status = err instanceof ProviderError ? err.status : 0
+      if (!(status === 429 || status >= 500) || attempt >= RETRY_MS.length) throw err
+      const wait = err instanceof ProviderError && err.retryAfterMs ? err.retryAfterMs + 500 : RETRY_MS[attempt]
+      if (wait > MAX_WAIT_MS) throw err
+      await sleep(wait, signal)
+    }
+  }
+}
+
+async function postOnce(url: string, headers: Record<string, string>, body: unknown, signal?: AbortSignal): Promise<Record<string, unknown>> {
   let res: Response
   try {
     res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body), signal })
@@ -66,9 +106,17 @@ async function post(url: string, headers: Record<string, string>, body: unknown,
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>
   if (!res.ok) {
     const e = json.error as { message?: string } | string | undefined
-    throw new ProviderError(`${res.status}: ${typeof e === 'string' ? e : (e?.message ?? res.statusText)}`)
+    const after = Number(res.headers.get('retry-after'))
+    throw new ProviderError(`${res.status}: ${typeof e === 'string' ? e : (e?.message ?? res.statusText)}`, res.status, Number.isFinite(after) && after > 0 ? after * 1000 : retryDelayOf(json))
   }
   return json
+}
+
+/** Espera que pide Google en el cuerpo del 429 (`RetryInfo.retryDelay`, p. ej. "24.4s" o "10h48m15s"), en ms. */
+function retryDelayOf(json: Record<string, unknown>): number {
+  const details = ((json.error as { details?: Array<{ retryDelay?: string }> } | undefined)?.details ?? []).map((d) => d.retryDelay).find(Boolean)
+  const m = details ? /^(?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?$/.exec(details) : null
+  return m ? ((Number(m[1] ?? 0) * 60 + Number(m[2] ?? 0)) * 60 + Number(m[3] ?? 0)) * 1000 : 0
 }
 
 /** Una llamada al modelo con las herramientas; devuelve texto y pedidos de herramientas. */
@@ -115,7 +163,7 @@ export const OPENAI_BASE: Partial<Record<ProviderId, string>> = { openai: 'https
 async function server(system: string, messages: ChatMessage[], tools: ToolDef[]): Promise<ModelReply> {
   try {
     const r = await api.agentStep({ system, messages, tools })
-    return { text: r.text, toolCalls: r.tool_calls, usage: r.usage }
+    return { text: r.text, toolCalls: r.tool_calls, usage: r.usage, raw: r.raw }
   } catch (err) {
     throw new ProviderError(err instanceof Error ? err.message : String(err))
   }
@@ -173,11 +221,15 @@ function geminiSchema(s: unknown): unknown {
 async function gemini(cfg: ProviderConfig, system: string, messages: ChatMessage[], tools: ToolDef[], signal?: AbortSignal): Promise<ModelReply> {
   const contents = messages.map((m) => {
     if (m.role === 'user') return { role: 'user', parts: [{ text: m.text }] }
-    if (m.role === 'assistant') return { role: 'model', parts: [...(m.text ? [{ text: m.text }] : []), ...m.toolCalls.map((c) => ({ functionCall: { name: c.name, args: c.args } }))] }
+    if (m.role === 'assistant')
+      return {
+        role: 'model',
+        parts: [...(m.text ? [{ text: m.text }] : []), ...m.toolCalls.map((c) => ({ functionCall: { id: c.id, name: c.name, args: c.args }, ...(c.signature ? { thoughtSignature: c.signature } : {}) }))],
+      }
     return {
       role: 'user',
       parts: m.results.flatMap((r) => [
-        { functionResponse: { name: r.name, response: { content: r.isError ? `ERROR: ${r.text}` : r.text } } },
+        { functionResponse: { id: r.id, name: r.name, response: { content: r.isError ? `ERROR: ${r.text}` : r.text } } },
         ...(r.image ? [{ inlineData: { mimeType: 'image/png', data: b64(r.image) } }] : []),
       ]),
     }
@@ -188,12 +240,15 @@ async function gemini(cfg: ProviderConfig, system: string, messages: ChatMessage
     { systemInstruction: { parts: [{ text: system }] }, contents, ...(tools.length ? { tools: [{ functionDeclarations: tools.map((t) => ({ name: t.name, description: t.description, parameters: geminiSchema(t.parameters) })) }] } : {}) },
     signal,
   )
-  const parts = ((json.candidates as Array<{ content?: { parts?: Array<{ text?: string; functionCall?: { name: string; args?: Record<string, unknown> } }> } }>) ?? [])[0]?.content?.parts ?? []
+  const parts =
+    ((json.candidates as Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean; thoughtSignature?: string; functionCall?: { id?: string; name: string; args?: Record<string, unknown> } }> } }>) ?? [])[0]?.content?.parts ?? []
   const usage = json.usageMetadata as { promptTokenCount?: number; candidatesTokenCount?: number } | undefined
   let k = 0
   return {
-    text: parts.filter((p) => p.text).map((p) => p.text).join('\n'),
-    toolCalls: parts.filter((p) => p.functionCall).map((p) => ({ id: `call_${Date.now()}_${k++}`, name: p.functionCall!.name, args: p.functionCall!.args ?? {} })),
+    text: parts.filter((p) => p.text && !p.thought).map((p) => p.text).join('\n'),
+    toolCalls: parts
+      .filter((p) => p.functionCall)
+      .map((p) => ({ id: p.functionCall!.id ?? `call_${Date.now()}_${k++}`, name: p.functionCall!.name, args: p.functionCall!.args ?? {}, ...(p.thoughtSignature ? { signature: p.thoughtSignature } : {}) })),
     usage: { input: usage?.promptTokenCount ?? 0, output: usage?.candidatesTokenCount ?? 0 },
   }
 }

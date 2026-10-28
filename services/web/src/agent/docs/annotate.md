@@ -19,7 +19,9 @@ MLEADER (leader with text): arrowhead point, landing point, text lines, "".
   MLEADER 40,20 20,45 "Hole" ""
 THREAD: the ISO thread symbol on a circle: a point on the circle, a point inside (shaft) or outside (hole), the
 number of the suggested thread ("" = the nearest), Y/N for its leader and, if Y, the leader landing. On a 3D
-solid it takes a point on a cylindrical face instead (no side: shaft or hole comes from the face).
+solid it takes a point on a cylindrical face instead (no side: shaft or hole comes from the face): the point must
+be on the side of the face that the current view sees, e.g. after -VIEW FRONT the point x,y−r,z at the front of a
+vertical shaft of radius r centered at x,y.
   THREAD 60,20 50,20 "" N
 
 -HATCH (command-line HATCH): P and a pattern name (ANSI31, ANSI37, SOLID…), pattern scale and angle, then a point inside each closed

@@ -33,8 +33,9 @@ export interface ScriptResult {
   ok: boolean
   /** Entradas procesadas. */
   ran: number
-  /** Índice de la entrada rechazada. */
+  /** Índice de la entrada rechazada y el prompt que la rechazó. */
   failedAt?: number
+  failedPrompt?: string
   error?: string
   /** Todo lo que se imprimió (prompts con su respuesta y mensajes). */
   transcript: string[]
@@ -382,7 +383,7 @@ export class CommandEngine {
           const error = fresh.filter((l) => SCRIPT_ERROR.test(l)).at(-1) ?? fresh.at(-1) ?? 'Input rejected.'
           this.cancel()
           await settle()
-          return { ok: false, ran: i, failedAt: i, error, transcript: lines }
+          return { ok: false, ran: i, failedAt: i, failedPrompt: prompt.trim(), error, transcript: lines }
         }
       }
       if (this.activeCommand && opts.finish === 'cancel') {

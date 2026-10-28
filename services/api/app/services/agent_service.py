@@ -14,6 +14,7 @@ from pydantic_ai import direct
 from pydantic_ai.messages import (
     BinaryContent,
     ModelMessage,
+    ModelMessagesTypeAdapter,
     ModelRequest,
     ModelResponse,
     SystemPromptPart,
@@ -50,14 +51,18 @@ def to_model_messages(system: str, messages: list[dict[str, Any]]) -> list[Model
                 parts.insert(0, SystemPromptPart(content=system))
             out.append(ModelRequest(parts=parts))
             first = False
+        elif role == "assistant" and m.get("raw"):
+            # La respuesta tal como la devolvió el modelo (con firmas de razonamiento, ids…): vuelve intacta.
+            try:
+                out.extend(ModelMessagesTypeAdapter.validate_python(m["raw"]))
+                continue
+            except ValueError:
+                pass
+            out.append(_plain_response(m))
         elif role == "assistant":
-            rparts: list[Any] = []
-            if m.get("text"):
-                rparts.append(TextPart(content=str(m["text"])))
-            for c in m.get("toolCalls", []):
-                rparts.append(ToolCallPart(tool_name=c["name"], args=c.get("args") or {}, tool_call_id=c["id"]))
-            out.append(ModelResponse(parts=rparts))
+            out.append(_plain_response(m))
         elif role == "tool":
+
             tparts: list[Any] = []
             images: list[BinaryContent] = []
             for r in m.get("results", []):
@@ -70,6 +75,15 @@ def to_model_messages(system: str, messages: list[dict[str, Any]]) -> list[Model
                 tparts.append(UserPromptPart(content=["Image of the active view:", *images]))
             out.append(ModelRequest(parts=tparts))
     return out
+
+
+def _plain_response(m: dict[str, Any]) -> ModelResponse:
+    parts: list[Any] = []
+    if m.get("text"):
+        parts.append(TextPart(content=str(m["text"])))
+    for c in m.get("toolCalls", []):
+        parts.append(ToolCallPart(tool_name=c["name"], args=c.get("args") or {}, tool_call_id=c["id"]))
+    return ModelResponse(parts=parts)
 
 
 def tool_definitions(tools: list[dict[str, Any]]) -> list[ToolDefinition]:
@@ -87,4 +101,5 @@ async def step(cfg: dict[str, Any], system: str, messages: list[dict[str, Any]],
     text = "\n".join(p.content for p in resp.parts if isinstance(p, TextPart))
     calls = [{"id": p.tool_call_id, "name": p.tool_name, "args": p.args_as_dict()} for p in resp.parts if isinstance(p, ToolCallPart)]
     usage = resp.usage
-    return {"text": text, "tool_calls": calls, "usage": {"input": int(usage.input_tokens or 0), "output": int(usage.output_tokens or 0)}}
+    raw = ModelMessagesTypeAdapter.dump_python([resp], mode="json")
+    return {"text": text, "tool_calls": calls, "usage": {"input": int(usage.input_tokens or 0), "output": int(usage.output_tokens or 0)}, "raw": raw}

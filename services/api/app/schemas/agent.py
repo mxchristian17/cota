@@ -21,6 +21,8 @@ class AgentStepOut(BaseModel):
     text: str
     tool_calls: list[ToolCallOut]
     usage: dict[str, int]
+    #: Respuesta del modelo serializada por pydantic-ai: el navegador la devuelve en la próxima vuelta (firmas, ids).
+    raw: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ConversationIn(BaseModel):

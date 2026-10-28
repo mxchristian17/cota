@@ -4,6 +4,22 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.8.1] — 2026-10-28
+
+Fixes found testing the modeling agent with a real Google Gemini key.
+
+### Fixed
+- Gemini 3 models: the agent keeps the reasoning signature of each tool call, which these models require on the next
+  turn (it failed after the first tool), also through the optional server.
+- Busy or rate-limited providers (HTTP 429/5xx): the agent waits as long as the provider asks and retries, and says
+  clearly when a daily quota is used up. The default Gemini model is now `gemini-3.5-flash`, available on the free tier.
+- `%%c` (Ø), `%%d` (°) and `%%p` (±) in dimension and leader text are shown as symbols, as in TEXT.
+- Dimensions drawn on a sheet over a drawing view measure the part, not the paper (a 1:2 view showed half sizes).
+
+### Changed
+- The agent can read the lines, circles and arcs of a drawing view in sheet coordinates to dimension it, gets the
+  sheet size, and is told which input and prompt rejected a script.
+
 ## [2.8.0] — 2026-10-28
 
 ### Added
