@@ -13,9 +13,9 @@
 export const CATEGORIES: { label: string; names: string[] }[] = [
   {
     label: 'File',
-    names: ['NEW', 'OPEN', 'OPENFOLDER', 'SAVE', 'CLOUD', '§Import / export', 'IMPORT', 'EXPORT', '§Print', 'PAGESETUP', 'PLOT', 'PUBLISH', '§Drawing', 'DWGPROPS', 'UNITS', 'TEMPLATE', 'LOGIN'],
+    names: ['NEW', 'OPEN', 'OPENFOLDER', 'SAVE', 'CLOUD', '§Import / export', 'IMPORT', 'EXPORT', '§Print', 'PAGESETUP', 'PLOT', 'PUBLISH', '§Drawing', 'DWGPROPS', 'UNITS', 'TEMPLATE', 'PURGE', 'LOGIN'],
   },
-  { label: 'Edit', names: ['UNDO', 'REDO', '§Clipboard', 'CUTCLIP', 'COPYCLIP', 'COPYBASE', 'PASTECLIP', 'PASTEORIG', '§Selection', 'SELECTALL', 'SELECT', 'SELECTSIMILAR', 'ERASE'] },
+  { label: 'Edit', names: ['UNDO', 'REDO', '§Clipboard', 'CUTCLIP', 'COPYCLIP', 'COPYBASE', 'PASTECLIP', 'PASTEORIG', '§Selection', 'SELECTALL', 'SELECT', 'SELECTSIMILAR', 'QSELECT', 'ERASE'] },
   {
     label: 'View',
     names: [
@@ -32,7 +32,7 @@ export const CATEGORIES: { label: string; names: string[] }[] = [
       '§Styles', 'LINETYPE', 'DIMSTYLE', 'MLEADERSTYLE', '§Drawing', 'LIMITS',
     ],
   },
-  { label: 'Tools', names: ['@toolbars', 'TOOLBAR', 'OPTIONS', 'OSNAP', 'GRID', '§UCS', 'UCS', '§Inquiry', 'DIST', 'ID', 'AREA', 'LIST', 'MASSPROP', '§Other', 'PROMPT', 'ATTSYNC'] },
+  { label: 'Tools', names: ['@toolbars', 'TOOLBAR', 'OPTIONS', 'OSNAP', 'GRID', '§UCS', 'UCS', '§Inquiry', 'DIST', 'ID', 'AREA', 'LIST', 'MASSPROP', '§Groups', 'GROUP', 'UNGROUP', '§Isolate', 'ISOLATEOBJECTS', 'HIDEOBJECTS', 'UNISOLATEOBJECTS', '§Other', 'PROMPT', 'ATTSYNC'] },
   {
     label: 'Draw',
     names: [

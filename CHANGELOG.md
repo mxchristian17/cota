@@ -4,6 +4,20 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.3.0] — 2026-10-28
+
+### Added
+- **QSELECT** Quick Select dialog: by object type and property (layer, linetype, length, angle, radius, diameter,
+  area, closed, text contents and height, dimension measurement and style, block name, hatch pattern), with
+  equals / not equal / greater / less / wildcard / select all, include or exclude, and append to the selection.
+- **GROUP**, **UNGROUP** and **-GROUP** (list, create, add, remove, explode, rename, selectable): picking an object of
+  a group selects the whole group; **PICKSTYLE** (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd>) turns it off. Groups are
+  saved with the drawing.
+- **ISOLATEOBJECTS**, **HIDEOBJECTS** and **UNISOLATEOBJECTS**: temporarily show only, or hide, the selected objects;
+  hidden objects give no snaps and cannot be selected. In the right-click menu with Quick Select.
+- **PURGE**: removes unused blocks (nested ones too), dimension styles, layers and linetypes, by name or wildcard,
+  optionally confirming each one.
+
 ## [2.2.0] — 2026-10-28
 
 ### Added

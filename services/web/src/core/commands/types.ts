@@ -161,6 +161,8 @@ export interface AppHooks {
   setViewportLayout(n: number): void
   /** Exporta el dibujo a PDF vectorial (descarga en el navegador). */
   exportPdf(): void
+  /** QSELECT: abre el diálogo de selección rápida. */
+  qselect?(): void
   /** Malla de un sólido o de una malla 3D (para LIST, AREA y MASSPROP). */
   solidMesh?(e: Entity): import('../document/types').MeshProps | null
   /** PLOT: diálogo con vista previa; 'window' = el usuario pidió marcar una ventana (se vuelve a abrir con ella). */

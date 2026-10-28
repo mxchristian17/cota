@@ -846,6 +846,8 @@ export interface DocumentData {
   modelUcs?: { origin: Vec3; xAxis: Vec3; yAxis: Vec3 }
   /** Vistas al guardar (como el CAD clásico guarda la vista de cada viewport); ausente = vista en planta a extensiones. */
   viewState?: SavedViews
+  /** Grupos con nombre (GROUP): conjuntos de objetos que se seleccionan juntos (PICKSTYLE). */
+  groups?: GroupDef[]
   /** Tipos de línea cargados; `.cota` previos: se cargan los que usen sus capas. */
   linetypes?: LinetypeDefData[]
   /** Variables de tipo de línea y de sombreado guardadas en el dibujo, como en el DWG. */
@@ -882,4 +884,12 @@ export interface SavedViews {
   active?: number
   paper?: Record<string, SavedCamera>
   visualStyle?: string
+}
+
+/** Grupo (GROUP): objetos que se seleccionan juntos si es seleccionable y PICKSTYLE está activo. */
+export interface GroupDef {
+  name: string
+  ids: string[]
+  selectable: boolean
+  description?: string
 }

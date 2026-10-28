@@ -1,3 +1,4 @@
+import { isHidden } from '../editing/isolation'
 import type { DocumentModel } from '../document/DocumentModel'
 import type { Entity } from '../document/types'
 import { entityOutline } from '../editing/bounds'
@@ -26,7 +27,7 @@ export function selectableEntities(doc: DocumentModel): Entity[] {
   const layers = new Map(doc.layers.map((l) => [l.id, l]))
   return doc.entities.filter((e) => {
     const l = layers.get(e.layer)
-    return layerEditable(l)
+    return layerEditable(l) && !isHidden(e.id)
   })
 }
 

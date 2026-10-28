@@ -7,6 +7,7 @@ import { FloatingToolbars, ToolbarDialog, ToolbarDock } from './ui/Toolbar'
 import { canInstall, enterFullscreen, isStandalone, onInstallChange, promptInstall } from './ui/appWindow'
 import { FlatshotDialog } from './ui/FlatshotDialog'
 import { PlotDialog } from './ui/PlotDialog'
+import { QSelectDialog } from './ui/QSelectDialog'
 import { CLOUD_ENABLED } from './core/io/backend'
 import { BRAND_HTML } from './ui/brand'
 import { focusCommandLine } from './ui/focus'
@@ -197,6 +198,12 @@ export default function App() {
             return
           }
         }
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A') && e.shiftKey && !e.altKey && !editingText() && !inOtherField()) {
+        // Ctrl+Shift+A = selección de grupos sí/no (PICKSTYLE), como el CAD clásico.
+        e.preventDefault()
+        useStore.getState().togglePickstyle()
+        return
       }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A') && !e.shiftKey && !e.altKey) {
         // Ctrl+A = seleccionar todo (CAD clásico), salvo que se esté escribiendo en un campo.
@@ -410,6 +417,7 @@ export default function App() {
       <AiDialog />
       <FlatshotDialog />
       <PlotDialog />
+      <QSelectDialog />
       <ViewGenDialog />
     </div>
   )

@@ -65,6 +65,8 @@ import { vplayerCommand } from './impl/vplayer'
 import { dwgpropsCommand, fieldCommand, updatefieldCommand } from './impl/field'
 import { attdefCommand, attdispCommand, atteditCommand, attsyncCommand, eatteditCommand } from './impl/attribs'
 import { distCommand } from './impl/dist'
+import { groupCliCommand, groupCommand, hideObjectsCommand, isolateObjectsCommand, pickstyleCommand, qselectCommand, ungroupCommand, unisolateObjectsCommand } from './impl/group'
+import { purgeCommand } from './impl/purge'
 import { areaCommand, idCommand, listCommand, masspropCommand, polarAngCommand } from './impl/inquiry'
 import { exportCommand, importCommand } from './impl/io'
 import { optionsCommand } from './impl/options'
@@ -151,6 +153,9 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   engine.register(distCommand)
   for (const c of [idCommand, areaCommand, listCommand, masspropCommand]) engine.register(c)
   registerVariable(engine, polarAngCommand)
+  for (const c of [groupCommand, ungroupCommand, groupCliCommand, qselectCommand, isolateObjectsCommand, hideObjectsCommand, unisolateObjectsCommand]) engine.register(c)
+  registerVariable(engine, pickstyleCommand)
+  engine.register(purgeCommand)
   engine.register(blockCommand)
   engine.register(insertCommand)
   engine.register(explodeCommand)

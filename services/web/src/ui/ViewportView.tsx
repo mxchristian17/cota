@@ -13,6 +13,7 @@ import { focusCommandLine } from './focus'
 import { ViewNet } from './ViewNet'
 import { LayoutView } from './LayoutView'
 import { paneKeyOf, paneState } from '../render/viewMemory'
+import { isolation } from '../core/editing/isolation'
 
 
 function containerStyle(layout: number): CSSProperties {
@@ -124,8 +125,9 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
     vp.setProvider(() => {
       const s = useStore.getState()
       return {
-        revision: s.doc.revision,
-        entities: s.doc.entities,
+        // Lo oculto con ISOLATEOBJECTS/HIDEOBJECTS no se dibuja ni da snaps (la revisión cambia con el aislamiento).
+        revision: s.doc.revision + isolation.rev * 1e-6,
+        entities: isolation.hidden.size ? s.doc.entities.filter((e) => !isolation.hidden.has(e.id)) : s.doc.entities,
         blocks: s.doc.blocks,
         layers: s.doc.layers,
         selection: s.picked.length ? [...s.selection, ...s.picked] : s.selection,

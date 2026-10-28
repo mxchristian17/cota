@@ -19,6 +19,7 @@ import type { Pt, Vec3 } from '../core/math'
 import type { PreviewShape } from '../core/preview'
 import { isWorldUcs, normalizeUcs, sameUcs, ucsToDef, WORLD_UCS, type Ucs } from '../core/ucs'
 import { paneKeyOf, paneState, paperCams } from '../render/viewMemory'
+import { endIsolation, isHidden } from '../core/editing/isolation'
 import type { SavedViews } from '../core/document/types'
 import { DEFAULT_PALETTE, normalizePalette, type PaletteState } from '../core/ui/palette'
 import { dockToolbar, normalizeToolbar, normalizeToolbars, type ToolbarSide, type ToolbarState, type ToolbarStates } from '../core/ui/toolbar'
@@ -296,6 +297,8 @@ export interface AppState {
   toggleOrtho: () => void
   toggleDynInput: () => void
   togglePolar: () => void
+  /** Ctrl+Shift+A: selección de grupos (PICKSTYLE) sí/no. */
+  togglePickstyle: () => void
   /** GRID / F7: muestra u oculta la grilla; sin argumento, alterna. */
   setGrid: (on?: boolean) => void
   /** FULLSCREEN: pantalla completa total; sin argumento, alterna. `apply = false` sólo anota la preferencia. */
@@ -403,6 +406,11 @@ export interface AppState {
   setAiLod: (n: number) => void
   exportPdf: () => void
   plotOpen: boolean
+  qselectOpen: boolean
+  openQselect: () => void
+  closeQselect: () => void
+  /** QSELECT ▸ OK: deja seleccionados esos objetos (o los suma a la selección actual). */
+  applyQselect: (ids: string[], append: boolean) => void
   /** Opciones del último PLOT del modelo (se recuerdan en la sesión). */
   plotSettings: PlotSettings
   /** Página que saldría con esas opciones (para la vista previa), y si se puede usar Display (vista en planta). */
@@ -826,6 +834,7 @@ export const useStore = create<AppState>((set, get) => {
   }
   /** Al abrir un dibujo: sus vistas guardadas (o, si no trae, planta a extensiones) en los paneles y el papel. */
   const applyViews = () => {
+    endIsolation() // los objetos ocultos con ISOLATEOBJECTS/HIDEOBJECTS son del dibujo anterior
     const v = doc.savedViews
     paneState.clear()
     paperCams.clear()
@@ -977,6 +986,7 @@ export const useStore = create<AppState>((set, get) => {
     facingNormal: () => get().activeViewport?.facingNormal() ?? [0, 0, 1],
     setViewportLayout: (n) => get().setViewportLayout(n),
     exportPdf: () => get().exportPdf(),
+    qselect: () => get().openQselect(),
     solidMesh: (e) => (e.type === 'SOLID3D' ? solidMesh(e.props) : e.type === 'MESH3D' ? e.props : null),
     plotDialog: (window) =>
       new Promise((resolve) => {
@@ -1382,6 +1392,14 @@ export const useStore = create<AppState>((set, get) => {
     flatshotOptions: { ...DEFAULT_FLATSHOT },
     plotOpen: false,
     plotSettings: { ...DEFAULT_PLOT },
+    qselectOpen: false,
+    openQselect: () => set({ qselectOpen: true }),
+    closeQselect: () => set({ qselectOpen: false }),
+    applyQselect: (ids, append) => {
+      const next = append ? mergeSelection(get().selection, ids) : ids
+      set({ qselectOpen: false, selection: next })
+      print(`${ids.length} item(s) selected.`)
+    },
     cleanScreen: false,
     commandLineCompact: false,
     viewCubeOn: true,
@@ -1610,7 +1628,7 @@ export const useStore = create<AppState>((set, get) => {
           if (get().selection.length > 0) set({ selection: [] })
           return
         }
-        set({ selection: mergeSelection(get().selection, [pickedId], subtract) })
+        set({ selection: mergeSelection(get().selection, engine.withGroups([pickedId]), subtract) })
       }
     },
     beginGripEdit: (entityId, grip) => {
@@ -1746,7 +1764,7 @@ export const useStore = create<AppState>((set, get) => {
     boxSelect: (rect, crossing, project, subtract = false) => {
       const selectable = doc.entities.filter((e) => {
         const l = layerSvc.get(e.layer)
-        return layerEditable(l)
+        return layerEditable(l) && !isHidden(e.id)
       })
       const area = engine.selectionArea
       const cross = area ? area === 'crossing' : crossing
@@ -1769,7 +1787,7 @@ export const useStore = create<AppState>((set, get) => {
         reportLocked()
       } else if (!engine.busy) {
         // La ventana también acumula (CAD clásico); con Shift resta lo encerrado.
-        set({ selection: mergeSelection(get().selection, ids, subtract) })
+        set({ selection: mergeSelection(get().selection, engine.withGroups(ids), subtract) })
       }
     },
     isSelectMode: () => engine.isSelecting || (!engine.hasPending && !engine.busy),
@@ -2099,6 +2117,11 @@ export const useStore = create<AppState>((set, get) => {
       const next = !get().esnap
       set({ esnap: next })
       print(`<Osnap ${next ? 'on' : 'off'}>`)
+      saveConfig()
+    },
+    togglePickstyle: () => {
+      sysvars.PICKSTYLE = sysvars.PICKSTYLE ? 0 : 1
+      print(`<Group selection ${sysvars.PICKSTYLE ? 'on' : 'off'}>`)
       saveConfig()
     },
     togglePolar: () => {
@@ -2796,6 +2819,7 @@ export const useStore = create<AppState>((set, get) => {
         viewportLayout: 1,
       })
       bump()
+      endIsolation()
       // Un dibujo nuevo empieza en planta (sin la vista ni la UCS del anterior).
       for (const vp of get().viewports) if (vp.kind === 'model') vp.setView('TOP')
       restoreModelUcs()

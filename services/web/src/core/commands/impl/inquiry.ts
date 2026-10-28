@@ -1,7 +1,8 @@
 import type { Command, CommandContext } from '../types'
 import type { Entity, MeshProps } from '../../document/types'
 import type { Pt, Vec3 } from '../../math'
-import { curveOf, primPoint, type Curve } from '../../geom/curve'
+import { curveOf } from '../../geom/curve'
+import { curveArea } from '../../geom/area'
 import { hatchArea } from '../../hatch/geometry'
 import { formatDim, measureDim } from '../../dimension/dimGeometry'
 import { worldToUcs, WORLD_UCS } from '../../ucs'
@@ -22,34 +23,7 @@ const xyz = (ctx: CommandContext, p: Pt | Vec3) => {
   return `X = ${n4(q.x)}  Y = ${n4(q.y)}  Z = ${n4(q.z)}`
 }
 
-/** Área exacta con signo de una curva plana (líneas y arcos exactos; elipses y splines por muestreo fino). */
-export function curveArea(c: Curve): number {
-  let a = 0
-  for (const p of c.prims) {
-    if (p.k === 'L') a += (p.a[0] * p.b[1] - p.b[0] * p.a[1]) / 2
-    else if (p.k === 'A') {
-      const t0 = p.a0
-      const t1 = p.a0 + p.sw
-      a += (p.r * p.r * p.sw + p.r * (p.c[0] * (Math.sin(t1) - Math.sin(t0)) - p.c[1] * (Math.cos(t1) - Math.cos(t0)))) / 2
-    } else {
-      // Elipse o tramo de spline: por muestreo fino de la primitiva.
-      const k = 'sw' in p ? Math.max(64, Math.ceil((1024 * Math.abs(p.sw)) / (2 * Math.PI))) : 256
-      let q = primPoint(p, 0)
-      for (let j = 1; j <= k; j++) {
-        const r = primPoint(p, j / k)
-        a += (q[0] * r[1] - r[0] * q[1]) / 2
-        q = r
-      }
-    }
-  }
-  // Una curva abierta se mide como si se cerrara con una recta (como AREA ▸ Object del CAD clásico).
-  if (!c.closed) {
-    const s = c.pointAt(0)
-    const e = c.pointAt(c.n)
-    a += (e[0] * s[1] - s[0] * e[1]) / 2
-  }
-  return a
-}
+export { curveArea }
 
 /** Volumen, centroide y área de la superficie de una malla cerrada (triángulos en abanico por cara). */
 export function meshProperties(m: MeshProps): { volume: number; centroid: Vec3; surface: number; min: Vec3; max: Vec3 } {

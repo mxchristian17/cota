@@ -19,6 +19,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | `DWGPROPS` | — | Drawing properties: title, subject, author, keywords and custom properties (used by fields) |
 | `UNITS` | `UN` | Set the drawing units: millimeters, centimeters, meters, inches or feet |
 | `TEMPLATE` | — | Drawing template: save it, open one, make the current settings the default for new drawings, or clear it |
+| `PURGE` | `PU`, `-PURGE`, `-PU` | Remove unused blocks, dimension styles, layers and linetypes [Blocks/Dimstyles/LAyers/LTypes/All] |
 | `LOGIN` | — | Sign in to save and load drawings |
 
 ## Edit menu
@@ -35,6 +36,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | `SELECTALL` | — | Select all objects (Ctrl+A) |
 | `SELECT` | `SE` | Select objects |
 | `SELECTSIMILAR` | — | Select every object of the same type and layer as the selected ones |
+| `QSELECT` | — | Quick Select: select objects by type and property (layer, linetype, length, radius, area, text…) in a dialog |
 | `ERASE` | `E` | Erase selected objects |
 
 ## View menu
@@ -121,6 +123,11 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | `AREA` | `AA` | Area and perimeter of points or of an object [Object/Add area/Subtract area]; Add/Subtract keep a running total |
 | `LIST` | `LI`, `LS` | List the properties of the selected objects: type, layer, points, lengths, areas, volumes |
 | `MASSPROP` | — | Mass properties of solids: volume (mass with density 1), surface area, bounding box and centroid |
+| `GROUP` | `G` | Group the selected objects so they are selected together [Name/Description]; UNGROUP breaks a group |
+| `UNGROUP` | — | Break up the group of a picked object [Name] |
+| `ISOLATEOBJECTS` | `ISOLATE` | Temporarily hide everything except the selected objects (UNISOLATEOBJECTS shows them again) |
+| `HIDEOBJECTS` | — | Temporarily hide the selected objects (UNISOLATEOBJECTS shows them again) |
+| `UNISOLATEOBJECTS` | `UNISOLATE` | Show again the objects hidden by ISOLATEOBJECTS or HIDEOBJECTS |
 | `PROMPT` | `AI` | Generate or edit the model with natural language (LLM). Opens a prompt box. |
 | `ATTSYNC` | — | Synchronize block references with their redefined attributes [?/Name/Select] |
 
@@ -237,6 +244,7 @@ Dash versions run without dialogs, for scripts and power users.
 
 | Command | Aliases | What it does |
 | --- | --- | --- |
+| `-GROUP` | `-G` | Groups from the command line [?/Add/Remove/Explode/REName/Selectable/Create] |
 | `-TOOLBAR` | `-TO` | Show, hide, dock or float a toolbar from the command line (or ALL toolbars) |
 | `-PLOT` | `-PRINT` | Plot to PDF right away with the last PLOT settings (no dialog) |
 | `-DIMSTYLE` | — | Dimension styles from the command line [ANnotative/Save/Restore/STatus/Variables/Apply/?] |
@@ -254,6 +262,7 @@ Type the name to see or change the value.
 | --- | --- |
 | `OFFSETGAPTYPE` | Gap fill when offsetting polylines: 0 extend, 1 fillet, 2 chamfer |
 | `POLARANG` | Polar tracking angle increment in degrees (POLAR / F10 tracks multiples of it from the base point) |
+| `PICKSTYLE` | Group selection: 1 = picking a grouped object selects its group, 0 = single objects (Ctrl+Shift+A toggles) |
 | `ZOOMFACTOR` | Mouse wheel zoom step (3–100) |
 | `RENDERMINPX` | Draw solids smaller than this many pixels as a point (0 = off) |
 | `ZOOMWHEEL` | Mouse wheel direction: 0 = forward zooms in, 1 = forward zooms out |

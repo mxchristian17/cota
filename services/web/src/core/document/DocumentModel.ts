@@ -4,7 +4,7 @@ import { modelToPaperEntity, parseProxyId } from '../layout/transspatial'
 import { setModelAnnoScale } from '../dimension/dimGeometry'
 import { annoScaleOf, paperPerModel } from '../layout/scale'
 import { refreshBreaks } from '../dimension/breaks'
-import type { AttDisp, BlockDef, DimAssocRef, DimensionProps, DocumentData, DrawingVars, Entity, EntityInput, Layer, LayoutDef, LinetypeDefData, PageSetup, UcsDef } from './types'
+import type { AttDisp, BlockDef, DimAssocRef, DimensionProps, DocumentData, DrawingVars, Entity, EntityInput, Layer, LayoutDef, LinetypeDefData, PageSetup, UcsDef, GroupDef } from './types'
 import { loopsSignature, rebuildHatchLoops, sourceSignature } from '../hatch/assoc'
 import { BYBLOCK, BYLAYER, CONTINUOUS, CONTINUOUS_DEF, isSpecialLinetype, libraryLinetype, type LinetypeContext } from '../linetype/linetypes'
 import { defaultPageSetup } from '../layout/paper'
@@ -400,6 +400,16 @@ export class DocumentModel {
   }
 
   // --- UCS -----------------------------------------------------------------------------
+
+  /** Grupos del dibujo (sin los ids de objetos que ya no existen). */
+  get groups(): GroupDef[] {
+    return (this.data.groups ?? []).map((g) => ({ ...g, ids: g.ids.filter((id) => this.getEntity(id)) }))
+  }
+  setGroups(g: GroupDef[]): void {
+    if (g.length) this.data.groups = structuredClone(g)
+    else delete this.data.groups
+    this.touch()
+  }
 
   /** Vistas guardadas con el dibujo (se anotan al guardar; no cuentan como un cambio). */
   get savedViews(): DocumentData['viewState'] | null {

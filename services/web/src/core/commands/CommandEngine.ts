@@ -6,6 +6,7 @@ import type { DocumentModel } from '../document/DocumentModel'
 import { constrainOrtho, type PreviewShape } from '../preview'
 import { isWorldAligned, ucsToWorld, worldToUcs, type Ucs } from '../ucs'
 import { flushFrame, frameContext } from './ucsFrame'
+import { expandGroups } from '../document/groups'
 import { sysvars } from './sysvars'
 import { parseCoordinate, parseNumber } from './coords'
 import { matchOsnapOverride } from '../snap/osnap'
@@ -418,17 +419,22 @@ export class CommandEngine {
     this.submitPoint(world, snapped, { id: pickedId, raw: raw ?? world, shift: subtract, ...(deferred ? { deferred } : {}) })
   }
 
+  /** Con PICKSTYLE, los ids más los demás miembros de sus grupos seleccionables. */
+  withGroups(ids: string[]): string[] {
+    return sysvars.PICKSTYLE ? expandGroups(this.deps.doc.groups, ids) : ids
+  }
+
   /** Agrega varios ids a la selección pendiente (selección por ventana). */
   addPicks(ids: string[]): void {
     if (!this.pending || this.pending.type !== 'selection') return
-    for (const id of ids) this.pending.ids.add(id)
+    for (const id of this.withGroups(ids)) this.pending.ids.add(id)
     this.deps.onSelectionChange([...this.pending.ids])
   }
 
   /** Quita varios ids de la selección pendiente (Shift + ventana). */
   removePicks(ids: string[]): void {
     if (!this.pending || this.pending.type !== 'selection') return
-    for (const id of ids) this.pending.ids.delete(id)
+    for (const id of this.withGroups(ids)) this.pending.ids.delete(id)
     this.deps.onSelectionChange([...this.pending.ids])
   }
 
@@ -668,7 +674,8 @@ export class CommandEngine {
   private preselectionTaken = false
 
   /** Agrega (o quita) ids a la selección en curso, como un paso deshacible; informa "N found". */
-  private applySel(sel: Extract<Pending, { type: 'selection' }>, ids: string[], remove: boolean, report = true, prefix = ''): void {
+  private applySel(sel: Extract<Pending, { type: 'selection' }>, picked: string[], remove: boolean, report = true, prefix = ''): void {
+    const ids = this.withGroups(picked)
     const changed = ids.filter((id) => (remove ? sel.ids.has(id) : !sel.ids.has(id)))
     for (const id of changed) {
       if (remove) sel.ids.delete(id)

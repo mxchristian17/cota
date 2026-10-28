@@ -137,6 +137,12 @@ function MenuBody({ x, y, close }: { x: number; y: number; close: () => void }) 
             {sep('c')}
             {cmdItem('Select Similar', 'SELECTSIMILAR')}
             {item('Deselect All', act(() => s.clearSelection()), 'ctx-deselect')}
+            <Sub label="Isolate" testId="ctx-isolate">
+              {cmdItem('Isolate Objects', 'ISOLATEOBJECTS')}
+              {cmdItem('Hide Objects', 'HIDEOBJECTS')}
+              {cmdItem('End Object Isolation', 'UNISOLATEOBJECTS')}
+            </Sub>
+            {cmdItem('Quick Select…', 'QSELECT')}
             {sep('d')}
             {cmdItem('Properties', 'PROPERTIES')}
           </>
@@ -148,6 +154,8 @@ function MenuBody({ x, y, close }: { x: number; y: number; close: () => void }) 
             {cmdItem('Zoom', 'ZOOM')}
             {sep('c')}
             {cmdItem('Select All', 'SELECTALL')}
+            {cmdItem('Quick Select…', 'QSELECT')}
+            {cmdItem('End Object Isolation', 'UNISOLATEOBJECTS')}
             {cmdItem('Options...', 'OPTIONS')}
           </>
         )}
