@@ -26,12 +26,20 @@ export interface TurnOptions {
  * Un turno del agente: el pedido del usuario y las vueltas modelo → herramientas hasta que el modelo responde sin
  * pedir más. Devuelve la conversación completa (la que se guarda) y los tokens de la última llamada (contexto).
  */
-export async function runAgentTurn(history: ChatMessage[], userText: string, o: TurnOptions): Promise<{ messages: ChatMessage[]; context: number }> {
+export async function runAgentTurn(history: ChatMessage[], userText: string, o: TurnOptions): Promise<{ messages: ChatMessage[]; context: number; error?: Error }> {
   const messages: ChatMessage[] = [...history, { role: 'user', text: userText }]
   let context = 0
   for (let step = 0; step < (o.maxSteps ?? 30); step++) {
     if (o.signal?.aborted) break
-    const r = await callModel(o.cfg, SYSTEM_PROMPT, messages, AGENT_TOOLS, o.signal)
+    let r: Awaited<ReturnType<typeof callModel>>
+    try {
+      r = await callModel(o.cfg, SYSTEM_PROMPT, messages, AGENT_TOOLS, o.signal)
+    } catch (err) {
+      // El turno se corta (cupo agotado, red…) pero lo hecho queda en la conversación: con otro modelo o más tarde,
+      // "seguí" continúa desde acá.
+      if ((err as Error).name === 'AbortError') return { messages, context }
+      return { messages, context, error: err as Error }
+    }
     context = r.usage.input + r.usage.output
     o.onEvent?.({ kind: 'usage', input: r.usage.input, output: r.usage.output })
     messages.push({ role: 'assistant', text: r.text, toolCalls: r.toolCalls, ...(r.raw !== undefined ? { raw: r.raw } : {}) })

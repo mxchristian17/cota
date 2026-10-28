@@ -3,6 +3,7 @@ import '../render/csg'
 import { makeEngine } from '../test/engineHarness'
 import { parseScript } from '../core/commands/script'
 import { GUIDES } from './docs'
+import { box3 } from './describe'
 
 /** Líneas de ejemplo de una guía: las que empiezan con dos espacios y un comando. */
 const examples = (md: string) => md.split('\n').filter((l) => /^ {2}[A-Z-]/.test(l)).map((l) => l.trim())
@@ -13,7 +14,7 @@ const RESULT: Record<string, Array<[string, number]>> = {
   'modify-2d': [['ARC', 1], ['CIRCLE', 14]],
   annotate: [['TEXT', 1], ['DIMENSION', 5], ['HATCH', 1]],
   properties: [],
-  'solids-3d': [['SOLID3D', 7]],
+  'solids-3d': [['SOLID3D', 8]],
   'blocks-groups': [['INSERT', 2]],
 }
 
@@ -30,6 +31,12 @@ describe('Guías del agente: cada ejemplo corre tal cual', () => {
       for (const [type, n] of RESULT[id] ?? []) expect([type, h.doc.entities.filter((e) => e.type === type).length]).toEqual([type, n])
       if (id === 'annotate') expect(h.doc.entities.some((e) => e.type === 'ARC' && e.props.thread)).toBe(true)
       if (id === 'blocks-groups') expect(h.doc.groups).toHaveLength(1)
+      if (id === 'solids-3d') {
+        // La pieza torneada del ejemplo: Ø100 × 77 de alto, alrededor del eje Z del mundo.
+        const rev = h.doc.entities.filter((e) => e.type === 'SOLID3D' && e.props.op === 'REVOLVE').at(-1)!
+        const [lo, hi] = box3(rev)
+        expect([lo, hi].flat().map((v) => Math.round(v))).toEqual([-50, -50, 0, 50, 50, 77])
+      }
     })
   }
 })

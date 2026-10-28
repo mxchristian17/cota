@@ -31,6 +31,8 @@ export interface ToolCall {
   args: Record<string, unknown>
   /** Firma de razonamiento de Gemini 3: hay que devolverla tal cual con la llamada en las vueltas siguientes. */
   signature?: string
+  /** Modelo que firmó (una firma sólo vale para su modelo). */
+  signedBy?: string
 }
 
 export interface ToolResultMsg {
@@ -211,6 +213,9 @@ const safeJson = (s: string): Record<string, unknown> => {
   }
 }
 
+/** Firma que Gemini acepta para llamadas de otro modelo (docs de "thought signatures"). */
+const FOREIGN_SIGNATURE = 'skip_thought_signature_validator'
+
 /** Gemini acepta un subconjunto de JSON Schema: se quitan las claves que no conoce. */
 function geminiSchema(s: unknown): unknown {
   if (Array.isArray(s)) return s.map(geminiSchema)
@@ -224,7 +229,12 @@ async function gemini(cfg: ProviderConfig, system: string, messages: ChatMessage
     if (m.role === 'assistant')
       return {
         role: 'model',
-        parts: [...(m.text ? [{ text: m.text }] : []), ...m.toolCalls.map((c) => ({ functionCall: { id: c.id, name: c.name, args: c.args }, ...(c.signature ? { thoughtSignature: c.signature } : {}) }))],
+        // La firma vuelve tal cual al modelo que la dio; si la conversación cambió de modelo (cupo agotado, otro
+        // proveedor), va la firma comodín que Gemini acepta para historial ajeno.
+        parts: [
+          ...(m.text ? [{ text: m.text }] : []),
+          ...m.toolCalls.map((c) => ({ functionCall: { id: c.id, name: c.name, args: c.args }, thoughtSignature: c.signature && c.signedBy === cfg.model ? c.signature : FOREIGN_SIGNATURE })),
+        ],
       }
     return {
       role: 'user',
@@ -248,7 +258,7 @@ async function gemini(cfg: ProviderConfig, system: string, messages: ChatMessage
     text: parts.filter((p) => p.text && !p.thought).map((p) => p.text).join('\n'),
     toolCalls: parts
       .filter((p) => p.functionCall)
-      .map((p) => ({ id: p.functionCall!.id ?? `call_${Date.now()}_${k++}`, name: p.functionCall!.name, args: p.functionCall!.args ?? {}, ...(p.thoughtSignature ? { signature: p.thoughtSignature } : {}) })),
+      .map((p) => ({ id: p.functionCall!.id ?? `call_${Date.now()}_${k++}`, name: p.functionCall!.name, args: p.functionCall!.args ?? {}, ...(p.thoughtSignature ? { signature: p.thoughtSignature, signedBy: cfg.model } : {}) })),
     usage: { input: usage?.promptTokenCount ?? 0, output: usage?.candidatesTokenCount ?? 0 },
   }
 }

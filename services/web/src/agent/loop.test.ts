@@ -10,8 +10,8 @@ function fakeAnthropic(replies: unknown[]) {
   const seen: Array<Record<string, unknown>> = []
   vi.stubGlobal('fetch', async (_url: string, init: { body: string; headers: Record<string, string> }) => {
     seen.push({ ...JSON.parse(init.body), headers: init.headers })
-    const body = replies.shift() ?? { content: [{ type: 'text', text: 'done' }], usage: { input_tokens: 1, output_tokens: 1 } }
-    return new Response(JSON.stringify(body), { status: 200 })
+    const body = (replies.shift() ?? { content: [{ type: 'text', text: 'done' }], usage: { input_tokens: 1, output_tokens: 1 } }) as { __status?: number }
+    return new Response(JSON.stringify(body), { status: body.__status ?? 200 })
   })
   return seen
 }
@@ -56,6 +56,15 @@ describe('Ciclo del agente (navegador)', () => {
     await runAgentTurn([], 'draw', { cfg, host: hh, mode: 'ask', approve: async () => false })
     expect(h.doc.entities).toHaveLength(0)
     expect(JSON.stringify(seen[1].messages)).toContain('The user rejected this script')
+  })
+
+  it('si el proveedor corta a mitad de turno, lo hecho queda en la conversación para seguir', async () => {
+    fakeAnthropic([toolUse('CIRCLE 0,0 10'), { __status: 400, error: { message: 'quota exceeded' } }])
+    const { h, host: hh } = host()
+    const r = await runAgentTurn([], 'draw', { cfg, host: hh, mode: 'auto', approve: async () => true })
+    expect(r.error?.message).toContain('quota exceeded')
+    expect(r.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'tool'])
+    expect(h.doc.entities).toHaveLength(1)
   })
 
   it('COMPACT reemplaza la conversación por un resumen', async () => {

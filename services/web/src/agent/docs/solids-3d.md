@@ -16,6 +16,13 @@ EXTRUDE: closed profiles (circle, closed polyline, rectangle), "", height.
 REVOLVE: closed profiles, "", two points of the axis, angle (360 = full turn).
   RECTANGLE 100,100 @10,30
   REVOLVE L "" 90,100 90,130 360
+Turned parts (shafts, flanges, bushings) with chamfers or steps: draw the closed half-section in the XZ plane (UCS X
+90: typed x is the radius, typed y is the height), go back to UCS W and REVOLVE it around Z. The chamfers are just
+corners of the profile, so no edge picking is needed.
+  UCS X 90
+  PLINE 0,0 49,0 50,1 50,11 49,12 22,12 22,31 21,32 10,32 10,75.5 8.5,77 0,77 C
+  UCS W
+  REVOLVE L "" Z 360
 Booleans: UNION (objects, ""), SUBTRACT (solids to keep, "", solids to remove, ""), INTERSECT (objects, "").
   CYLINDER 20,110,0 5 40
   SUBTRACT 1,101,1 "" L ""

@@ -247,8 +247,9 @@ export const useAgentStore = create<AgentState>((set, get) => {
           onEvent,
           signal: abort.signal,
         })
-        const done = { ...conv, messages: r.messages, context: r.context, updatedAt: Date.now() }
+        const done = { ...conv, messages: r.messages, context: r.context || conv.context, updatedAt: Date.now() }
         saveConvs(get().conversations.map((x) => (x.id === id ? done : x)), done)
+        if (r.error) set({ feed: [...get().feed, { kind: 'error', text: r.error instanceof ProviderError ? r.error.message : String(r.error.message ?? r.error) }] })
       } catch (err) {
         if ((err as Error).name !== 'AbortError') set({ feed: [...get().feed, { kind: 'error', text: err instanceof ProviderError ? err.message : String((err as Error).message ?? err) }] })
       } finally {

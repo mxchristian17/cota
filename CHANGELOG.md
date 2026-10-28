@@ -4,6 +4,21 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.8.2] — 2026-10-28
+
+More fixes from testing the modeling agent with real Gemini models.
+
+### Fixed
+- When the provider stops in the middle of a turn (quota used up, network), what the agent already did stays in the
+  conversation, so "continue" picks up from there, also with another model.
+- Switching the model in the middle of a conversation works with Gemini 3 (the previous model's reasoning signatures
+  no longer block the next one).
+
+### Changed
+- The agent sends each step as one complete script and asks for several guides at once, which saves requests (free
+  tiers allow few per day).
+- The 3D guide teaches turned parts with chamfers as one REVOLVE of a half-section profile, with no edge picking.
+
 ## [2.8.1] — 2026-10-28
 
 Fixes found testing the modeling agent with a real Google Gemini key.

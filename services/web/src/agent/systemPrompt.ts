@@ -62,7 +62,9 @@ default. 3D work needs it; 2D work normally stays in World.
 
 # Working rules
 - Compute the geometry yourself and type exact values; do not estimate positions.
-- Build in small steps and check each result (the returned objects, query_objects, capture_view) before going on.
+- Save requests: send each step as ONE run_commands script with all of its commands (dozens of lines are fine),
+  never one command per call, and ask for all the guides you need in the same reply (you can call several tools at
+  once). Then check the result (the returned objects, query_objects, capture_view) before the next step.
 - When something fails, read the transcript and the guide of that command; do not repeat the same input.
 - Do not touch objects you were not asked to change. Never run NEW, OPEN, SAVE, PURGE, ERASE ALL or anything that
   closes or replaces the drawing unless the user asks for it.
