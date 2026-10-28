@@ -131,6 +131,8 @@ export interface AppState {
   otrack: boolean
   /** Entrada dinámica (DYN / F12): tras el primer punto, `x,y` tecleado es relativo sin `@`. */
   dynInput: boolean
+  /** Rastreo polar (POLAR / F10): ángulos múltiplos de POLARANG desde el punto base. Excluye a ORTHO. */
+  polar: boolean
   ucs: Ucs
   /** Nombre de la UCS actual si es una guardada o World; null = sin nombre. */
   ucsName: string | null
@@ -293,6 +295,7 @@ export interface AppState {
   closeHelp: () => void
   toggleOrtho: () => void
   toggleDynInput: () => void
+  togglePolar: () => void
   /** GRID / F7: muestra u oculta la grilla; sin argumento, alterna. */
   setGrid: (on?: boolean) => void
   /** FULLSCREEN: pantalla completa total; sin argumento, alterna. `apply = false` sólo anota la preferencia. */
@@ -974,6 +977,7 @@ export const useStore = create<AppState>((set, get) => {
     facingNormal: () => get().activeViewport?.facingNormal() ?? [0, 0, 1],
     setViewportLayout: (n) => get().setViewportLayout(n),
     exportPdf: () => get().exportPdf(),
+    solidMesh: (e) => (e.type === 'SOLID3D' ? solidMesh(e.props) : e.type === 'MESH3D' ? e.props : null),
     plotDialog: (window) =>
       new Promise((resolve) => {
         plotResolve?.('cancel')
@@ -1220,6 +1224,7 @@ export const useStore = create<AppState>((set, get) => {
       esnap: s.esnap,
       otrack: s.otrack,
       dynInput: s.dynInput,
+      polar: s.polar,
       gridStep: s.gridStep,
       theme: s.theme,
       osnap: s.osnap,
@@ -1263,6 +1268,7 @@ export const useStore = create<AppState>((set, get) => {
     if (typeof d.esnap === 'boolean') patch.esnap = d.esnap
     if (typeof d.otrack === 'boolean') patch.otrack = d.otrack
     if (typeof d.dynInput === 'boolean') patch.dynInput = d.dynInput
+    if (typeof d.polar === 'boolean') patch.polar = d.polar
     if (typeof d.gridStep === 'number' && d.gridStep > 0) patch.gridStep = d.gridStep
     if (d.theme && typeof d.theme === 'object') {
       const theme = normalizeTheme(d.theme)
@@ -1339,6 +1345,7 @@ export const useStore = create<AppState>((set, get) => {
     esnap: true,
     otrack: true,
     dynInput: false,
+    polar: false,
     ucs: { ...WORLD_UCS },
     ucsName: 'World',
     dimStyleOpen: false,
@@ -2058,7 +2065,8 @@ export const useStore = create<AppState>((set, get) => {
     closeHelp: () => set({ helpOpen: false }),
     toggleOrtho: () => {
       const next = !get().ortho
-      set({ ortho: next })
+      // Como el CAD clásico: ORTHO y POLAR no van juntos.
+      set(next && get().polar ? { ortho: true, polar: false } : { ortho: next })
       print(`<Ortho ${next ? 'on' : 'off'}>`)
       saveConfig()
     },
@@ -2091,6 +2099,12 @@ export const useStore = create<AppState>((set, get) => {
       const next = !get().esnap
       set({ esnap: next })
       print(`<Osnap ${next ? 'on' : 'off'}>`)
+      saveConfig()
+    },
+    togglePolar: () => {
+      const next = !get().polar
+      set(next && get().ortho ? { polar: true, ortho: false } : { polar: next })
+      print(next ? `<Polar on: every ${sysvars.POLARANG}°>` : '<Polar off>')
       saveConfig()
     },
     toggleDynInput: () => {

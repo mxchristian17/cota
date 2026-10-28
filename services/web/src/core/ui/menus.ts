@@ -32,7 +32,7 @@ export const CATEGORIES: { label: string; names: string[] }[] = [
       '§Styles', 'LINETYPE', 'DIMSTYLE', 'MLEADERSTYLE', '§Drawing', 'LIMITS',
     ],
   },
-  { label: 'Tools', names: ['@toolbars', 'TOOLBAR', 'OPTIONS', 'OSNAP', 'GRID', '§UCS', 'UCS', '§Inquiry', 'DIST', '§Other', 'PROMPT', 'ATTSYNC'] },
+  { label: 'Tools', names: ['@toolbars', 'TOOLBAR', 'OPTIONS', 'OSNAP', 'GRID', '§UCS', 'UCS', '§Inquiry', 'DIST', 'ID', 'AREA', 'LIST', 'MASSPROP', '§Other', 'PROMPT', 'ATTSYNC'] },
   {
     label: 'Draw',
     names: [

@@ -40,7 +40,7 @@ saving by download.
 - **Toolbars:** the Dimension toolbar (left) gives one-click access to the dimension commands. 22 more
   toolbars (Draw, Modify, Object Snap, View, Zoom…) are in **Tools ▸ Toolbars**.
 - **Status bar:** Model and layout tabs, cursor coordinates, the current layer and the drawing aids
-  (GRID, SNAP, ORTHO, OSNAP, OTRACK, DYN, UCS). Click a button or use its function key to toggle it.
+  (GRID, SNAP, ORTHO, POLAR, OSNAP, OTRACK, DYN, UCS). Click a button or use its function key to toggle it.
 - **Command line:** where you type commands and answer their prompts. You do not need to click it:
   start typing anywhere and the text goes there.
 

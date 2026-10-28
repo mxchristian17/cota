@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../store/store'
+import { sysvars } from '../core/commands/sysvars'
 import { OSNAP_KINDS, OSNAP_LABELS } from '../core/snap/osnap'
 import { focusCommandLine } from './focus'
 import { isWorldUcs, WORLD_UCS, worldToUcs } from '../core/ucs'
@@ -186,6 +187,8 @@ export function StatusBar() {
   const setGrid = useStore((s) => s.setGrid)
   const toggleOtrack = useStore((s) => s.toggleOtrack)
   const dynInput = useStore((s) => s.dynInput)
+  const polar = useStore((s) => s.polar)
+  const togglePolar = useStore((s) => s.togglePolar)
   const toggleDynInput = useStore((s) => s.toggleDynInput)
   const setUcs = useStore((s) => s.setUcs)
   const setCurrentLayer = useStore((s) => s.setCurrentLayer)
@@ -276,6 +279,15 @@ export function StatusBar() {
           onClick={withFocus(toggleOrtho)}
         >
           ORTHO
+        </button>
+        <button
+          className={'status-toggle' + (polar ? ' on' : '')}
+          title={`Polar tracking (F10): angles every ${sysvars.POLARANG}° from the base point (POLARANG)`}
+          data-testid="polar-toggle"
+          aria-pressed={polar}
+          onClick={withFocus(togglePolar)}
+        >
+          POLAR
         </button>
         <OsnapControl />
         <button

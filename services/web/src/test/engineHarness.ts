@@ -9,6 +9,7 @@ import { resetDimSession } from '../core/commands/impl/dim'
 import { resetMatchSettings } from '../core/commands/impl/matchprop'
 import type { ViewName, VisualStyle } from '../core/view'
 import type { Vec3 } from '../core/math'
+import { solidMesh } from '../render/csg'
 
 /**
  * Motor de comandos con un documento vacío y hooks de app inertes, para tests de comandos
@@ -60,6 +61,7 @@ export function makeEngine() {
           ucsName = name ?? null
         }
       if (k === 'getUcs') return () => ucs
+      if (k === 'solidMesh') return (e: Entity) => (e.type === 'SOLID3D' ? solidMesh(e.props) : e.type === 'MESH3D' ? e.props : null)
       if (k === 'ucsName') return () => ucsName
       if (k === 'previousUcs')
         return () => {

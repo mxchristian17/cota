@@ -4,6 +4,7 @@ import { openContextMenu } from './DimContextMenu'
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { PAPER_COLOR, Viewport, type CameraState, type ViewportData } from '../render/Viewport'
 import { useStore } from '../store/store'
+import { sysvars } from '../core/commands/sysvars'
 import type { Pt } from '../core/math'
 import type { Entity, ViewportEntity } from '../core/document/types'
 import type { VisualStyle } from '../core/view'
@@ -52,6 +53,7 @@ function baseData(
     pointPrompt: active && s.engine.awaitingPoint,
     previewColor: pickPreviewColor(s.layerSvc.get(s.currentLayerId)?.color ?? '#ffffff', PAPER_COLOR),
     otrack: s.otrack,
+        polarAng: s.polar ? sysvars.POLARANG : undefined,
     // Los campos de los textos (rótulo) se evalúan con los datos del layout activo.
     fields: fieldContextFor(s.doc, s.docName + DRAWING_EXT, s.doc.activeTab),
     // Cotas anotativas: en el papel a 1:1; dentro de un viewport, a la escala del viewport.

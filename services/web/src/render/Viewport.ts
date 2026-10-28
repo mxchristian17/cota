@@ -69,6 +69,8 @@ export interface ViewportData {
   previewColor: number
   /** Object snap tracking activo (OTRACK / F11). */
   otrack: boolean
+  /** Rastreo polar (POLAR / F10): incremento de ángulo en grados, o ausente si está apagado. */
+  polarAng?: number
   /** UCS dinámica habilitada en este momento (primer punto de un comando de dibujo). */
   ducs?: boolean
   /** Contexto de los campos de los textos (`%<\AcVar …>%`); sin él se muestran tal cual. */
@@ -1270,7 +1272,7 @@ export class Viewport {
   /** ¿El snap está activo ahora? (solo durante un prompt de punto/distancia, como el CAD clásico). */
   private needSnap(): boolean {
     const d = this.data
-    return !!d && d.pointPrompt && (d.esnap || d.osnapOverride !== null || d.otrack)
+    return !!d && d.pointPrompt && (d.esnap || d.osnapOverride !== null || d.otrack || !!(d.polarAng && d.snapBase && !d.ortho))
   }
 
   private entities(): Entity[] {
@@ -1364,6 +1366,15 @@ export class Viewport {
     // Object snap tracking: los osnaps directos ganan; el tracking sólo actúa cuando no hay captura
     // (o sólo hay grilla), como en el CAD clásico.
     this.trackLines = []
+    // Rastreo polar (POLAR): cerca (10 px) de un múltiplo de POLARANG desde el punto base, el cursor corre por ese
+    // rayo, punteado, y lo tecleado como distancia va en esa dirección. Los osnaps directos ganan.
+    if (d.polarAng && d.snapBase && d.pointPrompt && !d.ortho && (result.type === null || result.type === 'grid')) {
+      const polar = this.polarTrack(raw, d.snapBase, d.polarAng)
+      if (polar) {
+        this.trackLines = [polar.line]
+        return { point: polar.point, type: 'tracking' }
+      }
+    }
     if (d.otrack && this.tracked.length > 0 && (result.type === null || result.type === 'grid')) {
       const track = computeTracking(raw, this.tracked, {
         cursorPx: this.lastPx,
@@ -1452,6 +1463,25 @@ export class Viewport {
   }
 
   /** Ejes (mundo) de las alineaciones de tracking: los ejes X/Y de la UCS del viewport. */
+  /** Rayo polar más cercano al cursor desde `base` (en el plano de la UCS), si pasa a menos de 10 px. */
+  private polarTrack(raw: Pt, base: Pt, stepDeg: number): { point: Pt; line: [Pt, Pt] } | null {
+    const [ux, uy] = this.trackingAxes()
+    const d = { x: raw.x - base.x, y: raw.y - base.y, z: raw.z - base.z }
+    const lx = d.x * ux.x + d.y * ux.y + d.z * ux.z
+    const ly = d.x * uy.x + d.y * uy.y + d.z * uy.z
+    if (Math.hypot(lx, ly) < 1e-9) return null
+    const step = (Math.max(0.1, stepDeg) * Math.PI) / 180
+    const a = Math.round(Math.atan2(ly, lx) / step) * step
+    const dir = { x: ux.x * Math.cos(a) + uy.x * Math.sin(a), y: ux.y * Math.cos(a) + uy.y * Math.sin(a), z: ux.z * Math.cos(a) + uy.z * Math.sin(a) }
+    const t = d.x * dir.x + d.y * dir.y + d.z * dir.z
+    if (t <= 0) return null
+    const point = { x: base.x + dir.x * t, y: base.y + dir.y * t, z: base.z + dir.z * t }
+    const pp = this.controller.project(new THREE.Vector3(point.x, point.y, point.z))
+    if (!pp || Math.hypot(pp[0] - this.lastPx[0], pp[1] - this.lastPx[1]) > 10) return null
+    const far = t + 400 * (this.controller.worldPerPx() || 1)
+    return { point, line: [base, { x: base.x + dir.x * far, y: base.y + dir.y * far, z: base.z + dir.z * far }] }
+  }
+
   private trackingAxes(): [Pt, Pt] {
     const [x, y] = [this.ucs.x, this.ucs.y]
     return [{ x: x[0], y: x[1], z: x[2] }, { x: y[0], y: y[1], z: y[2] }]
@@ -2474,8 +2504,8 @@ export class Viewport {
   private updateSnapGlyph(): void {
     this.disposeGroup(this.snapGroup)
     // Marcas "+" de los puntos adquiridos para el tracking y sus líneas de alineación.
-    if (this.data?.otrack && this.data.pointPrompt) {
-      for (const tp of this.tracked) {
+    if ((this.data?.otrack || this.data?.polarAng) && this.data.pointPrompt) {
+      for (const tp of this.data.otrack ? this.tracked : []) {
         for (const seg of this.glyphPoints('tracking', tp, 5 * this.controller.worldPerPxAt(tp))) {
           const geom = new THREE.BufferGeometry().setFromPoints(seg.map((p) => new THREE.Vector3(p.x, p.y, p.z)))
           this.snapGroup.add(new THREE.Line(geom, this.snapMaterial))

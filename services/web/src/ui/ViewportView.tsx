@@ -2,6 +2,7 @@ import { openContextMenu } from './DimContextMenu'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Viewport } from '../render/Viewport'
 import { useStore } from '../store/store'
+import { sysvars } from '../core/commands/sysvars'
 import { VPORT_VIEWS, type CameraMode, type ViewName } from '../core/view'
 import { isWorldUcs, normalizeUcs, WORLD_UCS } from '../core/ucs'
 import { pickPreviewColor } from '../core/preview'
@@ -141,6 +142,7 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
         pointPrompt: s.engine.awaitingPoint,
         previewColor: pickPreviewColor(s.layerSvc.get(s.currentLayerId)?.color ?? '#ffffff', s.theme.background),
         otrack: s.otrack,
+        polarAng: s.polar ? sysvars.POLARANG : undefined,
         ducs: s.engine.ducsEligible,
         fields: fieldContextFor(s.doc, s.docName + DRAWING_EXT, MODEL_TAB),
         attdisp: s.doc.attdisp,

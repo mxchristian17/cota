@@ -4,6 +4,17 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-10-28
+
+### Added
+- **POLAR** polar tracking (<kbd>F10</kbd> or the POLAR button): near a multiple of `POLARANG` (90° by default) from
+  the base point, the cursor runs along that ray, shown dashed, and a typed distance goes that way. ORTHO and POLAR
+  turn each other off, as in classic CAD.
+- Inquiry commands: **ID** (coordinates of a point in the current UCS), **AREA** (area and perimeter of points or of
+  a circle, polyline, rectangle, ellipse, spline, hatch or the surface of a solid, with `Add area`/`Subtract area`
+  for a running total), **LIST** (type, layer, points, lengths, angles, areas, volumes of the selected objects) and
+  **MASSPROP** (volume, surface area, bounding box and centroid of solids). Under Tools ▸ Inquiry.
+
 ## [2.1.0] — 2026-10-28
 
 ### Added

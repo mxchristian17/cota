@@ -175,4 +175,28 @@ test.describe('Cota: command line like classic CAD', () => {
     const ucs = await st<number[]>(page, "return s.viewports.filter((v) => v.kind === 'model')[0].getUcs().x")
     expect(ucs[0]).toBeCloseTo(Math.cos(Math.PI / 6), 6)
   })
+
+  test('POLAR (F10) tracks multiples of POLARANG from the base point; a typed distance goes along it', async ({ page }) => {
+    const { cmd } = await open(page)
+    await cmd('POLARANG', '45', 'ZOOM', 'C', '0,0', '100')
+    await page.keyboard.press('F3') // sin osnaps: sólo el rastreo polar
+    await page.keyboard.press('F10')
+    await expect(page.getByTestId('polar-toggle')).toHaveAttribute('aria-pressed', 'true')
+    const box = (await page.locator('canvas').first().boundingBox())!
+    const scr = async (x: number, y: number) => {
+      const p = await st<number[]>(page, `return s.activeViewport.project({ x: ${x}, y: ${y}, z: 0 })`)
+      return [box.x + p[0], box.y + p[1]] as const
+    }
+    await cmd('LINE', '0,0')
+    const [x, y] = await scr(20, 21) // casi a 45°: el cursor corre por el rayo polar
+    await page.mouse.move(x - 3, y)
+    await page.mouse.move(x, y)
+    await cmd('30', '')
+    const end = await st<number[]>(page, "return s.doc.entities.at(-1).props.end")
+    expect(end[0]).toBeCloseTo(30 * Math.SQRT1_2, 6)
+    expect(end[1]).toBeCloseTo(30 * Math.SQRT1_2, 6)
+    // ORTHO apaga POLAR (no van juntos).
+    await page.keyboard.press('F8')
+    await expect(page.getByTestId('polar-toggle')).toHaveAttribute('aria-pressed', 'false')
+  })
 })

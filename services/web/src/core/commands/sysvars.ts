@@ -66,6 +66,8 @@ export interface Sysvars {
   UCSVIEW: 0 | 1
   /** Estilo de los POINT (CAD clásico): 0 punto, 1 nada, 2 +, 3 ×, 4 trazo; +32 círculo, +64 cuadrado. */
   PDMODE: number
+  /** POLARANG: incremento de ángulo del rastreo polar, en grados (90, 45, 30, 22.5, 18, 15, 10, 5…). */
+  POLARANG: number
   /** Tamaño de los POINT: 0 = 5 % del alto de la vista, < 0 = % de la vista, > 0 = unidades de dibujo. */
   PDSIZE: number
 }
@@ -105,6 +107,7 @@ const DEFAULTS: Sysvars = {
   ZOOMWHEEL: 0,
   UCSVIEW: 1,
   PDMODE: 0,
+  POLARANG: 90,
   PDSIZE: 0,
 }
 
@@ -122,7 +125,7 @@ export function resetSysvars(): void {
 export const PERSISTED_SYSVARS = [
   'FILLETRAD', 'CHAMFERA', 'CHAMFERB', 'CHAMFERC', 'CHAMFERD', 'CHAMMODE', 'TRIMMODE',
   'UCSICON', 'ZOOMFACTOR', 'ZOOMWHEEL', 'RENDERMINPX', 'UCSORTHO', 'UCSFOLLOW', 'UCSDETECT', 'UCSVIEW',
-  'ATTDIA', 'ATTREQ', 'PEDITACCEPT', 'OFFSETGAPTYPE', 'EDGEMODE', 'PROJMODE', 'PDMODE', 'PDSIZE',
+  'ATTDIA', 'ATTREQ', 'PEDITACCEPT', 'OFFSETGAPTYPE', 'EDGEMODE', 'PROJMODE', 'PDMODE', 'PDSIZE', 'POLARANG',
 ] as const
 
 export type PersistedSysvars = Pick<Sysvars, (typeof PERSISTED_SYSVARS)[number]>
@@ -158,4 +161,5 @@ export function applySysvars(data: Record<string, unknown>): void {
   const pd = data.PDMODE
   if (typeof pd === 'number' && Number.isInteger(pd) && (pd & 31) <= 4 && (pd & ~(31 | 32 | 64)) === 0) sysvars.PDMODE = pd
   if (typeof data.PDSIZE === 'number' && Number.isFinite(data.PDSIZE)) sysvars.PDSIZE = data.PDSIZE
+  if (typeof data.POLARANG === 'number' && data.POLARANG > 0 && data.POLARANG <= 180) sysvars.POLARANG = data.POLARANG
 }

@@ -117,6 +117,10 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | `GRID` | — | Show or hide the grid [ON/OFF] (F7) |
 | `UCS` | — | User coordinate system [Face/NAmed/OBject/Previous/View/World/X/Y/Z/ZAxis] |
 | `DIST` | `DI` | Measure distance and angle between two points |
+| `ID` | — | Display the coordinates of a point in the current UCS |
+| `AREA` | `AA` | Area and perimeter of points or of an object [Object/Add area/Subtract area]; Add/Subtract keep a running total |
+| `LIST` | `LI`, `LS` | List the properties of the selected objects: type, layer, points, lengths, areas, volumes |
+| `MASSPROP` | — | Mass properties of solids: volume (mass with density 1), surface area, bounding box and centroid |
 | `PROMPT` | `AI` | Generate or edit the model with natural language (LLM). Opens a prompt box. |
 | `ATTSYNC` | — | Synchronize block references with their redefined attributes [?/Name/Select] |
 
@@ -249,6 +253,7 @@ Type the name to see or change the value.
 | Variable | What it controls |
 | --- | --- |
 | `OFFSETGAPTYPE` | Gap fill when offsetting polylines: 0 extend, 1 fillet, 2 chamfer |
+| `POLARANG` | Polar tracking angle increment in degrees (POLAR / F10 tracks multiples of it from the base point) |
 | `ZOOMFACTOR` | Mouse wheel zoom step (3–100) |
 | `RENDERMINPX` | Draw solids smaller than this many pixels as a point (0 = off) |
 | `ZOOMWHEEL` | Mouse wheel direction: 0 = forward zooms in, 1 = forward zooms out |

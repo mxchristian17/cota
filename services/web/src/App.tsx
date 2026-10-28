@@ -58,6 +58,7 @@ export default function App() {
   const toggleEsnap = useStore((s) => s.toggleEsnap)
   const toggleOtrack = useStore((s) => s.toggleOtrack)
   const toggleDynInput = useStore((s) => s.toggleDynInput)
+  const togglePolar = useStore((s) => s.togglePolar)
   const email = useStore((s) => s.email)
   const token = useStore((s) => s.token)
   const docName = useStore((s) => s.docName)
@@ -222,6 +223,10 @@ export default function App() {
         // F11 = object snap tracking (CAD clásico); se evita el pantalla completa del navegador.
         e.preventDefault()
         toggleOtrack()
+      } else if (e.key === 'F10' && !e.shiftKey) {
+        // F10 = rastreo polar (CAD clásico); Shift+F10 sigue siendo el menú contextual.
+        e.preventDefault()
+        togglePolar()
       } else if (e.key === 'F12') {
         // F12 = entrada dinámica (CAD clásico): coordenadas relativas sin '@' tras el primer punto.
         e.preventDefault()
@@ -276,7 +281,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [toggleOrtho, toggleSnap, toggleEsnap, toggleOtrack, toggleDynInput])
+  }, [toggleOrtho, toggleSnap, toggleEsnap, toggleOtrack, toggleDynInput, togglePolar])
 
   return (
     <div className="app">

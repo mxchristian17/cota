@@ -65,6 +65,7 @@ import { vplayerCommand } from './impl/vplayer'
 import { dwgpropsCommand, fieldCommand, updatefieldCommand } from './impl/field'
 import { attdefCommand, attdispCommand, atteditCommand, attsyncCommand, eatteditCommand } from './impl/attribs'
 import { distCommand } from './impl/dist'
+import { areaCommand, idCommand, listCommand, masspropCommand, polarAngCommand } from './impl/inquiry'
 import { exportCommand, importCommand } from './impl/io'
 import { optionsCommand } from './impl/options'
 import { osnapCommand } from './impl/osnap'
@@ -148,6 +149,8 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   engine.register(redoCommand)
   engine.register(arrayCommand)
   engine.register(distCommand)
+  for (const c of [idCommand, areaCommand, listCommand, masspropCommand]) engine.register(c)
+  registerVariable(engine, polarAngCommand)
   engine.register(blockCommand)
   engine.register(insertCommand)
   engine.register(explodeCommand)
