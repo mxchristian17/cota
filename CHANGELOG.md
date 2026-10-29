@@ -4,6 +4,12 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.10.1] — 2026-10-28
+
+### Fixed
+- The end-to-end tests of the mobile view tap like a finger (a short pause between touches), so they pass reliably in
+  CI.
+
 ## [2.10.0] — 2026-10-28
 
 ### Added

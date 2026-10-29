@@ -29,11 +29,20 @@ const screenOf = (page: Page, p: { x: number; y: number; z: number }) =>
     return [x + r.left, y + r.top] as [number, number]
   }, p)
 
+/**
+ * Toque sobre un botón como lo haría un dedo: Chrome descarta un toque pegado a otro toque o al final de un arrastre
+ * (lo toma como parte de un doble toque), así que se deja pasar un instante antes.
+ */
+async function tapId(page: Page, id: string) {
+  await page.waitForTimeout(350)
+  await page.getByTestId(id).tap()
+}
+
 const camera = (page: Page) => st<{ az: number; el: number; radius: number }>(page, 'return s.activeViewport.getCamera()')
 
 async function part(page: Page) {
   await st(page, "return s.runScript('BOX 0,0,0 100,60 20\\nCYLINDER 50,30,20 15 30\\nUNION ALL \"\"\\n-LAYER M Ejes \"\"\\nLINE -20,30 120,30 \"\"\\n-LAYER S 0 \"\"', { finish: 'cancel', fresh: true })")
-  await page.getByTestId('m-fit').tap()
+  await tapId(page, 'm-fit')
 }
 
 test.describe('Mobile view for the job site', () => {
@@ -43,8 +52,8 @@ test.describe('Mobile view for the job site', () => {
     await expect(page.getByTestId('mobile-app')).toBeVisible()
     await expect(page.getByTestId('command-input')).toHaveCount(0)
     await expect(page.getByTestId('agent-tab')).toHaveCount(0)
-    await page.getByTestId('m-menu').tap()
-    await page.getByTestId('m-full-editor').tap()
+    await tapId(page, 'm-menu')
+    await tapId(page, 'm-full-editor')
     await expect(page.getByTestId('command-input')).toBeVisible()
     await expect(page.getByTestId('mobile-app')).toHaveCount(0)
     await page.reload()
@@ -85,8 +94,8 @@ test.describe('Mobile view for the job site', () => {
 
     // En un dibujo 2D un dedo desplaza (la vista en planta no se pierde).
     await st(page, "return s.runScript('ERASE ALL \"\"\\nRECTANGLE 0,0 100,60', { finish: 'cancel', fresh: true })")
-    await page.getByTestId('m-menu').tap()
-    await page.getByTestId('m-full-editor').tap()
+    await tapId(page, 'm-menu')
+    await tapId(page, 'm-full-editor')
     await st(page, "return s.runScript('-VIEW TOP\\nMOBILEVIEW ON', { fresh: true })")
     await expect(page.getByTestId('m-orbit')).toContainText('Pan')
     const p0 = await camera(page)
@@ -94,9 +103,8 @@ test.describe('Mobile view for the job site', () => {
     const p1 = await camera(page)
     expect(p1.el).toBeCloseTo(p0.el, 5)
     expect(p1.az).toBeCloseTo(p0.az, 5)
-    // El botón cambia lo que hace un dedo. (Chrome descarta un toque pegado al final de un arrastre.)
-    await page.waitForTimeout(500)
-    await page.getByTestId('m-orbit').tap()
+    // El botón cambia lo que hace un dedo.
+    await tapId(page, 'm-orbit')
     await expect(page.getByTestId('m-orbit')).toContainText('Orbit')
   })
 
@@ -105,10 +113,10 @@ test.describe('Mobile view for the job site', () => {
     await expect(page.getByTestId('mobile-app')).toBeVisible()
     const cdp = await page.context().newCDPSession(page)
     await part(page)
-    await page.getByTestId('m-views').tap()
-    await page.getByTestId('m-view-TOP').tap()
-    await page.getByTestId('m-fit').tap()
-    await page.getByTestId('m-measure-btn').tap()
+    await tapId(page, 'm-views')
+    await tapId(page, 'm-view-TOP')
+    await tapId(page, 'm-fit')
+    await tapId(page, 'm-measure-btn')
     await expect(page.getByTestId('m-measure-hint')).toContainText('Point 1 of 2')
     // La mira queda 72 px por encima del dedo; se apunta cerca de la esquina y el snap la lleva a la esquina.
     const a = await screenOf(page, { x: 0, y: 0, z: 20 })
@@ -125,13 +133,13 @@ test.describe('Mobile view for the job site', () => {
     await expect(page.getByTestId('touch-aim')).toBeHidden()
     // El tramo medido queda dibujado mientras se ve la tarjeta.
     expect(await st<number>(page, 'return s.computePreview({ x: 0, y: 0, z: 0 }).length')).toBe(1)
-    await page.getByTestId('m-measure-close').tap()
+    await tapId(page, 'm-measure-close')
     await expect(page.getByTestId('m-measure')).toHaveCount(0)
     expect(await st<number>(page, 'return s.computePreview({ x: 0, y: 0, z: 0 }).length')).toBe(0)
     // Cancelar a mitad.
-    await page.getByTestId('m-measure-btn').tap()
+    await tapId(page, 'm-measure-btn')
     await expect(page.getByTestId('m-measure-hint')).toBeVisible()
-    await page.getByTestId('m-measure-cancel').tap()
+    await tapId(page, 'm-measure-cancel')
     await expect(page.getByTestId('m-measure-hint')).toHaveCount(0)
     expect(await st<boolean>(page, 'return s.engine.busy')).toBe(false)
   })
@@ -140,20 +148,20 @@ test.describe('Mobile view for the job site', () => {
     await page.goto('/')
     await expect(page.getByTestId('mobile-app')).toBeVisible()
     await part(page)
-    await page.getByTestId('m-style').tap()
-    await page.getByTestId('m-style-hidden').tap()
+    await tapId(page, 'm-style')
+    await tapId(page, 'm-style-hidden')
     expect(await st<string>(page, 'return s.visualStyle')).toBe('hidden')
-    await page.getByTestId('m-views').tap()
-    await page.getByTestId('m-view-NEISO').tap()
+    await tapId(page, 'm-views')
+    await tapId(page, 'm-view-NEISO')
     const c = await camera(page)
     expect(c.el).toBeGreaterThan(0.3)
     // Capas: apagar en pantalla no toca el dibujo.
-    await page.getByTestId('m-layers').tap()
-    await page.getByTestId('m-layer-Ejes').tap()
+    await tapId(page, 'm-layers')
+    await tapId(page, 'm-layer-Ejes')
     await expect(page.getByTestId('m-layer-Ejes')).toContainText('Off')
     expect(await st<boolean>(page, "return s.doc.layers.find((l) => l.name === 'Ejes').visible")).toBe(true)
     expect(await st<boolean>(page, "return s.activeViewport.provider().layers.find((l) => l.name === 'Ejes').visible")).toBe(false)
-    await page.getByTestId('m-layer-Ejes').tap()
+    await tapId(page, 'm-layer-Ejes')
     expect(await st<boolean>(page, "return s.activeViewport.provider().layers.find((l) => l.name === 'Ejes').visible")).toBe(true)
     await page.locator('.m-sheet-backdrop').tap({ position: { x: 20, y: 20 } })
     // Layout: la hoja, sin botón de vistas ni de órbita.
@@ -171,9 +179,9 @@ test.describe('Mobile view for the job site', () => {
     await st(page, "return s.runScript('CIRCLE 0,0 25\\nLINE 0,0 40,0 \"\"', { finish: 'cancel', fresh: true })")
     const data = await st<string>(page, 'return JSON.stringify(s.doc.toJSON())')
     await st(page, "return s.runScript('ERASE ALL \"\"', { finish: 'cancel', fresh: true })")
-    await page.getByTestId('m-menu').tap()
+    await tapId(page, 'm-menu')
     const chooser = page.waitForEvent('filechooser')
-    await page.getByTestId('m-open').tap()
+    await tapId(page, 'm-open')
     await (await chooser).setFiles({ name: 'obra.cota', mimeType: 'application/json', buffer: Buffer.from(data) })
     await expect(page.getByTestId('m-name')).toHaveText('obra')
     expect(await st<string[]>(page, 'return s.doc.entities.map((e) => e.type)')).toEqual(['CIRCLE', 'LINE'])
