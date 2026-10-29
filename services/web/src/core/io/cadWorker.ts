@@ -13,8 +13,9 @@ const ctx = self as unknown as {
 ctx.onmessage = (e) => {
   try {
     const { kind, data } = e.data
-    const text = new TextDecoder().decode(kind === 'dwg' ? convertDwgToDxfBytes(data) : new Uint8Array(data))
-    ctx.postMessage({ ok: true, result: importDxf(text) })
+    const dwg = kind === 'dwg' ? convertDwgToDxfBytes(data) : null
+    const result = importDxf(new TextDecoder().decode(dwg ? dwg.bytes : new Uint8Array(data)))
+    ctx.postMessage({ ok: true, result: dwg?.wireSolids ? { ...result, wireSolids: dwg.wireSolids } : result })
   } catch (err) {
     ctx.postMessage({ ok: false, error: err instanceof Error ? err.message : String(err) })
   }

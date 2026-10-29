@@ -4,6 +4,18 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.10.5] — 2026-10-29
+
+### Fixed
+- 3D DWG files opened almost empty: their solids, regions and bodies (ACIS) were skipped. They now show as wireframe,
+  from the edges the DWG stores with each one (also inside blocks), on their layer and color. Their faces are not
+  read yet, so hidden and shaded styles show the same edges.
+- POLYLINE with vertices (old-style 2D polylines with arcs and widths, 3D polylines, polyface and M×N meshes) were
+  skipped when opening DXF and DWG files; the meshes now come in as 3D meshes.
+- A drawing saved looking in 3D or from a side opens with that view (the active viewport's direction and center),
+  not only plan views.
+- In the mobile view one finger orbits drawings with real depth (like the edges of a 3D DWG), not only solids.
+
 ## [2.10.4] — 2026-10-29
 
 ### Fixed

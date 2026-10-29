@@ -611,6 +611,15 @@ export class Viewport {
   }
 
   /** ZOOM Center: centro y alto visible. */
+  /** Encuadra un rectángulo de la vista actual (centro en el mundo, ancho y alto visibles): entra entero. */
+  fitViewRect(center: Pt, width: number, height: number): void {
+    this.recordView()
+    this.controller.target.set(center.x, center.y, center.z)
+    this.controller.viewHeight = Math.max(height, width / (this.width / Math.max(1, this.height)))
+    this.controller.update()
+    this.invalidate()
+  }
+
   zoomCenter(c: Pt, height: number): void {
     this.recordView()
     this.controller.target.set(c.x, c.y, c.z)

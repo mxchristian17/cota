@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ACadVersion, BlockRecord, CadDocument, Circle, DwgWriter, Insert, Layer, Line, XY, XYZ } from '@node-projects/acad-ts'
+import { ACadVersion, BlockRecord, CadDocument, Circle, DwgWriter, DxfWriter, Insert, Layer, Line, ModelerGeometryWire, Solid3D, XY, XYZ } from '@node-projects/acad-ts'
 import { CadTimeoutError, dwgToDxfText, dwgVersion, importCadInWorker } from './dwg'
 import { importDxf } from './dxf'
+import { solidsAsWires } from './dwgConvert'
 
 /** Un DWG 2018 armado en el test: una línea y un círculo en una capa, y un bloque insertado dos veces. */
 function sampleDwg(): ArrayBuffer {
@@ -94,7 +95,7 @@ describe('mensajes de error de DWG', () => {
     const bytes = DwgWriter.writeToBuffer(doc)
     // Sin Worker (Node) lee en el hilo principal: mismo resultado.
     const r = await importCadInWorker('dwg', bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)
-    expect(r.view).toEqual({ center: [40, 5], height: 12, aspect: 2 })
+    expect(r.view).toMatchObject({ center: [40, 5], height: 12, aspect: 2, direction: [0, 0, 1] })
   })
 
   it('los textos con acentos y eñes llegan intactos (el DXF se escribe en bytes UTF-8)', async () => {
@@ -134,5 +135,37 @@ describe('mensajes de error de DWG', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  it('los sólidos ACIS se traen por sus aristas guardadas (también dentro de bloques), en su capa', () => {
+    const doc = new CadDocument()
+    const capa = new Layer('Pieza')
+    doc.layers!.add(capa)
+    const solid = (pts: XYZ[][]) => {
+      const s = new Solid3D()
+      s.layer = capa
+      s.wires = pts.map((p) => Object.assign(new ModelerGeometryWire(), { points: p, applyTransformPresent: false }))
+      return s
+    }
+    doc.modelSpace!.entities.add(solid([[new XYZ(0, 0, 0), new XYZ(10, 0, 0)], [new XYZ(0, 0, 0), new XYZ(0, 5, 0), new XYZ(0, 5, 8)]]))
+    const br = new BlockRecord('Perno')
+    br.entities.add(solid([[new XYZ(0, 0, 0), new XYZ(0, 0, 20)]]))
+    doc.blockRecords!.add(br)
+    const ins = new Insert(br)
+    ins.insertPoint = new XYZ(100, 0, 0)
+    doc.modelSpace!.entities.add(ins)
+    expect(solidsAsWires(doc)).toBe(2)
+    const parts: string[] = []
+    DxfWriter.writeToStream({ write: (t: string) => void parts.push(t), flush: () => {}, close: () => {} } as unknown as Parameters<typeof DxfWriter.writeToStream>[0], doc, false)
+    const r = importDxf(parts.join(''))
+    expect(r.unsupported).not.toContain('3DSOLID')
+    const lines = r.entities.filter((e) => e.type === 'LINE')
+    const polys = r.entities.filter((e) => e.type === 'POLYLINE')
+    expect(lines).toHaveLength(2) // una del modelo y la del bloque insertado
+    expect(polys).toHaveLength(1)
+    expect((polys[0].props as unknown as { vertices: number[][] }).vertices).toEqual([[0, 0, 0], [0, 5, 0], [0, 5, 8]])
+    expect(lines.every((e) => e.layerName === 'Pieza')).toBe(true)
+    const inBlock = lines.find((e) => (e.props as unknown as { start: number[] }).start[0] === 100)
+    expect((inBlock?.props as unknown as { end: number[] }).end).toEqual([100, 0, 20])
   })
 })

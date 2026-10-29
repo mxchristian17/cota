@@ -11,6 +11,7 @@ import { setViewLayerOff, viewLayersOff } from '../../core/editing/isolation'
 import { touchConfig } from '../../render/touchGesture'
 import { ABOUT } from '../../core/about'
 import type { ViewName, VisualStyle } from '../../core/view'
+import type { Entity } from '../../core/document/types'
 
 /**
  * Vista mobile para obra (PRD076): abrir dibujos, orbitar con los dedos, medir con DIST, estilos visuales, vistas,
@@ -61,6 +62,32 @@ function Icon({ name }: { name: keyof typeof ICONS }) {
   )
 }
 
+/**
+ * ¿Dibujo 3D? Sólidos o mallas, o una profundidad (Z) de más del 5 % de su extensión en planta. Mira los puntos de
+ * líneas, polilíneas, círculos y puntos (el resto no cambia la respuesta en la práctica).
+ */
+function is3DDrawing(entities: readonly Entity[]): boolean {
+  const lo = [Infinity, Infinity, Infinity]
+  const hi = [-Infinity, -Infinity, -Infinity]
+  const add = (p: readonly number[]) => {
+    for (let i = 0; i < 3; i++) {
+      lo[i] = Math.min(lo[i], p[i] ?? 0)
+      hi[i] = Math.max(hi[i], p[i] ?? 0)
+    }
+  }
+  for (const e of entities) {
+    if (e.type === 'SOLID3D' || e.type === 'MESH3D') return true
+    if (e.type === 'LINE') {
+      add(e.props.start)
+      add(e.props.end)
+    } else if (e.type === 'POLYLINE') e.props.vertices.forEach(add)
+    else if (e.type === 'CIRCLE') add(e.props.center)
+    else if (e.type === 'POINT') add(e.props.position)
+  }
+  const plan = Math.max(hi[0] - lo[0], hi[1] - lo[1])
+  return isFinite(plan) && plan > 0 && hi[2] - lo[2] > plan * 0.05
+}
+
 /** Número legible: hasta 3 decimales, sin ceros de más. */
 const num = (n: number): string => String(Math.round(n * 1000) / 1000)
 
@@ -79,8 +106,9 @@ export function MobileApp() {
   const [, redraw] = useState(0)
   const inModel = doc.activeTab === MODEL_TAB
 
-  // Un dedo orbita si el dibujo tiene sólidos o mallas; en un dibujo 2D, desplaza. Se puede cambiar a mano.
-  const has3D = useMemo(() => doc.modelEntities.some((e) => e.type === 'SOLID3D' || e.type === 'MESH3D'), [doc.revision, docName])
+  // Un dedo orbita si el dibujo es 3D (sólidos, mallas o profundidad real: las aristas de un DWG 3D son líneas); en un
+  // dibujo 2D, desplaza. Se puede cambiar a mano.
+  const has3D = useMemo(() => is3DDrawing(doc.modelEntities), [doc.revision, docName])
   const [orbitPick, setOrbitPick] = useState<boolean | null>(null)
   useEffect(() => setOrbitPick(null), [docName])
   const orbit = inModel && (orbitPick ?? has3D)

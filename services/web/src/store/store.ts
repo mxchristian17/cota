@@ -565,8 +565,9 @@ export const useStore = create<AppState>((set, get) => {
   /** Vista con que se guardó el último DXF/DWG abierto (VPORT *Active): se encuadra ahí, como el CAD clásico. */
   let openedView: DxfImportResult['view']
   /**
-   * Encuadre al abrir un DXF/DWG: la vista guardada (en planta) si muestra algo del dibujo; si no, todo. El rectángulo
-   * guardado entra entero en la pantalla (en un teléfono en vertical se ve más alto que en el CAD de escritorio).
+   * Encuadre al abrir un DXF/DWG: la vista con que se guardó (en planta o en 3D, como la tenía el visor activo) y, si
+   * es en planta y no muestra nada del dibujo, todo. El rectángulo guardado entra entero en la pantalla (en un teléfono
+   * en vertical se ve más alto que en el CAD de escritorio).
    */
   const frameOpenedDrawing = () => {
     const v = openedView
@@ -575,12 +576,20 @@ export const useStore = create<AppState>((set, get) => {
     if (!vp) return
     const ext = v && vp.kind === 'model' ? vp.extentsBox() : null
     if (v && ext) {
+      const [dx, dy, dz] = v.direction
+      const plan = Math.hypot(dx, dy) < 1e-9 && dz > 0
+      if (plan) {
+        if (!vp.isPlanView()) vp.setView('TOP')
+      } else vp.setViewDir(Math.atan2(dy, dx), Math.atan2(dz, Math.hypot(dx, dy)))
+      // El centro guardado está en el plano de la vista, relativo al punto mirado.
+      const { right, up } = vp.viewAxes()
+      const [cx, cy] = v.center
+      const c = [0, 1, 2].map((i) => v.target[i] + cx * right[i] + cy * up[i])
       const hw = (v.height * v.aspect) / 2
       const hh = v.height / 2
-      const [cx, cy] = v.center
-      if (cx + hw >= ext.min[0] && cx - hw <= ext.max[0] && cy + hh >= ext.min[1] && cy - hh <= ext.max[1]) {
-        if (!vp.isPlanView()) vp.setView('TOP')
-        vp.zoomWindow({ x: cx - hw, y: cy - hh, z: 0 }, { x: cx + hw, y: cy + hh, z: 0 })
+      const shows = !plan || (c[0] + hw >= ext.min[0] && c[0] - hw <= ext.max[0] && c[1] + hh >= ext.min[1] && c[1] - hh <= ext.max[1])
+      if (shows) {
+        vp.fitViewRect({ x: c[0], y: c[1], z: c[2] }, hw * 2, hh * 2)
         return
       }
     }
@@ -622,6 +631,7 @@ export const useStore = create<AppState>((set, get) => {
       if (added.type === 'DIMENSION' && doc.dimStyleDef(added.props.styleName ?? '')) doc.restyleDimension(added.props, added.props.styleName, undefined)
     }
     if (unsupported.length) print(`Unsupported entities skipped: ${unsupported.join(', ')}.`)
+    if (r.wireSolids) print(`${r.wireSolids} 3D solid(s) shown by their edges (wireframe): their faces are not read yet.`)
     const clayer = currentLayer && idByName.get(currentLayer.toLowerCase())
     if (asDrawing) set({ currentLayerId: clayer || doc.firstLayerId })
     return entities.length

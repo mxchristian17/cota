@@ -320,16 +320,21 @@ export interface DxfImportResult {
   /** Variables del HEADER: $LTSCALE, $CELTYPE, $CELTSCALE, $PSLTSCALE. */
   vars: DrawingVars
   /**
-   * Vista con que se guardó el dibujo (VPORT `*Active`): centro y alto visibles en planta. El CAD clásico abre el
-   * dibujo ahí; sin ella (o mirando en 3D, o girada) se encuadra todo.
+   * Vista con que se guardó el dibujo (VPORT `*Active`; con varios visores, el primero, que es el activo): dirección
+   * hacia el observador, punto mirado, centro de la vista relativo a él (en el plano de la vista), alto visible y
+   * proporción. El CAD clásico abre el dibujo ahí; sin ella (o girada) se encuadra todo.
    */
-  view?: { center: [number, number]; height: number; aspect: number }
+  view?: { center: [number, number]; height: number; aspect: number; direction: Vec3; target: Vec3 }
+  /** (DWG) Sólidos, regiones y cuerpos ACIS que se trajeron como sus aristas guardadas (sin caras). */
+  wireSolids?: number
   unsupported: string[]
 }
 
 interface Rec {
   type: string
   codes: Array<[number, string]>
+  /** POLYLINE "pesada": sus VERTEX (hasta el SEQEND). */
+  children?: Rec[]
 }
 
 /**
@@ -362,6 +367,8 @@ export function importDxf(text: string): DxfImportResult {
   // DXF de 20 MB, el arreglo de líneas y el de pares costaban más de 100 MB (en un teléfono, más de lo que hay).
   const records: Rec[] = []
   let cur: Rec | null = null
+  // POLYLINE abierta: los VERTEX que siguen son suyos hasta el SEQEND.
+  let poly: Rec | null = null
   let pos = 0
   const line = (): string | null => {
     if (pos >= text.length) return null
@@ -378,8 +385,14 @@ export function importDxf(text: string): DxfImportResult {
     const code = parseInt(c.trim(), 10)
     if (Number.isNaN(code)) continue
     if (code === 0) {
-      cur = { type: val.trim(), codes: [] }
-      records.push(cur)
+      const type = val.trim()
+      cur = { type, codes: [] }
+      if (poly && type === 'VERTEX') poly.children!.push(cur)
+      else if (poly && type === 'SEQEND') poly = null
+      else {
+        poly = type === 'POLYLINE' ? Object.assign(cur, { children: [] }) : null
+        records.push(cur)
+      }
     } else if (cur) {
       cur.codes.push([code, val])
     }
@@ -465,14 +478,16 @@ export function importDxf(text: string): DxfImportResult {
     }
 
     if (table === 'VPORT' && rec.type === 'VPORT') {
-      // La vista activa del modelo: sólo en planta (dirección 0,0,1) y sin giro, que es lo que se puede reproducir.
-      const dir = [num(rec.codes, 16, 0), num(rec.codes, 26, 0), num(rec.codes, 36, 1)]
+      // La vista activa del modelo (en planta o en 3D), sin giro: lo que se puede reproducir.
+      const direction: Vec3 = [num(rec.codes, 16, 0), num(rec.codes, 26, 0), num(rec.codes, 36, 1)]
+      const target: Vec3 = [num(rec.codes, 17, 0), num(rec.codes, 27, 0), num(rec.codes, 37, 0)]
       const height = num(rec.codes, 40, 0)
-      const plan = Math.abs(dir[0]) < 1e-9 && Math.abs(dir[1]) < 1e-9 && dir[2] > 0 && Math.abs(num(rec.codes, 51, 0)) < 1e-9
-      if ((str(rec.codes, 2) ?? '').toUpperCase() === '*ACTIVE' && !view && plan && height > 0 && isFinite(height)) {
-        const center: [number, number] = [num(rec.codes, 12, 0), num(rec.codes, 22, 0)]
+      const center: [number, number] = [num(rec.codes, 12, 0), num(rec.codes, 22, 0)]
+      const usable =
+        Math.hypot(...direction) > 1e-12 && Math.abs(num(rec.codes, 51, 0)) < 1e-9 && height > 0 && [...direction, ...target, ...center, height].every((v) => isFinite(v))
+      if ((str(rec.codes, 2) ?? '').toUpperCase() === '*ACTIVE' && !view && usable) {
         const aspect = num(rec.codes, 41, 1)
-        if (center.every((v) => isFinite(v))) view = { center, height, aspect: aspect > 0 && isFinite(aspect) ? aspect : 1 }
+        view = { center, height, aspect: aspect > 0 && isFinite(aspect) ? aspect : 1, direction, target }
       }
       continue
     }
@@ -636,6 +651,77 @@ function extrusionOf(c: Rec['codes']): Vec3 {
   return [num(c, 210, 0), num(c, 220, 0), num(c, 230, 1)]
 }
 
+/** Polilínea plana (LWPOLYLINE o POLYLINE 2D): vértices en el OCS de `normal`, con bulges y anchos. */
+function planarPolyline(verts: Vec3[], bulges: number[], widths: Array<[number, number]>, closed: boolean, normal: Vec3): { type: EntityType; props: EntityProps } {
+  const wide = widths.some(([a, b]) => a > 0 || b > 0)
+  const curved = bulges.some((b) => isFinite(b) && Math.abs(b) > 1e-12)
+  const plan = isWorldExtrusion(normal)
+  // Un polígono cerrado de 4 vértices rectos alineado a los ejes (en planta) vuelve a ser RECTANGLE.
+  if (closed && !curved && plan && !wide) {
+    const rect = asRectangle(verts)
+    if (rect) return { type: 'RECTANGLE', props: rect }
+  }
+  // Vértices del OCS al mundo.
+  const world = plan ? verts : verts.map((v) => fromOcs(v, normal))
+  return { type: 'POLYLINE', props: { vertices: world, closed, ...(curved ? { bulges } : {}), ...(plan ? {} : { normal }), ...(wide ? { widths } : {}) } }
+}
+
+/**
+ * POLYLINE "pesada" (con VERTEX): según su 70, malla de caras (polyface, 64), malla de M×N vértices (16), polilínea
+ * 3D (8) o polilínea 2D con curvas y anchos. Las mallas pasan a MESH3D; las polilíneas, a POLYLINE.
+ */
+function heavyPolyline(rec: Rec): { type: EntityType; props: EntityProps } | null {
+  const c = rec.codes
+  const flags = num(c, 70, 0)
+  const vs = (rec.children ?? []).filter((v) => v.type === 'VERTEX')
+  const vflag = (v: Rec) => num(v.codes, 70, 0)
+  const at = (v: Rec): Vec3 => [num(v.codes, 10), num(v.codes, 20), num(v.codes, 30)]
+  if (flags & 64) {
+    // Primero los vértices (128 + 64); después las caras (sólo 128) con 71–74: índices desde 1, negativo = arista oculta.
+    const vertices = vs.filter((v) => (vflag(v) & 192) === 192).map(at)
+    const faces: number[][] = []
+    for (const v of vs) {
+      if ((vflag(v) & 192) !== 128) continue
+      const idx = [71, 72, 73, 74].map((k) => Math.abs(num(v.codes, k, 0))).filter((i) => i > 0 && i <= vertices.length)
+      if (idx.length >= 3) faces.push(idx.map((i) => i - 1))
+    }
+    return faces.length ? { type: 'MESH3D', props: { vertices, faces } as EntityProps } : null
+  }
+  if (flags & 16) {
+    // M filas de N vértices (71, 72); cerrada en M (bit 1) o en N (bit 32).
+    const m = num(c, 71, 0)
+    const n = num(c, 72, 0)
+    const vertices = vs.map(at)
+    if (m < 2 || n < 2 || vertices.length < m * n) return null
+    const cm = (flags & 1) !== 0
+    const cn = (flags & 32) !== 0
+    const faces: number[][] = []
+    for (let i = 0; i < (cm ? m : m - 1); i++)
+      for (let j = 0; j < (cn ? n : n - 1); j++) {
+        const i2 = (i + 1) % m
+        const j2 = (j + 1) % n
+        faces.push([i * n + j, i * n + j2, i2 * n + j2, i2 * n + j])
+      }
+    return { type: 'MESH3D', props: { vertices: vertices.slice(0, m * n), faces } as EntityProps }
+  }
+  const closed = (flags & 1) !== 0
+  // Los vértices de control de un ajuste spline (16) no se dibujan: sí los que genera el ajuste.
+  const pts = vs.filter((v) => !(vflag(v) & 16))
+  if (pts.length < 2) return null
+  if (flags & 8) return { type: 'POLYLINE', props: { vertices: pts.map(at), closed } as EntityProps }
+  // 2D: en el OCS de la extrusión, a la elevación del POLYLINE (su 30).
+  const z = num(c, 30, 0)
+  const sw = num(c, 40, 0)
+  const ew = num(c, 41, 0)
+  return planarPolyline(
+    pts.map((v) => [num(v.codes, 10), num(v.codes, 20), z] as Vec3),
+    pts.map((v) => num(v.codes, 42, 0)),
+    pts.map((v) => [num(v.codes, 40, sw), num(v.codes, 41, ew)] as [number, number]),
+    closed,
+    extrusionOf(c),
+  )
+}
+
 function parseEntity(rec: Rec): { type: EntityType; props: EntityProps } | null {
   const c = rec.codes
   switch (rec.type) {
@@ -751,20 +837,10 @@ function parseEntity(rec: Rec): { type: EntityType; props: EntityProps } | null 
           widths[verts.length - 1][code - 40] = Number(val)
         }
       }
-      const wide = widths.some(([a, b]) => a > 0 || b > 0)
-      const closed = (num(c, 70) & 1) !== 0
-      const curved = bulges.some((b) => isFinite(b) && Math.abs(b) > 1e-12)
-      const normal = extrusionOf(c)
-      const plan = isWorldExtrusion(normal)
-      // Un polígono cerrado de 4 vértices rectos alineado a los ejes (en planta) vuelve a ser RECTANGLE.
-      if (closed && !curved && plan && !wide) {
-        const rect = asRectangle(verts)
-        if (rect) return { type: 'RECTANGLE', props: rect }
-      }
-      // Vértices del OCS al mundo.
-      const world = plan ? verts : verts.map((v) => fromOcs(v, normal))
-      return { type: 'POLYLINE', props: { vertices: world, closed, ...(curved ? { bulges } : {}), ...(plan ? {} : { normal }), ...(wide ? { widths } : {}) } }
+      return planarPolyline(verts, bulges, widths, (num(c, 70) & 1) !== 0, extrusionOf(c))
     }
+    case 'POLYLINE':
+      return heavyPolyline(rec)
     case 'SPLINE': {
       const cps: Vec3[] = []
       let x: number | null = null

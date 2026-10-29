@@ -430,3 +430,48 @@ describe('importDxf ▸ bloques', () => {
     }
   })
 })
+
+describe('importDxf ▸ POLYLINE con VERTEX (3D, mallas y 2D del formato viejo)', () => {
+  const dxf = (pairs: Array<[number, string | number]>) =>
+    [[0, 'SECTION'], [2, 'ENTITIES'], ...pairs, [0, 'ENDSEC'], [0, 'EOF']].map(([c, v]) => `${c}\n${v}`).join('\n') + '\n'
+  const vtx = (x: number, y: number, z: number, flags = 0, extra: Array<[number, number]> = []): Array<[number, string | number]> => [
+    [0, 'VERTEX'], [8, '0'], [10, x], [20, y], [30, z], [70, flags], ...extra,
+  ]
+  it('polilínea 3D: los vértices en el mundo', () => {
+    const r = importDxf(dxf([[0, 'POLYLINE'], [8, 'A'], [66, 1], [70, 8], ...vtx(0, 0, 0, 32), ...vtx(10, 0, 5, 32), ...vtx(10, 10, 20, 32), [0, 'SEQEND'], [8, 'A']]))
+    expect(r.entities).toHaveLength(1)
+    const e = r.entities[0]
+    expect(e.type).toBe('POLYLINE')
+    expect((e.props as unknown as { vertices: number[][] }).vertices).toEqual([[0, 0, 0], [10, 0, 5], [10, 10, 20]])
+    expect(r.unsupported).toEqual([])
+  })
+  it('malla de caras (polyface): vértices y caras → MESH3D', () => {
+    const r = importDxf(
+      dxf([
+        [0, 'POLYLINE'], [8, '0'], [66, 1], [70, 64], [71, 4], [72, 2],
+        ...vtx(0, 0, 0, 192), ...vtx(1, 0, 0, 192), ...vtx(1, 1, 0, 192), ...vtx(0, 1, 1, 192),
+        ...vtx(0, 0, 0, 128, [[71, 1], [72, 2], [73, 3]]), ...vtx(0, 0, 0, 128, [[71, 1], [72, -3], [73, 4]]),
+        [0, 'SEQEND'],
+      ]),
+    )
+    const m = r.entities[0]
+    expect(m.type).toBe('MESH3D')
+    const p = m.props as unknown as { vertices: number[][]; faces: number[][] }
+    expect(p.vertices).toHaveLength(4)
+    expect(p.faces).toEqual([[0, 1, 2], [0, 2, 3]])
+  })
+  it('malla de M×N vértices → MESH3D de cuadriláteros', () => {
+    const verts = [0, 1, 2].flatMap((i) => [0, 1].flatMap((j) => vtx(i, j, i * j, 64)))
+    const r = importDxf(dxf([[0, 'POLYLINE'], [8, '0'], [66, 1], [70, 16], [71, 3], [72, 2], ...verts, [0, 'SEQEND']]))
+    const p = r.entities[0].props as unknown as { faces: number[][] }
+    expect(r.entities[0].type).toBe('MESH3D')
+    expect(p.faces).toEqual([[0, 1, 3, 2], [2, 3, 5, 4]])
+  })
+  it('polilínea 2D del formato viejo: elevación y tramo curvo (bulge)', () => {
+    const r = importDxf(dxf([[0, 'POLYLINE'], [8, '0'], [66, 1], [10, 0], [20, 0], [30, 3], [70, 0], ...vtx(0, 0, 0, 0, [[42, 1]]), ...vtx(10, 0, 0), [0, 'SEQEND']]))
+    const p = r.entities[0].props as unknown as { vertices: number[][]; bulges: number[] }
+    expect(r.entities[0].type).toBe('POLYLINE')
+    expect(p.vertices).toEqual([[0, 0, 3], [10, 0, 3]])
+    expect(p.bulges).toEqual([1, 0])
+  })
+})
