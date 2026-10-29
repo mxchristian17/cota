@@ -26,7 +26,7 @@ import { DEFAULT_PALETTE, normalizePalette, type PaletteState } from '../core/ui
 import { dockToolbar, normalizeToolbar, normalizeToolbars, type ToolbarSide, type ToolbarState, type ToolbarStates } from '../core/ui/toolbar'
 import { DEFAULT_TOOLBARS, findToolbar } from '../core/ui/toolbars'
 import { pickPrefs, readLocalPrefs, writeLocalPrefs, type Prefs } from '../core/ui/prefs'
-import { enterFullscreen, exitFullscreen, isPhone, mobileParam, type ViewMode } from '../ui/appWindow'
+import { enterFullscreen, exitFullscreen, fileAccept, isPhone, mobileParam, type ViewMode } from '../ui/appWindow'
 import { DEFAULT_VISUAL_STYLE, VISUAL_STYLES, type CameraMode, type ViewName, type VisualStyle } from '../core/view'
 import type { CameraState, Viewport } from '../render/Viewport'
 import { entitiesInScreenBox, entityOutline, type RectPx } from '../core/editing/bounds'
@@ -1082,7 +1082,7 @@ export const useStore = create<AppState>((set, get) => {
       const file = await new Promise<File | null>((resolve) => {
         const input = document.createElement('input')
         input.type = 'file'
-        input.accept = `${DRAWING_TEMPLATE_EXT},.json`
+        input.accept = fileAccept(`${DRAWING_TEMPLATE_EXT},.json`)
         input.onchange = () => resolve(input.files?.[0] ?? null)
         input.click()
       })
@@ -2640,7 +2640,7 @@ export const useStore = create<AppState>((set, get) => {
     importFile: () => {
       const input = document.createElement('input')
       input.type = 'file'
-      input.accept = `.obj,.dxf,.dwg,${DRAWING_EXTS.join(',')}`
+      input.accept = fileAccept(`.obj,.dxf,.dwg,${DRAWING_EXTS.join(',')}`)
       input.onchange = () => {
         const file = input.files?.[0]
         if (!file) return
@@ -2648,6 +2648,11 @@ export const useStore = create<AppState>((set, get) => {
         // Un .cota no se "importa" sobre el dibujo actual: se abre como dibujo.
         if (isDrawingFile(name)) {
           void get().openDeviceFile(file)
+          return
+        }
+        // Sin filtro en el selector (pantallas táctiles), cualquier archivo puede llegar.
+        if (!['.obj', '.dxf', '.dwg'].some((x) => name.endsWith(x))) {
+          print(`"${file.name}" cannot be imported: use a .obj, .dxf or .dwg file.`)
           return
         }
         const reader = new FileReader()
@@ -2674,7 +2679,7 @@ export const useStore = create<AppState>((set, get) => {
     openFromDevice: () => {
       const input = document.createElement('input')
       input.type = 'file'
-      input.accept = `${DRAWING_EXTS.join(',')},.dxf,.dwg,${MODEL_EXTS.join(',')}`
+      input.accept = fileAccept(`${DRAWING_EXTS.join(',')},.dxf,.dwg,${MODEL_EXTS.join(',')}`)
       input.onchange = () => {
         const file = input.files?.[0]
         if (file) void get().openDeviceFile(file)
@@ -2706,6 +2711,10 @@ export const useStore = create<AppState>((set, get) => {
           set({ ...detached, viewportLayout: doc.viewportLayout })
           restoreModelUcs()
           print(`Opened "${file.name}" from the device (${meshes.length} mesh(es)).`)
+        } else if (!lower.endsWith('.dxf') && !lower.endsWith('.dwg')) {
+          // Sin filtro en el selector (pantallas táctiles), cualquier archivo puede llegar.
+          print(`"${file.name}" cannot be opened: use a ${DRAWING_EXT}, .dxf, .dwg or 3D model (${MODEL_EXTS.join(', ')}) file.`)
+          return
         } else {
           let dxf: string
           if (lower.endsWith('.dwg')) {

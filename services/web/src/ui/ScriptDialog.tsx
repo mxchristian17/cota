@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useStore } from '../store/store'
 import { parseScript, scriptLink } from '../core/commands/script'
 import { focusCommandLine } from './focus'
+import { fileAccept } from './appWindow'
 
 /**
  * SCRIPT: multicomandos. Se escriben o pegan las entradas (separadas por espacios o renglones; `""` es Enter y el
@@ -73,7 +74,7 @@ function ScriptBody({ initial, shared }: { initial: string; shared: boolean }) {
           {note && <p className="muted">{note}</p>}
         </div>
         <div className="modal-actions">
-          <input ref={file} type="file" accept=".scr,.txt" hidden onChange={(e) => void load(e.target.files?.[0])} />
+          <input ref={file} type="file" accept={fileAccept('.scr,.txt')} hidden onChange={(e) => void load(e.target.files?.[0])} />
           <button className="btn" onClick={() => file.current?.click()} data-testid="script-load">
             Load .scr…
           </button>

@@ -4,6 +4,14 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.10.2] — 2026-10-28
+
+### Fixed
+- On phones and tablets the file picker let you choose `.dwg` (and `.cota`) files: their pickers only know file
+  types, so those extensions appeared greyed out. Now every file can be picked and Cota checks the extension, with a
+  clear message for files it cannot open.
+- The mobile view shows what happened when opening a drawing ("Reading DWG…", opened, or why it could not be read).
+
 ## [2.10.1] — 2026-10-28
 
 ### Fixed

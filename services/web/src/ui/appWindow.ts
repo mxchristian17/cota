@@ -99,3 +99,10 @@ export function mobileParam(): boolean | null {
 
 /** ¿Se muestra la vista mobile con esta preferencia? */
 export const mobileActive = (mode: ViewMode): boolean => mode === 'mobile' || (mode === 'auto' && isPhone())
+
+/**
+ * Filtro del selector de archivos. En pantallas táctiles (Android, iOS) no se filtra: esos selectores traducen las
+ * extensiones a tipos MIME y dejan en gris las que no conocen (.dwg, .cota, .scr…). La extensión se revisa al abrir.
+ */
+export const fileAccept = (exts: string): string =>
+  typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches ? '' : exts

@@ -1,4 +1,5 @@
 import { devices, expect, test, type CDPSession, type Page } from '@playwright/test'
+import { ACadVersion, CadDocument, Circle, DwgWriter, Line, XYZ } from '@node-projects/acad-ts'
 
 /** Vista mobile para obra (PRD076): teléfono emulado con pantalla táctil; los dedos van por CDP (toques reales). */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -36,6 +37,21 @@ const screenOf = (page: Page, p: { x: number; y: number; z: number }) =>
 async function tapId(page: Page, id: string) {
   await page.waitForTimeout(350)
   await page.getByTestId(id).tap()
+}
+
+/** Un DWG 2018 de verdad (la misma librería con que Cota los lee): una línea y un círculo. */
+function sampleDwg(): Buffer {
+  const doc = new CadDocument()
+  doc.header!.version = ACadVersion.AC1032
+  const line = new Line()
+  line.startPoint = new XYZ(0, 0, 0)
+  line.endPoint = new XYZ(100, 0, 0)
+  doc.modelSpace!.entities.add(line)
+  const circle = new Circle()
+  circle.center = new XYZ(50, 50, 0)
+  circle.radius = 10
+  doc.modelSpace!.entities.add(circle)
+  return Buffer.from(DwgWriter.writeToBuffer(doc))
 }
 
 const camera = (page: Page) => st<{ az: number; el: number; radius: number }>(page, 'return s.activeViewport.getCamera()')
@@ -173,18 +189,35 @@ test.describe('Mobile view for the job site', () => {
     await expect(page.getByTestId('m-orbit')).toBeVisible()
   })
 
-  test('opens a drawing from the device', async ({ page }) => {
+  test('opens drawings from the device: the phone picker lets every file through (.dwg, .cota) and says what happened', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByTestId('mobile-app')).toBeVisible()
     await st(page, "return s.runScript('CIRCLE 0,0 25\\nLINE 0,0 40,0 \"\"', { finish: 'cancel', fresh: true })")
     const data = await st<string>(page, 'return JSON.stringify(s.doc.toJSON())')
     await st(page, "return s.runScript('ERASE ALL \"\"', { finish: 'cancel', fresh: true })")
-    await tapId(page, 'm-menu')
-    const chooser = page.waitForEvent('filechooser')
-    await tapId(page, 'm-open')
-    await (await chooser).setFiles({ name: 'obra.cota', mimeType: 'application/json', buffer: Buffer.from(data) })
+    const pick = async (name: string, mimeType: string, buffer: Buffer) => {
+      await tapId(page, 'm-menu')
+      const chooser = page.waitForEvent('filechooser')
+      await tapId(page, 'm-open')
+      const fc = await chooser
+      // Sin filtro: los selectores de Android e iOS dejan en gris las extensiones sin tipo MIME (.dwg, .cota).
+      expect(await fc.element().getAttribute('accept')).toBe('')
+      await fc.setFiles({ name, mimeType, buffer })
+    }
+    await pick('obra.cota', 'application/octet-stream', Buffer.from(data))
     await expect(page.getByTestId('m-name')).toHaveText('obra')
+    await expect(page.getByTestId('m-toast')).toContainText('Opened "obra.cota" from the device.')
     expect(await st<string[]>(page, 'return s.doc.entities.map((e) => e.type)')).toEqual(['CIRCLE', 'LINE'])
+
+    await pick('plano.dwg', 'application/octet-stream', sampleDwg())
+    await expect(page.getByTestId('m-name')).toHaveText('plano.dwg')
+    await expect(page.getByTestId('m-toast')).toContainText('Opened "plano.dwg" from the device')
+    expect((await st<string[]>(page, 'return s.doc.entities.map((e) => e.type)')).sort()).toEqual(['CIRCLE', 'LINE'])
+
+    // Otro tipo de archivo: no se abre y se avisa; el dibujo abierto sigue.
+    await pick('foto.jpg', 'image/jpeg', Buffer.from([0xff, 0xd8, 0xff, 0xe0]))
+    await expect(page.getByTestId('m-toast')).toContainText('"foto.jpg" cannot be opened')
+    await expect(page.getByTestId('m-name')).toHaveText('plano.dwg')
   })
 })
 

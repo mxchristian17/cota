@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../../store/store'
 import { ViewportView } from '../ViewportView'
 import { OpenDialog } from '../OpenDialog'
@@ -72,6 +72,7 @@ export function MobileApp() {
   const measure = useStore((s) => s.lastMeasure)
   const style = useStore((s) => s.visualStyle)
   const token = useStore((s) => s.token)
+  const output = useStore((s) => s.output)
   const [sheet, setSheet] = useState<Sheet>(null)
   const [measuring, setMeasuring] = useState(false)
   const [, redraw] = useState(0)
@@ -92,6 +93,23 @@ export function MobileApp() {
       touchConfig.mode = 'editor'
     }
   }, [])
+  // Sin línea de comandos, lo que dice la apertura ("Reading DWG…", "Opened…", un error) se muestra en un aviso.
+  const [toast, setToast] = useState<string | null>(null)
+  // Momento en que se tocó Abrir (0 = no se está abriendo); cancelar el selector no avisa, así que caduca solo.
+  const opening = useRef(0)
+  const lastOut = useRef(output)
+  useEffect(() => {
+    if (output === lastOut.current) return
+    lastOut.current = output
+    const line = output[output.length - 1]
+    if (!line || Date.now() - opening.current > 120_000) return
+    const done = /^Opened |could not|cannot|not available|failed/i.test(line)
+    if (done) opening.current = 0
+    setToast(line)
+    if (!done) return
+    const t = setTimeout(() => setToast(null), /^Opened /.test(line) ? 3000 : 7000)
+    return () => clearTimeout(t)
+  }, [output])
   // La medición es del espacio y del dibujo en que se hizo.
   useEffect(() => {
     if (st().lastMeasure) st().setMeasure(null)
@@ -102,6 +120,7 @@ export function MobileApp() {
   }, [busy, measuring])
 
   const startMeasure = () => {
+    opening.current = 0
     const s = st()
     if (s.engine.busy) s.cancel()
     if (!s.esnap) s.toggleEsnap() // apuntar a extremos, medios y centros
@@ -116,6 +135,7 @@ export function MobileApp() {
   }
   const open = () => {
     setSheet(null)
+    opening.current = Date.now()
     if (CLOUD_ENABLED && token) void st().openDocumentsDialog()
     else st().openFromDevice()
   }
@@ -185,6 +205,11 @@ export function MobileApp() {
             <div className="muted m-angle">
               Angle {num(measure.angXY)}° in XY{Math.abs(measure.angFromXY) > 1e-9 ? ` · ${num(measure.angFromXY)}° from XY` : ''}
             </div>
+          </div>
+        )}
+        {toast && (
+          <div className="m-toast" onClick={() => setToast(null)} data-testid="m-toast">
+            {toast}
           </div>
         )}
         {inModel && (

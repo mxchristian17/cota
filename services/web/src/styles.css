@@ -2093,5 +2093,6 @@ div.lt-row {
 .m-dist { flex: 1; min-width: 0; font-family: var(--mono); font-size: 28px; font-weight: 600; color: var(--icon-accent); }
 .m-deltas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 2px; font-family: var(--mono); font-size: 13px; }
 .m-angle { margin-top: 4px; font-size: 13px; }
+.m-toast { position: absolute; left: 50%; bottom: 84px; z-index: 11; width: max-content; max-width: calc(100% - 24px); transform: translateX(-50%); padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border); background: rgba(37, 37, 38, 0.96); font-size: 14px; line-height: 1.35; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45); }
 .m-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 .m-actions .btn { min-height: 40px; padding: 0 16px; font-size: 14px; border-radius: 8px; }
