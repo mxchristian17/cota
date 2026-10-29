@@ -1,4 +1,4 @@
-import { convertDwgToDxfBytes } from './dwgConvert'
+import { binaryDxfToDxfBytes, convertDwgToDxfBytes, isBinaryDxf } from './dwgConvert'
 import { importDxf } from './dxf'
 
 /**
@@ -14,7 +14,9 @@ ctx.onmessage = (e) => {
   try {
     const { kind, data } = e.data
     const dwg = kind === 'dwg' ? convertDwgToDxfBytes(data) : null
-    const result = importDxf(new TextDecoder().decode(dwg ? dwg.bytes : new Uint8Array(data)))
+    const raw = new Uint8Array(data)
+    const bytes = dwg ? dwg.bytes : isBinaryDxf(raw) ? binaryDxfToDxfBytes(data) : raw
+    const result = importDxf(new TextDecoder().decode(bytes))
     ctx.postMessage({ ok: true, result: dwg?.wireSolids ? { ...result, wireSolids: dwg.wireSolids } : result })
   } catch (err) {
     ctx.postMessage({ ok: false, error: err instanceof Error ? err.message : String(err) })

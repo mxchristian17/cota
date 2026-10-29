@@ -11,7 +11,9 @@ discussion.
 
 | Status | Item |
 |---|---|
-| next | **DWG in the browser**: open (and later save) `.dwg` files with no server, using a permissively licensed reader. |
+| done | **DWG in the browser**: open and save `.dwg` files with no server (a permissively licensed reader, in a background thread), checked against a standard sample drawing saved in every DWG/DXF version. |
+| next | **3D solids from DWG/DXF with faces**: read the ACIS data of 3DSOLID, REGION and BODY (today they come in as the edges the DWG stores, as wireframe). |
+| planned | Still skipped when opening DWG/DXF: MULTILEADER, MLINE, XLINE/RAY, TOLERANCE, images, PDF underlays, WIPEOUT, SHAPE and paper space (layouts and their viewports). |
 | next | Blocks from DXF/DWG: import `INSERT` references and attributes as Cota blocks. |
 | planned | STEP/IGES: test the import with real-world parts and assemblies; keep the assembly tree. |
 | idea | Export STEP from Cota solids. |

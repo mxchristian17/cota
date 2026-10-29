@@ -1,4 +1,4 @@
-import { DwgReader, DxfWriter, Line, ModelerGeometry, Polyline3D, XYZ, type CadDocument, type ModelerGeometryWire } from '@node-projects/acad-ts'
+import { DwgReader, DxfReader, DxfWriter, Line, ModelerGeometry, Polyline3D, XYZ, type CadDocument, type ModelerGeometryWire } from '@node-projects/acad-ts'
 
 /**
  * DWG → DXF con acad-ts (MIT, port a TypeScript de ACadSharp). Import estático a propósito: lo usan el hilo aparte
@@ -10,6 +10,18 @@ import { DwgReader, DxfWriter, Line, ModelerGeometry, Polyline3D, XYZ, type CadD
 export function convertDwgToDxfBytes(data: ArrayBuffer): { bytes: Uint8Array; wireSolids: number } {
   const doc = DwgReader.readFromStream(data, null)
   const wireSolids = solidsAsWires(doc)
+  return { bytes: writeDxfBytes(doc), wireSolids }
+}
+
+/** ¿DXF binario? Empieza con "AutoCAD Binary DXF" (el importador lee el de texto). */
+export const isBinaryDxf = (b: Uint8Array): boolean => b.length > 18 && new TextDecoder('latin1').decode(b.subarray(0, 18)) === 'AutoCAD Binary DXF'
+
+/** DXF binario → DXF de texto (lo lee acad-ts y lo vuelve a escribir). */
+export function binaryDxfToDxfBytes(data: ArrayBuffer): Uint8Array {
+  return writeDxfBytes(DxfReader.readFromStream(new Uint8Array(data)))
+}
+
+function writeDxfBytes(doc: CadDocument): Uint8Array {
   const enc = new TextEncoder()
   let buf = new Uint8Array(1 << 22)
   let len = 0
@@ -27,7 +39,7 @@ export function convertDwgToDxfBytes(data: ArrayBuffer): { bytes: Uint8Array; wi
     close: () => {},
   }
   DxfWriter.writeToStream(sink as unknown as Parameters<typeof DxfWriter.writeToStream>[0], doc, false)
-  return { bytes: buf.subarray(0, len), wireSolids }
+  return buf.subarray(0, len)
 }
 
 export const convertDwgToDxf = (data: ArrayBuffer): string => new TextDecoder().decode(convertDwgToDxfBytes(data).bytes)

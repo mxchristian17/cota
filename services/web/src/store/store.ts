@@ -595,7 +595,6 @@ export const useStore = create<AppState>((set, get) => {
     }
     vp.zoomExtents()
   }
-  const importDxfText = (text: string, asDrawing = false): number => applyDxf(importDxf(text), asDrawing)
   /** Carga en el dibujo un DXF ya interpretado (en el hilo aparte de lectura o acá). */
   const applyDxf = (r: DxfImportResult, asDrawing = false): number => {
     const { currentLayer, layers, entities, dimStyles, linetypes, vars, view, unsupported } = r
@@ -2704,11 +2703,16 @@ export const useStore = create<AppState>((set, get) => {
           reader.readAsArrayBuffer(file)
           return
         }
-        reader.onload = () => {
-          const text = String(reader.result ?? '')
-          if (name.endsWith('.dxf')) runImport(() => importDxfText(text), (n) => `Imported ${n} entity(ies) from DXF.`)
-          else runImport(() => importObjText(text), (n) => `Imported ${n} mesh(es) from OBJ.`)
+        if (name.endsWith('.dxf')) {
+          // En el hilo aparte, como al abrir (también el DXF binario).
+          void file
+            .arrayBuffer()
+            .then((buf) => importCadInWorker('dxf', buf))
+            .then((r) => runImport(() => applyDxf(r), (n) => `Imported ${n} entity(ies) from DXF.`))
+            .catch((err) => print(`DXF import failed: ${err instanceof Error ? err.message : String(err)}`))
+          return
         }
+        reader.onload = () => runImport(() => importObjText(String(reader.result ?? '')), (n) => `Imported ${n} mesh(es) from OBJ.`)
         reader.readAsText(file)
       }
       input.click()
@@ -3161,17 +3165,21 @@ export const useStore = create<AppState>((set, get) => {
         return
       }
       try {
-        const text = await readTextFile(handle)
-        pushSnapshot()
         if (fileName.toLowerCase().endsWith('.dxf')) {
+          // En el hilo aparte, como al abrir del equipo (también el DXF binario).
+          const f = await handle.getFile()
+          const r = await importCadInWorker('dxf', f.arrayBuffer ? await f.arrayBuffer() : (new TextEncoder().encode(await f.text()).buffer as ArrayBuffer))
+          pushSnapshot()
           doc.reset()
-          const n = importDxfText(text, true)
+          const n = applyDxf(r, true)
           currentFile = null // un DXF importado se guarda como .cota nuevo
           set({ docId: null, docName: name, docFolder: folder, fsFilePath: null, openOpen: false, selection: [] })
           print(`Imported "${path}" (${n} entities).`)
           markSaved()
           frameOpenedDrawing()
         } else {
+          const text = await readTextFile(handle)
+          pushSnapshot()
           doc.load(JSON.parse(text) as DocumentData)
           restoreModelUcs()
           applyViews()

@@ -475,3 +475,26 @@ describe('importDxf ▸ POLYLINE con VERTEX (3D, mallas y 2D del formato viejo)'
     expect(p.bulges).toEqual([1, 0])
   })
 })
+
+describe('importDxf ▸ SOLID, 3DFACE y LEADER', () => {
+  const dxf = (pairs: Array<[number, string | number]>) =>
+    [[0, 'SECTION'], [2, 'ENTITIES'], ...pairs, [0, 'ENDSEC'], [0, 'EOF']].map(([c, v]) => `${c}\n${v}`).join('\n') + '\n'
+  it('SOLID: las esquinas en orden de moño (1, 2, 3, 4) dan el contorno 1, 2, 4, 3 relleno', () => {
+    const r = importDxf(dxf([[0, 'SOLID'], [8, '0'], [10, 0], [20, 0], [30, 0], [11, 10], [21, 0], [31, 0], [12, 0], [22, 5], [32, 0], [13, 10], [23, 5], [33, 0]]))
+    const h = r.entities[0]
+    expect(h.type).toBe('HATCH')
+    const p = h.props as unknown as { pattern: string; loops: { vertices: number[][] }[] }
+    expect(p.pattern).toBe('SOLID')
+    expect(p.loops[0].vertices).toEqual([[0, 0, 0], [10, 0, 0], [10, 5, 0], [0, 5, 0]])
+  })
+  it('3DFACE de tres esquinas: un triángulo', () => {
+    const r = importDxf(dxf([[0, '3DFACE'], [8, '0'], [10, 0], [20, 0], [30, 0], [11, 1], [21, 0], [31, 0], [12, 0], [22, 1], [32, 1], [13, 0], [23, 1], [33, 1]]))
+    expect(r.entities[0].type).toBe('MESH3D')
+    expect((r.entities[0].props as unknown as { faces: number[][] }).faces).toEqual([[0, 1, 2]])
+  })
+  it('LEADER: sus vértices como polilínea', () => {
+    const r = importDxf(dxf([[0, 'LEADER'], [8, '0'], [71, 1], [76, 3], [10, 0], [20, 0], [30, 0], [10, 5], [20, 5], [30, 0], [10, 12], [20, 5], [30, 0]]))
+    expect(r.entities[0].type).toBe('POLYLINE')
+    expect((r.entities[0].props as unknown as { vertices: number[][] }).vertices).toEqual([[0, 0, 0], [5, 5, 0], [12, 5, 0]])
+  })
+})

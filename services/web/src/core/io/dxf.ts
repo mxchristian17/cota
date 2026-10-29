@@ -540,6 +540,13 @@ export function importDxf(text: string): DxfImportResult {
       inserts.push(rec)
       continue
     }
+    if (rec.type === 'ACAD_TABLE') {
+      // Una tabla se dibuja con su bloque anónimo (*T…): se inserta en su punto, girada según su dirección (11/21).
+      const deg = (Math.atan2(num(rec.codes, 21, 0), num(rec.codes, 11, 1)) * 180) / Math.PI
+      const keep = rec.codes.filter(([k]) => k === 2 || k === 8 || k === 10 || k === 20 || k === 30 || k === 210 || k === 220 || k === 230)
+      inserts.push({ type: 'INSERT', codes: [...keep, [50, String(deg)]] })
+      continue
+    }
     if (rec.type === 'ATTRIB') {
       // Valores de los atributos de la inserción anterior: ya vienen en coordenadas del dibujo, como textos.
       const spec = specOf(rec)
@@ -664,6 +671,42 @@ function planarPolyline(verts: Vec3[], bulges: number[], widths: Array<[number, 
   // Vértices del OCS al mundo.
   const world = plan ? verts : verts.map((v) => fromOcs(v, normal))
   return { type: 'POLYLINE', props: { vertices: world, closed, ...(curved ? { bulges } : {}), ...(plan ? {} : { normal }), ...(wide ? { widths } : {}) } }
+}
+
+/** Puntos (x, y, z) de los códigos `code`, `code + 10`, `code + 20` en el orden en que aparecen. */
+function triples(c: Array<[number, string]>, code: number): Vec3[] {
+  const out: Vec3[] = []
+  for (let i = 0; i < c.length; i++) {
+    if (c[i][0] !== code) continue
+    const y = c[i + 1]?.[0] === code + 10 ? Number(c[i + 1][1]) : 0
+    const z = c[i + 2]?.[0] === code + 20 ? Number(c[i + 2][1]) : 0
+    out.push([Number(c[i][1]), y, z])
+  }
+  return out
+}
+
+/**
+ * MESH (malla de subdivisión): 92 = cantidad de vértices (10/20/30 a continuación); 93 = largo de la lista de caras,
+ * que siguen como 90: cantidad de vértices de la cara y sus índices. Se trae la malla base (sin subdividir).
+ */
+function subdivisionMesh(c: Array<[number, string]>): { type: EntityType; props: EntityProps } | null {
+  const iv = c.findIndex(([k]) => k === 92)
+  if (iv < 0) return null
+  const nv = Number(c[iv][1])
+  const if93 = c.findIndex(([k], j) => j > iv && k === 93)
+  if (if93 < 0) return null
+  const vertices = triples(c.slice(iv + 1, if93), 10).slice(0, nv)
+  const total = Number(c[if93][1])
+  const list: number[] = []
+  for (let j = if93 + 1; j < c.length && list.length < total; j++) if (c[j][0] === 90) list.push(Number(c[j][1]))
+  const faces: number[][] = []
+  for (let j = 0; j < list.length; ) {
+    const k = list[j++]
+    const f = list.slice(j, j + k)
+    j += k
+    if (f.length >= 3 && f.every((x) => x >= 0 && x < vertices.length)) faces.push(f)
+  }
+  return faces.length ? { type: 'MESH3D', props: { vertices, faces } as EntityProps } : null
 }
 
 /**
@@ -841,6 +884,31 @@ function parseEntity(rec: Rec): { type: EntityType; props: EntityProps } | null 
     }
     case 'POLYLINE':
       return heavyPolyline(rec)
+    case '3DFACE': {
+      // Cara 3D de 3 o 4 esquinas (la 4ª repite la 3ª en un triángulo): una malla de una cara.
+      const pts = [0, 1, 2, 3].map((i) => [num(c, 10 + i), num(c, 20 + i), num(c, 30 + i)] as Vec3)
+      const tri = pts[3].every((v, k) => Math.abs(v - pts[2][k]) < 1e-12)
+      return { type: 'MESH3D', props: { vertices: tri ? pts.slice(0, 3) : pts, faces: [tri ? [0, 1, 2] : [0, 1, 2, 3]] } as EntityProps }
+    }
+    case 'SOLID':
+    case 'TRACE': {
+      // Relleno 2D de 3 o 4 esquinas en el OCS, en orden "de moño" (1-2-3 y 2-3-4): el contorno es 1, 2, 4, 3.
+      const n = extrusionOf(c)
+      const q = [0, 1, 2, 3].map((i) => fromOcs([num(c, 10 + i), num(c, 20 + i), num(c, 30 + i)], n))
+      const tri = q[3].every((v, k) => Math.abs(v - q[2][k]) < 1e-12)
+      const ring = tri ? [q[0], q[1], q[2]] : [q[0], q[1], q[3], q[2]]
+      return {
+        type: 'HATCH',
+        props: { loops: [{ vertices: ring }], pattern: 'SOLID', scale: 1, angle: 0, origin: ring[0], island: 'outer', ...(isWorldExtrusion(n) ? {} : { normal: n }) } as EntityProps,
+      }
+    }
+    case 'MESH':
+      return subdivisionMesh(c)
+    case 'LEADER': {
+      // Directriz del formato viejo: sus vértices como polilínea (la flecha no se dibuja).
+      const vertices = triples(c, 10)
+      return vertices.length >= 2 ? { type: 'POLYLINE', props: { vertices, closed: false } as EntityProps } : null
+    }
     case 'SPLINE': {
       const cps: Vec3[] = []
       let x: number | null = null

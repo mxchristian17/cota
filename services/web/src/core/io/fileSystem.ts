@@ -13,7 +13,7 @@ import { DRAWING_EXT, DRAWING_EXTS, drawingFileName, extensionOf, folderSegments
 export interface FsFileHandle {
   kind: 'file'
   name: string
-  getFile(): Promise<{ text(): Promise<string>; lastModified: number }>
+  getFile(): Promise<{ text(): Promise<string>; arrayBuffer?(): Promise<ArrayBuffer>; lastModified: number }>
   createWritable(): Promise<{ write(data: string): Promise<void>; close(): Promise<void> }>
   queryPermission?(opts?: { mode?: 'read' | 'readwrite' }): Promise<PermissionState>
   requestPermission?(opts?: { mode?: 'read' | 'readwrite' }): Promise<PermissionState>

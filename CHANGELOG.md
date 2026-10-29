@@ -4,6 +4,19 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.11.0] — 2026-10-29
+
+### Added
+- More entities come in when opening DXF and DWG files: 3D faces (3DFACE) and subdivision meshes (MESH) as 3D meshes,
+  2D filled shapes (SOLID, TRACE) as solid hatches, tables (ACAD_TABLE) with their lines and texts, and old-style
+  leaders (LEADER) as polylines.
+- **Binary DXF** files open (they used to come in empty, with no message).
+- The DWG/DXF reader is checked against a standard sample drawing with about 40 entity types, saved in several
+  versions (DWG 2000 and 2018, binary DXF, DXF R12), from the MIT-licensed ACadSharp project.
+
+### Changed
+- IMPORT of a DXF and opening a DXF from the working folder also read it in the background thread.
+
 ## [2.10.5] — 2026-10-29
 
 ### Fixed
