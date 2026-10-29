@@ -332,7 +332,7 @@ export function MobileApp() {
                   {[...doc.layers]
                     .sort((a, b) => a.name.localeCompare(b.name))
                     .map((l) => {
-                      const offInDrawing = !l.visible
+                      const offInDrawing = !l.visible || !!l.frozen
                       const shown = !offInDrawing && !viewLayersOff.has(l.id)
                       return (
                         <button
@@ -348,7 +348,7 @@ export function MobileApp() {
                         >
                           <span className="m-swatch" style={{ background: l.color }} />
                           <span className="m-row-name">{l.name}</span>
-                          <span className="muted">{offInDrawing ? 'off in the drawing' : shown ? 'On' : 'Off'}</span>
+                          <span className="muted">{l.frozen ? 'frozen in the drawing' : offInDrawing ? 'off in the drawing' : shown ? 'On' : 'Off'}</span>
                         </button>
                       )
                     })}

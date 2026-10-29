@@ -199,7 +199,7 @@ test.describe('Cota OPEN 3D models', () => {
 })
 
 test.describe('Cota picking solids', () => {
-  test('a clean click inside a solid selects it, in wireframe too; a frozen layer is visible but not selectable', async ({ page }) => {
+  test('a clean click inside a solid selects it, in wireframe too; a frozen layer is hidden and not selectable', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByTestId('command-input')).toBeVisible()
     await typeCmd(page, 'BOX', '#-20,-20', '#20,20', '10')
@@ -215,7 +215,7 @@ test.describe('Cota picking solids', () => {
       }).toPass({ timeout: 10_000 })
     }
     await store(page, 's.clearSelection()')
-    // Una pieza en una capa congelada (encima de la otra): se ve pero el clic pasa de largo hasta la de abajo.
+    // Una pieza en una capa congelada (encima de la otra): no se ve y el clic pasa de largo hasta la de abajo.
     await typeCmd(page, '-LAYER', 'M', 'Hielo', '')
     await typeCmd(page, 'BOX', '#-20,-20,10', '#20,20,10', '10')
     await typeCmd(page, '-LAYER', 'S', '0', 'F', 'Hielo', '')

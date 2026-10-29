@@ -2397,20 +2397,14 @@ export class Viewport {
   }
 
   /**
-   * Color con que se ve una capa: el color 7 según el fondo; las congeladas en grises (#222 a #CCC según la
-   * luminosidad de su color) y las bloqueadas atenuadas (como LAYLOCKFADECTL 50). Las dos se ven y dan snaps.
+   * Color con que se ve una capa: el color 7 según el fondo y las bloqueadas atenuadas (como LAYLOCKFADECTL 50); se
+   * ven y dan snaps. Las congeladas no se dibujan (como las apagadas).
    */
   private layerHex(layer: Layer | undefined, own?: string): string {
-    // Color propio del objeto, o el de su capa (ByLayer); congeladas y bloqueadas se atenúan igual.
+    // Color propio del objeto, o el de su capa (ByLayer); las bloqueadas se atenúan igual.
     const hex = this.ink((own?.startsWith('#') ? own : undefined) ?? layer?.color ?? '#ffffff')
-    if (!layer?.frozen && !layer?.locked) return hex
-    const color = new THREE.Color(hex)
-    if (layer.frozen) {
-      const c = color.getRGB({ r: 0, g: 0, b: 0 }, THREE.SRGBColorSpace)
-      const g = (0x22 + (0xcc - 0x22) * (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b)) / 255
-      color.setRGB(g, g, g, THREE.SRGBColorSpace)
-    } else color.lerp(new THREE.Color(this.bgColor), 0.5)
-    return '#' + color.getHexString()
+    if (!layer?.locked) return hex
+    return '#' + new THREE.Color(hex).lerp(new THREE.Color(this.bgColor), 0.5).getHexString()
   }
 
   /**

@@ -155,7 +155,7 @@ test.describe('Cota snap/UCS + UI', () => {
     expect(a[1]).toBeGreaterThan(0) // la tangente de arriba (del lado del clic)
   })
 
-  test('las capas apagadas no dan snaps; las congeladas sí', async ({ page }) => {
+  test('las capas apagadas y las congeladas no dan snaps (desaparecen, como en el CAD clásico)', async ({ page }) => {
     await typeCmd(page, '-LAYER', 'M', 'Oculta', '', 'LINE', '#0,0', '#40,0', '', '-LAYER', 'S', '0', '')
     const { cx, cy, s } = await canvasRef(page)
     const startOfNewLine = async () => {
@@ -167,9 +167,9 @@ test.describe('Cota snap/UCS + UI', () => {
       return (await lastEntity(page)).props.start as number[]
     }
     expect((await startOfNewLine())[0]).toBeCloseTo(40, 6) // visible: ENDpoint
-    // Apagada: desaparece y no da snaps. Congelada: se ve en grises y, como una bloqueada, sigue dando snaps.
+    // Apagada o congelada: desaparece y no da snaps.
     await typeCmd(page, 'U') // sin la línea de prueba (empieza en x = 40)
-    for (const [opt, snaps] of [['OFF', false], ['F', true]] as const) {
+    for (const [opt, snaps] of [['OFF', false], ['F', false]] as const) {
       await typeCmd(page, '-LAYER', opt, 'Oculta', '')
       const x = (await startOfNewLine())[0]
       if (snaps) expect(x).toBeCloseTo(40, 6)

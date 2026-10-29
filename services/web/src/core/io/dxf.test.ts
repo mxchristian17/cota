@@ -498,3 +498,25 @@ describe('importDxf ▸ SOLID, 3DFACE y LEADER', () => {
     expect((r.entities[0].props as unknown as { vertices: number[][] }).vertices).toEqual([[0, 0, 0], [5, 5, 0], [12, 5, 0]])
   })
 })
+
+describe('importDxf ▸ capas congeladas (como en el CAD clásico)', () => {
+  it('lo que hay dentro de una inserción en una capa congelada queda en esa capa (se oculta entero)', () => {
+    const pairs: Array<[number, string | number]> = [
+      [0, 'SECTION'], [2, 'TABLES'], [0, 'TABLE'], [2, 'LAYER'],
+      [0, 'LAYER'], [2, 'Pieza'], [70, 1], [62, 1], [6, 'CONTINUOUS'],
+      [0, 'LAYER'], [2, 'Ejes'], [70, 0], [62, 2], [6, 'CONTINUOUS'],
+      [0, 'ENDTAB'], [0, 'ENDSEC'],
+      [0, 'SECTION'], [2, 'BLOCKS'],
+      [0, 'BLOCK'], [2, 'Eje'], [10, 0], [20, 0], [30, 0],
+      [0, 'LINE'], [8, 'Ejes'], [10, 0], [20, 0], [30, 0], [11, 5], [21, 0], [31, 0],
+      [0, 'ENDBLK'], [0, 'ENDSEC'],
+      [0, 'SECTION'], [2, 'ENTITIES'],
+      [0, 'INSERT'], [8, 'Pieza'], [2, 'Eje'], [10, 0], [20, 0], [30, 0],
+      [0, 'INSERT'], [8, 'Ejes'], [2, 'Eje'], [10, 10], [20, 0], [30, 0],
+      [0, 'ENDSEC'], [0, 'EOF'],
+    ]
+    const r = importDxf(pairs.map(([c, v]) => `${c}\n${v}`).join('\n') + '\n')
+    expect(r.layers.find((l) => l.name === 'Pieza')?.frozen).toBe(true)
+    expect(r.entities.map((e) => e.layerName).sort()).toEqual(['Ejes', 'Pieza'])
+  })
+})

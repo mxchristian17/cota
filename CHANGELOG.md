@@ -4,6 +4,14 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.12.0] — 2026-10-29
+
+### Changed
+- **Frozen layers behave as in classic CAD**: their objects are hidden (they used to show in grey), give no object
+  snaps, cannot be selected and do not plot. A block inserted on a frozen layer is hidden whole when opening DXF/DWG
+  files, even the parts that are on other layers.
+- The mobile view's layer list marks frozen layers as "frozen in the drawing".
+
 ## [2.11.0] — 2026-10-29
 
 ### Added

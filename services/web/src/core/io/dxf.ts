@@ -587,23 +587,27 @@ export function importDxf(text: string): DxfImportResult {
     }
   }
   const shift = (b: Vec3): InsertProps => ({ name: '', position: [-b[0], -b[1], -b[2]], scale: [1, 1, 1], rotation: 0 })
-  const expand = (rec: Rec, after: InsertProps[], layer: string, depth: number): void => {
+  // Capas congeladas: en el CAD clásico una inserción en una capa congelada se oculta entera, aunque su contenido esté
+  // en otras capas. Como acá el bloque se desarma, todo lo que hay debajo de esa inserción pasa a su capa congelada.
+  const frozenNames = new Set(layers.filter((l) => l.frozen).map((l) => l.name.toUpperCase()))
+  const expand = (rec: Rec, after: InsertProps[], layer: string, depth: number, frozenAs: string | null = null): void => {
     const def = blocks.get((str(rec.codes, 2) ?? '').toUpperCase())
     if (!def || depth > 8) {
       if (!def) unsupported.add('INSERT')
       return
     }
     const here = (str(rec.codes, 8) ?? '0') === '0' ? layer : (str(rec.codes, 8) ?? '0')
+    const frozen = frozenAs ?? (frozenNames.has(here.toUpperCase()) ? here : null)
     const chain = [shift(def.base), insertOf(rec), ...after]
     for (const it of def.items) {
       if (it.insert) {
-        expand(it.insert, chain, here, depth + 1)
+        expand(it.insert, chain, here, depth + 1, frozen)
         continue
       }
       let e = { id: '', type: it.spec!.type, layer: '', props: it.spec!.props } as unknown as Entity
       for (const t of chain) e = transformInsertEntity(e, t)
       // El tipo puede cambiar al transformar (un RECTANGLE girado o fuera de planta pasa a POLYLINE).
-      entities.push({ ...it.spec!, type: e.type, props: e.props as EntityProps, layerName: it.spec!.layerName === '0' ? here : it.spec!.layerName })
+      entities.push({ ...it.spec!, type: e.type, props: e.props as EntityProps, layerName: frozen ?? (it.spec!.layerName === '0' ? here : it.spec!.layerName) })
     }
   }
   for (const rec of inserts) expand(rec, [], str(rec.codes, 8) ?? '0', 0)
