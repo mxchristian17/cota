@@ -4,6 +4,17 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.10.3] — 2026-10-28
+
+### Fixed
+- Opening a DXF or DWG showed an empty screen: the view was fitted before the new drawing was drawn. It now opens on
+  the view the drawing was saved with (as in classic CAD), or on the whole drawing if there is none.
+- DWG files are read in a background thread: the screen keeps responding, the mobile view counts the seconds, and a
+  file that takes more than 3 minutes is stopped with a message instead of "Reading DWG…" forever.
+- Rectangles inside blocks inserted rotated or out of plan could not be drawn (they kept the rectangle type after
+  becoming a polyline).
+- The mobile view shows, together with the result of opening, what could not be imported.
+
 ## [2.10.2] — 2026-10-28
 
 ### Fixed

@@ -59,8 +59,8 @@ import { DEFAULT_PLOT, plotPage, type PlotSettings } from '../core/io/plotSettin
 import { paperPerModel, unitToMm } from '../core/layout/scale'
 import { fieldContextFor, resolveFieldTexts } from '../core/fields/context'
 import { exportObj, importObj, type ObjMesh } from '../core/io/obj'
-import { exportDxf, importDxf } from '../core/io/dxf'
-import { dwgErrorMessage, dwgToDxfText, dwgVersion, dxfTextToDwg } from '../core/io/dwg'
+import { exportDxf, importDxf, type DxfImportResult } from '../core/io/dxf'
+import { dwgErrorMessage, dwgToDxfInWorker, dwgVersion, dxfTextToDwg } from '../core/io/dwg'
 import {
   ensurePermission,
   fsaSupported,
@@ -552,7 +552,7 @@ export const useStore = create<AppState>((set, get) => {
     const version = dwgVersion(data)
     if (!version) throw new Error('the file is not a DWG drawing.')
     try {
-      return await dwgToDxfText(data)
+      return await dwgToDxfInWorker(data)
     } catch (local) {
       try {
         return await api.dwgToDxf(data)
@@ -562,8 +562,33 @@ export const useStore = create<AppState>((set, get) => {
       }
     }
   }
+  /** Vista con que se guardó el último DXF/DWG abierto (VPORT *Active): se encuadra ahí, como el CAD clásico. */
+  let openedView: DxfImportResult['view']
+  /**
+   * Encuadre al abrir un DXF/DWG: la vista guardada (en planta) si muestra algo del dibujo; si no, todo. El rectángulo
+   * guardado entra entero en la pantalla (en un teléfono en vertical se ve más alto que en el CAD de escritorio).
+   */
+  const frameOpenedDrawing = () => {
+    const v = openedView
+    openedView = undefined
+    const vp = get().activeViewport
+    if (!vp) return
+    const ext = v && vp.kind === 'model' ? vp.extentsBox() : null
+    if (v && ext) {
+      const hw = (v.height * v.aspect) / 2
+      const hh = v.height / 2
+      const [cx, cy] = v.center
+      if (cx + hw >= ext.min[0] && cx - hw <= ext.max[0] && cy + hh >= ext.min[1] && cy - hh <= ext.max[1]) {
+        if (!vp.isPlanView()) vp.setView('TOP')
+        vp.zoomWindow({ x: cx - hw, y: cy - hh, z: 0 }, { x: cx + hw, y: cy + hh, z: 0 })
+        return
+      }
+    }
+    vp.zoomExtents()
+  }
   const importDxfText = (text: string, asDrawing = false): number => {
-    const { currentLayer, layers, entities, dimStyles, linetypes, vars, unsupported } = importDxf(text)
+    const { currentLayer, layers, entities, dimStyles, linetypes, vars, view, unsupported } = importDxf(text)
+    if (asDrawing) openedView = view
     // Tipos de línea: los del LTYPE del archivo; al abrir un DXF también sus variables.
     for (const d of linetypes) if (asDrawing || !doc.linetype(d.name)) doc.loadLinetype(d.name, d, true)
     if (asDrawing) for (const [k, v] of Object.entries(vars)) doc.setVar(k as keyof DrawingVars, v as never)
@@ -2731,7 +2756,7 @@ export const useStore = create<AppState>((set, get) => {
         }
         bump()
         markSaved()
-        get().activeViewport?.zoomExtents()
+        frameOpenedDrawing()
       } catch (err) {
         if (err instanceof ApiError && err.status === 501) print('DWG converter not available on the server.')
         else print(`"${file.name}" could not be read (${err instanceof Error && err.message ? err.message : 'invalid file?'}).`)
@@ -3129,6 +3154,7 @@ export const useStore = create<AppState>((set, get) => {
           set({ docId: null, docName: name, docFolder: folder, fsFilePath: null, openOpen: false, selection: [] })
           print(`Imported "${path}" (${n} entities).`)
           markSaved()
+          frameOpenedDrawing()
         } else {
           doc.load(JSON.parse(text) as DocumentData)
           restoreModelUcs()

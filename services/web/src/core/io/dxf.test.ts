@@ -408,4 +408,25 @@ describe('importDxf ▸ bloques', () => {
     expect(c.layerName).toBe('Fija')
     expect(r.unsupported).not.toContain('INSERT')
   })
+  it('un rectángulo del bloque insertado girado o fuera de planta queda como polilínea (se puede dibujar)', () => {
+    const rect: Array<[number, string | number]> = [[0, 'LWPOLYLINE'], [8, '0'], [90, 4], [70, 1], [10, 0], [20, 0], [10, 4], [20, 0], [10, 4], [20, 2], [10, 0], [20, 2]]
+    const text = dxf([
+      [0, 'SECTION'], [2, 'BLOCKS'],
+      [0, 'BLOCK'], [2, 'Caja'], [10, 0], [20, 0], [30, 0], ...rect, [0, 'ENDBLK'],
+      [0, 'ENDSEC'],
+      [0, 'SECTION'], [2, 'ENTITIES'],
+      [0, 'INSERT'], [8, 'A'], [2, 'Caja'], [10, 10], [20, 0], [30, 0],
+      [0, 'INSERT'], [8, 'B'], [2, 'Caja'], [10, 0], [20, 0], [30, 0], [50, 30],
+      [0, 'INSERT'], [8, 'C'], [2, 'Caja'], [10, 0], [20, 0], [30, 0], [210, -1], [220, 0], [230, 0],
+      [0, 'ENDSEC'], [0, 'EOF'],
+    ])
+    const r = importDxf(text)
+    const byLayer = (l: string) => r.entities.find((e) => e.layerName === l)!
+    expect(byLayer('A').type).toBe('RECTANGLE') // sin giro sigue siendo rectángulo
+    for (const l of ['B', 'C']) {
+      const e = byLayer(l)
+      expect(e.type).toBe('POLYLINE')
+      expect((e.props as unknown as { vertices: number[][] }).vertices).toHaveLength(4)
+    }
+  })
 })

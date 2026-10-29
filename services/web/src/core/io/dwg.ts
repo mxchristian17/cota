@@ -4,12 +4,60 @@
  * pesa: se carga recién al abrir el primer .dwg.
  */
 export async function dwgToDxfText(data: ArrayBuffer): Promise<string> {
-  const { DwgReader, DxfWriter } = await import('@node-projects/acad-ts')
-  const doc = DwgReader.readFromStream(data, null)
-  const parts: string[] = []
-  const sink = { write: (s: string) => void parts.push(s), flush: () => {}, close: () => {} }
-  DxfWriter.writeToStream(sink as unknown as Parameters<typeof DxfWriter.writeToStream>[0], doc, false)
-  return parts.join('')
+  const { convertDwgToDxf } = await import('./dwgConvert')
+  return convertDwgToDxf(data)
+}
+
+/** Tope para leer un DWG en el navegador: un plano grande en un teléfono tarda decenas de segundos, no minutos. */
+export const DWG_TIMEOUT_MS = 180_000
+
+/** El DWG no terminó de leerse a tiempo (muy grande o con contenido que el lector no termina de procesar). */
+export class DwgTimeoutError extends Error {
+  constructor(ms: number) {
+    super(`it took longer than ${Math.round(ms / 60_000)} min to read in the browser (very large or with 3D content it cannot process)`)
+    this.name = 'DwgTimeoutError'
+  }
+}
+
+/**
+ * DWG → DXF en un hilo aparte (Web Worker): la pantalla sigue respondiendo y, si tarda más que `timeoutMs`, se corta
+ * con un mensaje en vez de quedar "leyendo" para siempre. Sin Worker (tests) o si el hilo no arranca (sin conexión con
+ * una versión vieja en caché), se lee en el hilo principal como antes.
+ */
+export function dwgToDxfInWorker(data: ArrayBuffer, timeoutMs = DWG_TIMEOUT_MS): Promise<string> {
+  if (typeof Worker === 'undefined') return dwgToDxfText(data)
+  return new Promise((resolve, reject) => {
+    let worker: Worker
+    try {
+      worker = new Worker(new URL('./dwgWorker.ts', import.meta.url), { type: 'module' })
+    } catch {
+      dwgToDxfText(data).then(resolve, reject)
+      return
+    }
+    let answered = false
+    const done = () => {
+      clearTimeout(timer)
+      worker.terminate()
+    }
+    const timer = setTimeout(() => {
+      done()
+      reject(new DwgTimeoutError(timeoutMs))
+    }, timeoutMs)
+    worker.onmessage = (e: MessageEvent<{ ok: boolean; dxf?: string; error?: string }>) => {
+      answered = true
+      done()
+      if (e.data.ok) resolve(e.data.dxf ?? '')
+      else reject(new Error(e.data.error ?? 'the DWG could not be read'))
+    }
+    worker.onerror = (e) => {
+      e.preventDefault()
+      done()
+      // El hilo no llegó a responder (no cargó): se intenta en el hilo principal.
+      if (!answered) dwgToDxfText(data).then(resolve, reject)
+      else reject(new Error(e.message || 'the DWG reader stopped'))
+    }
+    worker.postMessage(data) // se copia: el original sigue disponible para el conversor del servidor
+  })
 }
 
 /** El archivo empieza con la versión del formato (`AC1015` = 2000 … `AC1032` = 2018+). */

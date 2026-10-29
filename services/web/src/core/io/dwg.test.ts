@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { ACadVersion, BlockRecord, CadDocument, Circle, DwgWriter, Insert, Layer, Line, XYZ } from '@node-projects/acad-ts'
-import { dwgToDxfText, dwgVersion } from './dwg'
+import { describe, expect, it, vi } from 'vitest'
+import { ACadVersion, BlockRecord, CadDocument, Circle, DwgWriter, Insert, Layer, Line, XY, XYZ } from '@node-projects/acad-ts'
+import { DwgTimeoutError, dwgToDxfInWorker, dwgToDxfText, dwgVersion } from './dwg'
 import { importDxf } from './dxf'
 
 /** Un DWG 2018 armado en el test: una línea y un círculo en una capa, y un bloque insertado dos veces. */
@@ -78,5 +78,41 @@ describe('mensajes de error de DWG', () => {
     const { dwgErrorMessage } = await import('./dwg')
     expect(dwgErrorMessage(new TypeError('Failed to fetch dynamically imported module: https://x/assets/dist-1.js'))).toContain('reload the page')
     expect(dwgErrorMessage(new Error('Entry not found'))).toBe('Entry not found')
+  })
+
+  it('trae la vista con que se guardó (VPORT *Active) para abrir ahí, como el CAD clásico', async () => {
+    const doc = new CadDocument()
+    doc.header!.version = ACadVersion.AC1032
+    const line = new Line()
+    line.startPoint = new XYZ(0, 0, 0)
+    line.endPoint = new XYZ(100, 0, 0)
+    doc.modelSpace!.entities.add(line)
+    const active = [...doc.vPorts!].find((v) => v.name.toUpperCase() === '*ACTIVE')!
+    active.center = new XY(40, 5)
+    active.viewHeight = 12
+    active.aspectRatio = 2
+    const bytes = DwgWriter.writeToBuffer(doc)
+    // Sin Worker (Node) lee en el hilo principal: mismo resultado.
+    const dxf = await dwgToDxfInWorker(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)
+    expect(importDxf(dxf).view).toEqual({ center: [40, 5], height: 12, aspect: 2 })
+  })
+
+  it('un DWG que no termina de leerse se corta con un mensaje (no queda "leyendo" para siempre)', async () => {
+    let terminated = false
+    class Stuck {
+      onmessage: unknown = null
+      onerror: unknown = null
+      postMessage() {}
+      terminate() {
+        terminated = true
+      }
+    }
+    vi.stubGlobal('Worker', Stuck)
+    try {
+      await expect(dwgToDxfInWorker(new ArrayBuffer(8), 30)).rejects.toBeInstanceOf(DwgTimeoutError)
+      expect(terminated).toBe(true)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

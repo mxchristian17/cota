@@ -93,23 +93,45 @@ export function MobileApp() {
       touchConfig.mode = 'editor'
     }
   }, [])
-  // Sin línea de comandos, lo que dice la apertura ("Reading DWG…", "Opened…", un error) se muestra en un aviso.
+  // Sin línea de comandos, lo que dice la apertura ("Reading DWG…", "Opened…", lo que no se pudo importar, un error) se
+  // muestra en un aviso. Mientras lee, cuenta los segundos: un plano grande tarda en un teléfono.
   const [toast, setToast] = useState<string | null>(null)
+  const [since, setSince] = useState(0)
+  const [, tick] = useState(0)
   // Momento en que se tocó Abrir (0 = no se está abriendo); cancelar el selector no avisa, así que caduca solo.
   const opening = useRef(0)
+  const said = useRef<string[]>([])
   const lastOut = useRef(output)
   useEffect(() => {
-    if (output === lastOut.current) return
+    const prev = lastOut.current
+    if (output === prev) return
     lastOut.current = output
-    const line = output[output.length - 1]
-    if (!line || Date.now() - opening.current > 120_000) return
+    // Varios mensajes seguidos llegan en un solo render: se toman todos los nuevos (al tope del historial, el último).
+    const fresh = output.length > prev.length ? output.slice(prev.length) : output.slice(-1)
+    const line = fresh[fresh.length - 1]
+    if (!line || Date.now() - opening.current > 600_000) return
     const done = /^Opened |could not|cannot|not available|failed/i.test(line)
-    if (done) opening.current = 0
-    setToast(line)
-    if (!done) return
-    const t = setTimeout(() => setToast(null), /^Opened /.test(line) ? 3000 : 7000)
+    for (const l of fresh) {
+      if (/^Reading /.test(l)) setSince(Date.now())
+      else said.current.push(l)
+    }
+    if (!done) {
+      setToast(line)
+      return
+    }
+    opening.current = 0
+    setSince(0)
+    // Al terminar: el resultado y, antes, lo que se avisó en el medio (p. ej. entidades que no se importan).
+    setToast([line, ...said.current.filter((l) => l !== line)].slice(0, 3).join('\n'))
+    said.current = []
+    const t = setTimeout(() => setToast(null), /^Opened /.test(line) ? 6000 : 9000)
     return () => clearTimeout(t)
   }, [output])
+  useEffect(() => {
+    if (!since) return
+    const id = setInterval(() => tick((n) => n + 1), 1000)
+    return () => clearInterval(id)
+  }, [since])
   // La medición es del espacio y del dibujo en que se hizo.
   useEffect(() => {
     if (st().lastMeasure) st().setMeasure(null)
@@ -136,6 +158,7 @@ export function MobileApp() {
   const open = () => {
     setSheet(null)
     opening.current = Date.now()
+    said.current = []
     if (CLOUD_ENABLED && token) void st().openDocumentsDialog()
     else st().openFromDevice()
   }
@@ -210,6 +233,7 @@ export function MobileApp() {
         {toast && (
           <div className="m-toast" onClick={() => setToast(null)} data-testid="m-toast">
             {toast}
+            {since > 0 && <span className="muted"> {Math.round((Date.now() - since) / 1000)} s</span>}
           </div>
         )}
         {inModel && (

@@ -1,5 +1,5 @@
 import { devices, expect, test, type CDPSession, type Page } from '@playwright/test'
-import { ACadVersion, CadDocument, Circle, DwgWriter, Line, XYZ } from '@node-projects/acad-ts'
+import { ACadVersion, CadDocument, Circle, DwgWriter, Line, XY, XYZ } from '@node-projects/acad-ts'
 
 /** Vista mobile para obra (PRD076): teléfono emulado con pantalla táctil; los dedos van por CDP (toques reales). */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -39,7 +39,7 @@ async function tapId(page: Page, id: string) {
   await page.getByTestId(id).tap()
 }
 
-/** Un DWG 2018 de verdad (la misma librería con que Cota los lee): una línea y un círculo. */
+/** Un DWG 2018 de verdad (la misma librería con que Cota los lee): una línea y un círculo, guardado mirando el círculo. */
 function sampleDwg(): Buffer {
   const doc = new CadDocument()
   doc.header!.version = ACadVersion.AC1032
@@ -51,6 +51,9 @@ function sampleDwg(): Buffer {
   circle.center = new XYZ(50, 50, 0)
   circle.radius = 10
   doc.modelSpace!.entities.add(circle)
+  const active = [...doc.vPorts!].find((v) => v.name.toUpperCase() === '*ACTIVE')!
+  active.center = new XY(50, 50)
+  active.viewHeight = 30
   return Buffer.from(DwgWriter.writeToBuffer(doc))
 }
 
@@ -213,6 +216,12 @@ test.describe('Mobile view for the job site', () => {
     await expect(page.getByTestId('m-name')).toHaveText('plano.dwg')
     await expect(page.getByTestId('m-toast')).toContainText('Opened "plano.dwg" from the device')
     expect((await st<string[]>(page, 'return s.doc.entities.map((e) => e.type)')).sort()).toEqual(['CIRCLE', 'LINE'])
+    // Abre en la vista con que se guardó (el círculo), no en el origen ni en todo el dibujo.
+    const cam = await camera(page)
+    const target = await st<number[]>(page, 'return s.activeViewport.getCamera().target')
+    expect(target[0]).toBeCloseTo(50, 3)
+    expect(target[1]).toBeCloseTo(50, 3)
+    expect(cam.el).toBeCloseTo(Math.PI / 2, 3)
 
     // Otro tipo de archivo: no se abre y se avisa; el dibujo abierto sigue.
     await pick('foto.jpg', 'image/jpeg', Buffer.from([0xff, 0xd8, 0xff, 0xe0]))

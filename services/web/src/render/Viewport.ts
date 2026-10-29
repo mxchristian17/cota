@@ -651,6 +651,8 @@ export class Viewport {
 
   /** Caja de lo dibujado (la extensión), o null si no hay nada. */
   extentsBox(): { min: Vec3; max: Vec3 } | null {
+    const d = (this.data = this.provider?.() ?? this.data)
+    if (d) this.syncScene(d)
     const box = new THREE.Box3().setFromObject(this.entityGroup)
     if (box.isEmpty() || ![box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z].every(isFinite)) return null
     return { min: [box.min.x, box.min.y, box.min.z], max: [box.max.x, box.max.y, box.max.z] }
@@ -789,6 +791,8 @@ export class Viewport {
   }
 
   private fitExtents(): void {
+    const d = (this.data = this.provider?.() ?? this.data)
+    if (d) this.syncScene(d)
     const box = new THREE.Box3().setFromObject(this.entityGroup)
     if (this.sheet) box.union(new THREE.Box3(new THREE.Vector3(0, 0, -1), new THREE.Vector3(this.sheet.w, this.sheet.h, 1)))
     // Bounds vacíos o NO finitos (una geometría degenerada puede dar NaN) → no romper la cámara.
@@ -2848,6 +2852,27 @@ export class Viewport {
     }
   }
 
+  /** Reconstruye la escena si los datos cambiaron: cada cuadro y, antes de encuadrar, ZOOM Extents (al abrir un dibujo
+   *  el encuadre llega antes que el primer cuadro con los datos nuevos). */
+  private syncScene(data: ViewportData): void {
+    const selKey = data.selection.join(',')
+    const fieldsKey = this.hasFieldTexts && data.fields ? JSON.stringify(data.fields) : this.lastFieldsKey
+    if (data.revision !== this.lastRevision || selKey !== this.lastSelectionKey || fieldsKey !== this.lastFieldsKey || data.annoScale !== this.lastAnnoScale) {
+      this.lastRevision = data.revision
+      this.lastAnnoScale = data.annoScale
+      this.lastSelectionKey = selKey
+      this.expanded = expandEntities(data.entities, data.blocks, { attdisp: data.attdisp })
+      this.snapList = null
+      this.hasFieldTexts = this.expanded.some(
+        (e) => (e.type === 'TEXT' && hasFields(e.props.text)) || (e.type === 'DIMENSION' && !!e.props.textOverride && hasFields(e.props.textOverride)),
+      )
+      this.lastFieldsKey = this.hasFieldTexts && data.fields ? JSON.stringify(data.fields) : ''
+      this.snapSpheres = null // el índice espacial de snap se reconstruye con los datos nuevos
+      this.rebuild(this.expanded, data.layers, new Set(data.selection))
+      this.invalidate()
+    }
+  }
+
   private tick = (): void => {
     // Todo el cuerpo va protegido: un error puntual (geometría degenerada, etc.) NUNCA debe
     // detener el loop de animación y congelar el viewport. Pase lo que pase, se re-agenda el RAF.
@@ -2894,24 +2919,7 @@ export class Viewport {
         this.lastPromptKey = promptKey
         this.invalidate()
       }
-      if (data) {
-        const selKey = data.selection.join(',')
-        const fieldsKey = this.hasFieldTexts && data.fields ? JSON.stringify(data.fields) : this.lastFieldsKey
-        if (data.revision !== this.lastRevision || selKey !== this.lastSelectionKey || fieldsKey !== this.lastFieldsKey || data.annoScale !== this.lastAnnoScale) {
-          this.lastRevision = data.revision
-          this.lastAnnoScale = data.annoScale
-          this.lastSelectionKey = selKey
-          this.expanded = expandEntities(data.entities, data.blocks, { attdisp: data.attdisp })
-          this.snapList = null
-          this.hasFieldTexts = this.expanded.some(
-            (e) => (e.type === 'TEXT' && hasFields(e.props.text)) || (e.type === 'DIMENSION' && !!e.props.textOverride && hasFields(e.props.textOverride)),
-          )
-          this.lastFieldsKey = this.hasFieldTexts && data.fields ? JSON.stringify(data.fields) : ''
-          this.snapSpheres = null // el índice espacial de snap se reconstruye con los datos nuevos
-          this.rebuild(this.expanded, data.layers, new Set(data.selection))
-          this.invalidate()
-        }
-      }
+      if (data) this.syncScene(data)
 
       // Cambio de cámara (orientación + pan + zoom + tamaño) → re-dibujar.
       const c = this.controller

@@ -319,6 +319,11 @@ export interface DxfImportResult {
   linetypes: LinetypeDefData[]
   /** Variables del HEADER: $LTSCALE, $CELTYPE, $CELTSCALE, $PSLTSCALE. */
   vars: DrawingVars
+  /**
+   * Vista con que se guardó el dibujo (VPORT `*Active`): centro y alto visibles en planta. El CAD clásico abre el
+   * dibujo ahí; sin ella (o mirando en 3D, o girada) se encuadra todo.
+   */
+  view?: { center: [number, number]; height: number; aspect: number }
   unsupported: string[]
 }
 
@@ -380,6 +385,7 @@ export function importDxf(text: string): DxfImportResult {
   let section = ''
   let table = ''
   let currentLayer: string | undefined
+  let view: DxfImportResult['view']
   const dimStyles: DimStyleDef[] = []
   const linetypes: LinetypeDefData[] = []
   const vars: DrawingVars = {}
@@ -448,6 +454,19 @@ export function importDxf(text: string): DxfImportResult {
     }
     if (table === 'DIMSTYLE' && rec.type === 'DIMSTYLE') {
       dimStyleRecs.push(rec) // se interpretan al final (las flechas R2000 referencian BLOCK_RECORD)
+      continue
+    }
+
+    if (table === 'VPORT' && rec.type === 'VPORT') {
+      // La vista activa del modelo: sólo en planta (dirección 0,0,1) y sin giro, que es lo que se puede reproducir.
+      const dir = [num(rec.codes, 16, 0), num(rec.codes, 26, 0), num(rec.codes, 36, 1)]
+      const height = num(rec.codes, 40, 0)
+      const plan = Math.abs(dir[0]) < 1e-9 && Math.abs(dir[1]) < 1e-9 && dir[2] > 0 && Math.abs(num(rec.codes, 51, 0)) < 1e-9
+      if ((str(rec.codes, 2) ?? '').toUpperCase() === '*ACTIVE' && !view && plan && height > 0 && isFinite(height)) {
+        const center: [number, number] = [num(rec.codes, 12, 0), num(rec.codes, 22, 0)]
+        const aspect = num(rec.codes, 41, 1)
+        if (center.every((v) => isFinite(v))) view = { center, height, aspect: aspect > 0 && isFinite(aspect) ? aspect : 1 }
+      }
       continue
     }
 
@@ -554,7 +573,8 @@ export function importDxf(text: string): DxfImportResult {
       }
       let e = { id: '', type: it.spec!.type, layer: '', props: it.spec!.props } as unknown as Entity
       for (const t of chain) e = transformInsertEntity(e, t)
-      entities.push({ ...it.spec!, props: e.props as EntityProps, layerName: it.spec!.layerName === '0' ? here : it.spec!.layerName })
+      // El tipo puede cambiar al transformar (un RECTANGLE girado o fuera de planta pasa a POLYLINE).
+      entities.push({ ...it.spec!, type: e.type, props: e.props as EntityProps, layerName: it.spec!.layerName === '0' ? here : it.spec!.layerName })
     }
   }
   for (const rec of inserts) expand(rec, [], str(rec.codes, 8) ?? '0', 0)
@@ -567,7 +587,7 @@ export function importDxf(text: string): DxfImportResult {
     dp.style = resolveDimVars(dimStyles.find((s) => s.name === dp.styleName)?.vars)
   }
 
-  return { currentLayer, layers, entities, dimStyles, linetypes, vars, unsupported: [...unsupported] }
+  return { currentLayer, layers, entities, dimStyles, linetypes, vars, ...(view ? { view } : {}), unsupported: [...unsupported] }
 }
 
 function hatchSpec(rec: Rec): { type: EntityType; props: EntityProps } | null {
