@@ -4,6 +4,18 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.10.4] — 2026-10-29
+
+### Fixed
+- Some DWG files failed with "… is not a DXF subclass" on the published site: the build renamed the classes that the
+  DWG reader looks up by name. Class names are now kept.
+- Opening a DWG on a phone could count seconds forever: converting it took more than 400 MB, and the reader thread ran
+  out of memory and stopped without a message. The conversion now writes straight to bytes and the drawing is
+  interpreted in the background thread too, so a 3.5 MB DWG needs well under 150 MB and opens faster.
+- Large DXF files are also read in the background thread (the phone no longer freezes while opening them), with a
+  lighter reader.
+- The mobile view's menu shows the version, so you can check that the phone has the latest one.
+
 ## [2.10.3] — 2026-10-28
 
 ### Fixed

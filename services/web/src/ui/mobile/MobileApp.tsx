@@ -9,6 +9,7 @@ import { MODEL_TAB } from '../../core/document/DocumentModel'
 import { CLOUD_ENABLED } from '../../core/io/backend'
 import { setViewLayerOff, viewLayersOff } from '../../core/editing/isolation'
 import { touchConfig } from '../../render/touchGesture'
+import { ABOUT } from '../../core/about'
 import type { ViewName, VisualStyle } from '../../core/view'
 
 /**
@@ -356,6 +357,10 @@ export function MobileApp() {
                 <button className="m-row" onClick={() => st().setScreen({ mobileView: false })} data-testid="m-full-editor">
                   Full editor
                 </button>
+                {/* La versión: para saber si el teléfono ya tiene la última (recargar la trae). */}
+                <p className="muted m-version" data-testid="m-version">
+                  {ABOUT.name} {ABOUT.version}
+                </p>
               </div>
             )}
           </div>

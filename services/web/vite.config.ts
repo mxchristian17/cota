@@ -12,6 +12,10 @@ export default defineConfig({
   base: process.env.COTA_BASE || '/',
   // La app es instalable (PWA): el service worker se genera en el build.
   plugins: [react(), serviceWorker()],
+  // La librería de DWG (acad-ts) busca sus clases por nombre (`constructor.name`): al minificar sin conservarlos, abrir
+  // o guardar algunos DWG fallaba ("Rt is not a DXF subclass"). También en el hilo aparte que lee los DWG.
+  build: { rolldownOptions: { output: { keepNames: true } } },
+  worker: { rolldownOptions: { output: { keepNames: true } } },
   server: {
     port: 5173,
     // Sólo esta máquina; el contenedor de desarrollo pasa `--host 0.0.0.0`.

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ACadVersion, BlockRecord, CadDocument, Circle, DwgWriter, Insert, Layer, Line, XY, XYZ } from '@node-projects/acad-ts'
-import { DwgTimeoutError, dwgToDxfInWorker, dwgToDxfText, dwgVersion } from './dwg'
+import { CadTimeoutError, dwgToDxfText, dwgVersion, importCadInWorker } from './dwg'
 import { importDxf } from './dxf'
 
 /** Un DWG 2018 armado en el test: una línea y un círculo en una capa, y un bloque insertado dos veces. */
@@ -93,10 +93,30 @@ describe('mensajes de error de DWG', () => {
     active.aspectRatio = 2
     const bytes = DwgWriter.writeToBuffer(doc)
     // Sin Worker (Node) lee en el hilo principal: mismo resultado.
-    const dxf = await dwgToDxfInWorker(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)
-    expect(importDxf(dxf).view).toEqual({ center: [40, 5], height: 12, aspect: 2 })
+    const r = await importCadInWorker('dwg', bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)
+    expect(r.view).toEqual({ center: [40, 5], height: 12, aspect: 2 })
   })
 
+  it('los textos con acentos y eñes llegan intactos (el DXF se escribe en bytes UTF-8)', async () => {
+    const doc = new CadDocument()
+    doc.header!.version = ACadVersion.AC1032
+    const capa = new Layer('Caños y bocas — Ø20')
+    doc.layers!.add(capa)
+    const line = new Line()
+    line.startPoint = new XYZ(0, 0, 0)
+    line.endPoint = new XYZ(10, 0, 0)
+    line.layer = capa
+    doc.modelSpace!.entities.add(line)
+    const bytes = DwgWriter.writeToBuffer(doc)
+    const r = await importCadInWorker('dwg', bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)
+    expect(r.layers.map((l) => l.name)).toContain('Caños y bocas — Ø20')
+    expect(r.entities.find((e) => e.type === 'LINE')?.layerName).toBe('Caños y bocas — Ø20')
+  })
+  it('un DXF también se lee aparte (mismo importador)', async () => {
+    const dxf = '0\nSECTION\n2\nENTITIES\n0\nLINE\n8\n0\n10\n0\n20\n0\n30\n0\n11\n5\n21\n0\n31\n0\n0\nENDSEC\n0\nEOF\n'
+    const r = await importCadInWorker('dxf', new TextEncoder().encode(dxf).buffer as ArrayBuffer)
+    expect(r.entities.map((e) => e.type)).toEqual(['LINE'])
+  })
   it('un DWG que no termina de leerse se corta con un mensaje (no queda "leyendo" para siempre)', async () => {
     let terminated = false
     class Stuck {
@@ -109,7 +129,7 @@ describe('mensajes de error de DWG', () => {
     }
     vi.stubGlobal('Worker', Stuck)
     try {
-      await expect(dwgToDxfInWorker(new ArrayBuffer(8), 30)).rejects.toBeInstanceOf(DwgTimeoutError)
+      await expect(importCadInWorker('dwg', new ArrayBuffer(8), 30)).rejects.toBeInstanceOf(CadTimeoutError)
       expect(terminated).toBe(true)
     } finally {
       vi.unstubAllGlobals()

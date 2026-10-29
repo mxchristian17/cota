@@ -2081,6 +2081,7 @@ div.lt-row {
 .m-list { display: flex; flex-direction: column; gap: 6px; }
 .m-row { display: flex; align-items: center; gap: 12px; min-height: 50px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); font-size: 15px; text-align: left; }
 .m-row.off { opacity: 0.5; }
+.m-version { margin: 6px 2px 0; font-size: 12px; text-align: center; }
 .m-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .m-swatch { flex: none; width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, 0.4); }
 .m-card { position: absolute; top: 8px; left: 50%; z-index: 10; width: min(94%, 420px); transform: translateX(-50%); padding: 6px 8px 8px 14px; border-radius: 12px; border: 1px solid var(--border); background: rgba(37, 37, 38, 0.95); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45); }

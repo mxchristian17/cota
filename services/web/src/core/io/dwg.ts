@@ -1,3 +1,5 @@
+import { importDxf, type DxfImportResult } from './dxf'
+
 /**
  * DWG en el navegador, sin servidor: acad-ts (MIT, port a TypeScript de ACadSharp) lee el archivo y lo escribe como
  * DXF, que entra por el importador de siempre (capas, tipos de línea, cotas y bloques expandidos). La librería
@@ -8,30 +10,37 @@ export async function dwgToDxfText(data: ArrayBuffer): Promise<string> {
   return convertDwgToDxf(data)
 }
 
-/** Tope para leer un DWG en el navegador: un plano grande en un teléfono tarda decenas de segundos, no minutos. */
-export const DWG_TIMEOUT_MS = 180_000
+/** Tope para leer un DWG o DXF en el navegador: un plano grande en un teléfono tarda decenas de segundos, no minutos. */
+export const CAD_TIMEOUT_MS = 180_000
 
-/** El DWG no terminó de leerse a tiempo (muy grande o con contenido que el lector no termina de procesar). */
-export class DwgTimeoutError extends Error {
+/** El archivo no terminó de leerse a tiempo (muy grande, o el teléfono se quedó sin memoria). */
+export class CadTimeoutError extends Error {
   constructor(ms: number) {
-    super(`it took longer than ${Math.round(ms / 60_000)} min to read in the browser (very large or with 3D content it cannot process)`)
-    this.name = 'DwgTimeoutError'
+    super(`it took longer than ${Math.round(ms / 60_000)} min to read in the browser (too large for this device?)`)
+    this.name = 'CadTimeoutError'
   }
 }
 
+/** Lectura en el hilo principal: sin Worker (tests) o si el hilo no arranca. */
+async function importCadHere(kind: 'dwg' | 'dxf', data: ArrayBuffer): Promise<DxfImportResult> {
+  const text = kind === 'dwg' ? await dwgToDxfText(data) : new TextDecoder().decode(new Uint8Array(data))
+  return importDxf(text)
+}
+
 /**
- * DWG → DXF en un hilo aparte (Web Worker): la pantalla sigue respondiendo y, si tarda más que `timeoutMs`, se corta
- * con un mensaje en vez de quedar "leyendo" para siempre. Sin Worker (tests) o si el hilo no arranca (sin conexión con
- * una versión vieja en caché), se lee en el hilo principal como antes.
+ * DWG o DXF → dibujo interpretado, en un hilo aparte (Web Worker): la pantalla sigue respondiendo, el hilo principal
+ * no carga el texto DXF y, si tarda más que `timeoutMs` (un hilo que se quedó sin memoria muere sin avisar), se corta
+ * con un mensaje en vez de quedar leyendo para siempre. Sin Worker o si el hilo no arranca (sin conexión con una
+ * versión vieja en caché), se lee en el hilo principal.
  */
-export function dwgToDxfInWorker(data: ArrayBuffer, timeoutMs = DWG_TIMEOUT_MS): Promise<string> {
-  if (typeof Worker === 'undefined') return dwgToDxfText(data)
+export function importCadInWorker(kind: 'dwg' | 'dxf', data: ArrayBuffer, timeoutMs = CAD_TIMEOUT_MS): Promise<DxfImportResult> {
+  if (typeof Worker === 'undefined') return importCadHere(kind, data)
   return new Promise((resolve, reject) => {
     let worker: Worker
     try {
-      worker = new Worker(new URL('./dwgWorker.ts', import.meta.url), { type: 'module' })
+      worker = new Worker(new URL('./cadWorker.ts', import.meta.url), { type: 'module' })
     } catch {
-      dwgToDxfText(data).then(resolve, reject)
+      importCadHere(kind, data).then(resolve, reject)
       return
     }
     let answered = false
@@ -41,22 +50,22 @@ export function dwgToDxfInWorker(data: ArrayBuffer, timeoutMs = DWG_TIMEOUT_MS):
     }
     const timer = setTimeout(() => {
       done()
-      reject(new DwgTimeoutError(timeoutMs))
+      reject(new CadTimeoutError(timeoutMs))
     }, timeoutMs)
-    worker.onmessage = (e: MessageEvent<{ ok: boolean; dxf?: string; error?: string }>) => {
+    worker.onmessage = (e: MessageEvent<{ ok: boolean; result?: DxfImportResult; error?: string }>) => {
       answered = true
       done()
-      if (e.data.ok) resolve(e.data.dxf ?? '')
-      else reject(new Error(e.data.error ?? 'the DWG could not be read'))
+      if (e.data.ok && e.data.result) resolve(e.data.result)
+      else reject(new Error(e.data.error ?? 'the file could not be read'))
     }
     worker.onerror = (e) => {
       e.preventDefault()
       done()
       // El hilo no llegó a responder (no cargó): se intenta en el hilo principal.
-      if (!answered) dwgToDxfText(data).then(resolve, reject)
-      else reject(new Error(e.message || 'the DWG reader stopped'))
+      if (!answered) importCadHere(kind, data).then(resolve, reject)
+      else reject(new Error(e.message || 'the reader stopped'))
     }
-    worker.postMessage(data) // se copia: el original sigue disponible para el conversor del servidor
+    worker.postMessage({ kind, data }) // se copia: el original sigue disponible para el conversor del servidor
   })
 }
 

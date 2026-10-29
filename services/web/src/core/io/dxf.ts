@@ -358,18 +358,25 @@ function str(codes: Array<[number, string]>, code: number): string | undefined {
 
 /** Parsea DXF ASCII a specs de layers/entidades. Robusto ante DXF malformado. */
 export function importDxf(text: string): DxfImportResult {
-  const lines = text.split(/\r?\n/)
-  const pairs: Array<[number, string]> = []
-  for (let i = 0; i + 1 < lines.length; i += 2) {
-    const code = parseInt(lines[i].trim(), 10)
-    if (Number.isNaN(code)) continue
-    pairs.push([code, lines[i + 1]])
-  }
-
-  // Agrupar en records por cada par (0, TYPE).
+  // Records por cada par (0, TYPE), recorriendo el texto de a dos líneas (código, valor) sin partirlo entero: con un
+  // DXF de 20 MB, el arreglo de líneas y el de pares costaban más de 100 MB (en un teléfono, más de lo que hay).
   const records: Rec[] = []
   let cur: Rec | null = null
-  for (const [code, val] of pairs) {
+  let pos = 0
+  const line = (): string | null => {
+    if (pos >= text.length) return null
+    let end = text.indexOf('\n', pos)
+    if (end < 0) end = text.length
+    const v = text.slice(pos, end > pos && text.charCodeAt(end - 1) === 13 ? end - 1 : end)
+    pos = end + 1
+    return v
+  }
+  for (;;) {
+    const c = line()
+    const val = line()
+    if (c === null || val === null) break
+    const code = parseInt(c.trim(), 10)
+    if (Number.isNaN(code)) continue
     if (code === 0) {
       cur = { type: val.trim(), codes: [] }
       records.push(cur)

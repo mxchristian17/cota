@@ -60,7 +60,7 @@ import { paperPerModel, unitToMm } from '../core/layout/scale'
 import { fieldContextFor, resolveFieldTexts } from '../core/fields/context'
 import { exportObj, importObj, type ObjMesh } from '../core/io/obj'
 import { exportDxf, importDxf, type DxfImportResult } from '../core/io/dxf'
-import { dwgErrorMessage, dwgToDxfInWorker, dwgVersion, dxfTextToDwg } from '../core/io/dwg'
+import { dwgErrorMessage, dwgVersion, dxfTextToDwg, importCadInWorker } from '../core/io/dwg'
 import {
   ensurePermission,
   fsaSupported,
@@ -548,14 +548,14 @@ export const useStore = create<AppState>((set, get) => {
    * DWG → DXF: primero en el navegador (acad-ts, sin servidor); si el archivo no se puede leer ahí y hay un servidor
    * con conversor, se le pide a él.
    */
-  const readDwg = async (data: ArrayBuffer): Promise<string> => {
+  const readDwg = async (data: ArrayBuffer): Promise<DxfImportResult> => {
     const version = dwgVersion(data)
     if (!version) throw new Error('the file is not a DWG drawing.')
     try {
-      return await dwgToDxfInWorker(data)
+      return await importCadInWorker('dwg', data)
     } catch (local) {
       try {
-        return await api.dwgToDxf(data)
+        return importDxf(await api.dwgToDxf(data))
       } catch {
         // Sin servidor (o sin conversor): el motivo útil es el del lector local.
         throw new Error(`this DWG (${version}) could not be read: ${dwgErrorMessage(local)}`)
@@ -586,8 +586,10 @@ export const useStore = create<AppState>((set, get) => {
     }
     vp.zoomExtents()
   }
-  const importDxfText = (text: string, asDrawing = false): number => {
-    const { currentLayer, layers, entities, dimStyles, linetypes, vars, view, unsupported } = importDxf(text)
+  const importDxfText = (text: string, asDrawing = false): number => applyDxf(importDxf(text), asDrawing)
+  /** Carga en el dibujo un DXF ya interpretado (en el hilo aparte de lectura o acá). */
+  const applyDxf = (r: DxfImportResult, asDrawing = false): number => {
+    const { currentLayer, layers, entities, dimStyles, linetypes, vars, view, unsupported } = r
     if (asDrawing) openedView = view
     // Tipos de línea: los del LTYPE del archivo; al abrir un DXF también sus variables.
     for (const d of linetypes) if (asDrawing || !doc.linetype(d.name)) doc.loadLinetype(d.name, d, true)
@@ -2686,7 +2688,7 @@ export const useStore = create<AppState>((set, get) => {
           reader.onload = () => {
             print('Reading DWG…')
             readDwg(reader.result as ArrayBuffer)
-              .then((dxfText) => runImport(() => importDxfText(dxfText), (n) => `Imported ${n} entity(ies) from DWG.`))
+              .then((r) => runImport(() => applyDxf(r), (n) => `Imported ${n} entity(ies) from DWG.`))
               .catch((err) => print(`DWG import failed: ${err instanceof Error ? err.message : String(err)}`))
           }
           reader.readAsArrayBuffer(file)
@@ -2741,14 +2743,18 @@ export const useStore = create<AppState>((set, get) => {
           print(`"${file.name}" cannot be opened: use a ${DRAWING_EXT}, .dxf, .dwg or 3D model (${MODEL_EXTS.join(', ')}) file.`)
           return
         } else {
-          let dxf: string
+          // En el hilo aparte: la pantalla sigue respondiendo (un plano grande tarda en un teléfono).
+          let r: DxfImportResult
           if (lower.endsWith('.dwg')) {
             print('Reading DWG…')
-            dxf = await readDwg(await file.arrayBuffer())
-          } else dxf = await file.text()
+            r = await readDwg(await file.arrayBuffer())
+          } else {
+            print('Reading DXF…')
+            r = await importCadInWorker('dxf', await file.arrayBuffer())
+          }
           pushSnapshot()
           doc.reset()
-          const n = importDxfText(dxf, true)
+          const n = applyDxf(r, true)
           currentFile = null
           set({ ...detached, viewportLayout: doc.viewportLayout })
           restoreModelUcs()
