@@ -36,6 +36,9 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 
 Cota's 3D solids are exported as meshes of their faces (3DFACE), so a part looks the same but stops being a solid.
 
+Large 3D assemblies (a thousand solids, millions of triangles) open on a phone too: there the faces of the solids use
+about half the triangles (18 segments per full turn instead of 36), and texts smaller than 3 pixels are not drawn.
+
 ## Next, by impact
 
 1. NURBS faces of ACIS solids following their surface (today, over their best-fit plane).

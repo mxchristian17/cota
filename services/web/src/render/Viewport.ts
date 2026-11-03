@@ -25,6 +25,7 @@ import { rayFaces, solidTopology } from '../core/editing/topology'
 import { DEFAULT_VISUAL_STYLE, type CameraMode, type ViewName, type VisualStyle } from '../core/view'
 import { CameraController } from './CameraController'
 import { previewSolidGeometry, solidEdgePositions, solidGeometry } from './csg'
+import { meshRender, type MeshRender } from './meshBuffers'
 import { pointMarkTexture } from './pointMarks'
 import { ellipsePoints } from '../core/geom/ellipse'
 import { arcBasis, tessellateArc } from '../core/geom/arc'
@@ -176,6 +177,9 @@ export const VIEW_HISTORY = 10
 
 const BG_COLOR = 0x1e1e1e
 const HIGHLIGHT = 0x00e5ff
+/** Textos más chicos que esto (en px de alto) no se dibujan; y no más que tantos a la vez (ver `updateTextLabels`). */
+const MIN_TEXT_PX = 3
+const MAX_TEXT_LABELS = 3000
 /** Color de la hoja de papel de los layouts. */
 export const PAPER_COLOR = '#ffffff'
 /** Caras sombreadas de color 7 sobre el papel (el negro no deja ver el sombreado). */
@@ -184,6 +188,22 @@ const FACE_ON_PAPER = '#b8b8b8'
 /** Acumuladores de geometría fusionada por material (batching para modelos pesados). */
 interface MeshBatch { pos: number[]; nor: number[]; ranges: { s: number; id: string }[]; n: number }
 interface LineBatch { pos: number[]; ranges: { s: number; id: string }[]; n: number }
+/**
+ * Lote de caras sombreadas: las piezas se juntan recién al crear la geometría, en arreglos del tamaño justo (antes se
+ * copiaban número por número a listas que ocupaban el doble). `n` cuenta índices (tres por triángulo).
+ */
+interface FaceBatch { parts: { pos: ArrayLike<number>; nor: ArrayLike<number>; idx?: Uint32Array }[]; ranges: { s: number; id: string }[]; n: number; verts: number }
+/** Lote de aristas de sólidos y mallas, en tramos que se juntan al crear la geometría. */
+interface EdgeBatch { parts: ArrayLike<number>[]; ranges: { s: number; id: string }[]; n: number }
+const joinParts = (parts: ArrayLike<number>[], size: number): Float32Array => {
+  const out = new Float32Array(size)
+  let at = 0
+  for (const p of parts) {
+    out.set(p, at)
+    at += p.length
+  }
+  return out
+}
 /**
  * La grilla va debajo de todo: se dibuja primero y no escribe profundidad. Antes, con el orden de
  * capas negativo se dibujaba después de las entidades y tapaba las líneas que caían justo sobre
@@ -340,7 +360,11 @@ export class Viewport {
   private readonly ucsIconEl: SVGSVGElement | null = null
   private ucsIconKey = ''
   private dimLabels: { el: HTMLDivElement; pos: THREE.Vector3; height: number }[] = []
-  private textLabels: { el: HTMLDivElement; pos: THREE.Vector3; height: number; u: THREE.Vector3; v: THREE.Vector3; justify: string }[] = []
+  /**
+   * Textos en pantalla: cada uno crea su elemento recién cuando se ve y tiene un tamaño que se puede leer, y lo suelta al
+   * salir (un ensamble con 45 mil atributos creaba 45 mil elementos y no entraba en la memoria de un teléfono).
+   */
+  private textLabels: { el: HTMLDivElement | null; make: () => HTMLDivElement; pos: THREE.Vector3; height: number; u: THREE.Vector3; v: THREE.Vector3; justify: string }[] = []
   private grid!: THREE.GridHelper
   private bgColor = new THREE.Color(BG_COLOR)
   private visualStyle: VisualStyle = DEFAULT_VISUAL_STYLE
@@ -1893,28 +1917,33 @@ export class Viewport {
 
   /** Construye una entidad TEXT: overlay HTML (texto visible que escala con el zoom) + un plano
    *  invisible sobre su caja para poder seleccionarlo con click (pickAt). */
-  private buildText(e: import('../core/document/types').TextEntity, color: THREE.Color, selected: boolean): void {
+  /** Texto: su etiqueta (bajo demanda) y su caja de selección (en el lote `pick`, o una malla propia si no hay lote). */
+  private buildText(e: import('../core/document/types').TextEntity, color: THREE.Color, selected: boolean, pick?: MeshBatch): void {
     const fields = this.data?.fields
     const segments = fields && hasFields(e.props.text) ? fieldSegments(e.props.text, fields) : null
     // Con campos: la caja de selección se mide sobre el texto evaluado.
     const t = segments ? { ...e.props, text: segments.map((s) => s.text).join('') } : e.props
-    const el = document.createElement('div')
-    if (segments) {
-      // FIELDDISPLAY=1: los campos evaluados llevan fondo gris (sólo en pantalla, no se plotea).
-      for (const s of segments) {
-        const span = document.createElement('span')
-        span.textContent = s.text
-        if (s.field) span.style.background = 'rgba(140,140,140,0.45)'
-        el.appendChild(span)
-      }
-    } else el.textContent = t.text
-    el.style.cssText =
+    const css =
       `position:absolute;pointer-events:none;white-space:pre;font-family:monospace;line-height:${LINE_SPACING};` +
       `text-align:${t.justify};transform-origin:top left;color:${selected ? '#00e5ff' : '#' + color.getHexString()};z-index:4`
-    this.container.appendChild(el)
+    const make = (): HTMLDivElement => {
+      const el = document.createElement('div')
+      if (segments) {
+        // FIELDDISPLAY=1: los campos evaluados llevan fondo gris (sólo en pantalla, no se plotea).
+        for (const s of segments) {
+          const span = document.createElement('span')
+          span.textContent = s.text
+          if (s.field) span.style.background = 'rgba(140,140,140,0.45)'
+          el.appendChild(span)
+        }
+      } else el.textContent = t.text
+      el.style.cssText = css
+      return el
+    }
     const ax = textAxes(t)
     this.textLabels.push({
-      el,
+      el: null,
+      make,
       pos: new THREE.Vector3(...textTop(t)),
       height: t.height,
       u: new THREE.Vector3(...ax.u),
@@ -1924,6 +1953,12 @@ export class Viewport {
     // Plano invisible (2 triángulos sobre la caja) para selección por click.
     const c = textCorners(t)
     const pos = [...c[0], ...c[1], ...c[2], ...c[0], ...c[2], ...c[3]]
+    if (pick) {
+      pick.ranges.push({ s: pick.n, id: e.id })
+      pick.pos.push(...pos)
+      pick.n += 6
+      return
+    }
     const geom = new THREE.BufferGeometry()
     geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
     const mesh = new THREE.Mesh(
@@ -1935,19 +1970,30 @@ export class Viewport {
   }
 
   private clearTextLabels(): void {
-    for (const l of this.textLabels) l.el.remove()
+    for (const l of this.textLabels) l.el?.remove()
     this.textLabels = []
   }
 
   private updateTextLabels(): void {
     const wpp = this.controller.worldPerPx()
+    const [w, h] = [this.width || 1, this.height || 1]
+    let shown = 0
     for (const l of this.textLabels) {
-      const px = this.controller.project(l.pos)
-      if (!px) {
-        l.el.style.display = 'none'
+      // Fuera de la pantalla (con un margen: el texto sigue a la derecha de su punto), o de menos de 3 px de alto, como
+      // en el CAD clásico no se lee: no se crea su elemento. Con muchísimos a la vista, los primeros 3000.
+      const px = l.height / wpp >= MIN_TEXT_PX && shown < MAX_TEXT_LABELS ? this.controller.project(l.pos) : null
+      if (!px || px[0] < -w || px[0] > 2 * w || px[1] < -h || px[1] > 2 * h) {
+        if (l.el) {
+          l.el.remove()
+          l.el = null
+        }
         continue
       }
-      l.el.style.display = 'block'
+      shown++
+      if (!l.el) {
+        l.el = l.make()
+        this.container.appendChild(l.el)
+      }
       const font = Math.max(7, l.height / wpp)
       l.el.style.fontSize = `${font}px`
       l.el.style.left = `${px[0]}px`
@@ -2037,24 +2083,20 @@ export class Viewport {
     return geom
   }
 
-  private readonly meshCache = new WeakMap<object, { pos: Float32Array; nor: Float32Array; edges: Float32Array }>()
-  /** Triángulos (sin índices), normales y aristas de más de 30° de una malla, por su objeto de propiedades. */
-  private meshBuffers(props: MeshEntity['props']): { pos: Float32Array; nor: Float32Array; edges: Float32Array } {
-    let m = this.meshCache.get(props)
-    if (!m) {
+  private readonly meshCache = new WeakMap<object, MeshRender & { edges: Float32Array; faces: unknown }>()
+  /**
+   * Triángulos indexados, normales y aristas de más de 30° de una malla, por su lista de vértices: deshacer o rehacer
+   * copia el dibujo pero comparte esas listas, así que no se vuelven a calcular.
+   */
+  private meshBuffers(props: MeshEntity['props']): MeshRender & { edges: Float32Array } {
+    let m = this.meshCache.get(props.vertices)
+    if (!m || m.faces !== props.faces) {
       const g = this.meshGeometry(props)
-      const ng = g.index ? g.toNonIndexed() : g
-      if (!ng.getAttribute('normal')) ng.computeVertexNormals()
       const eg = new THREE.EdgesGeometry(g, 30)
-      m = {
-        pos: Float32Array.from(ng.getAttribute('position').array as ArrayLike<number>),
-        nor: Float32Array.from(ng.getAttribute('normal').array as ArrayLike<number>),
-        edges: Float32Array.from(eg.getAttribute('position').array as ArrayLike<number>),
-      }
+      m = { ...meshRender(props.vertices, props.faces), edges: Float32Array.from(eg.getAttribute('position').array as ArrayLike<number>), faces: props.faces }
       eg.dispose()
-      if (ng !== g) ng.dispose()
       g.dispose()
-      this.meshCache.set(props, m)
+      this.meshCache.set(props.vertices, m)
     }
     return m
   }
@@ -2124,8 +2166,8 @@ export class Viewport {
     // Batches por material (clave = color): fusionan la geometría estática (no seleccionada) para bajar
     // de miles de draw calls a unas pocas decenas → orbit fluido en modelos pesados. `ranges` mapea
     // cada tramo de vértices a su entityId (para el pick).
-    const meshB = new Map<string, MeshBatch>()
-    const edgeB = new Map<string, LineBatch>()
+    const meshB = new Map<string, FaceBatch>()
+    const edgeB = new Map<string, EdgeBatch>()
     const lineB = new Map<string, LineBatch>()
     const pointB = new Map<string, PointBatch>()
     /** Recorridos completos (invisibles) de lo que se dibuja con trazos: el pick toma también los huecos. */
@@ -2135,9 +2177,12 @@ export class Viewport {
     const markB = new Map<string, { pos: number[]; ids: string[] }>()
     /** Rellenos de sombreados (sólidos visibles; los de patrón, invisibles para el pick). */
     const fillB = new Map<string, MeshBatch>()
+    /** Cajas de selección de los textos. */
+    const textPickB = new Map<string, MeshBatch>()
     const ltCtx = this.data?.linetypes
     const layerOf = (id: string) => layerMap.get(id)
-    const getMesh = (k: string): MeshBatch => { let b = meshB.get(k); if (!b) { b = { pos: [], nor: [], ranges: [], n: 0 }; meshB.set(k, b) } return b }
+    const getMesh = (k: string): FaceBatch => { let b = meshB.get(k); if (!b) { b = { parts: [], ranges: [], n: 0, verts: 0 }; meshB.set(k, b) } return b }
+    const getEdges = (k: string): EdgeBatch => { let b = edgeB.get(k); if (!b) { b = { parts: [], ranges: [], n: 0 }; edgeB.set(k, b) } return b }
     const getLine = (m: Map<string, LineBatch>, k: string): LineBatch => { let b = m.get(k); if (!b) { b = { pos: [], ranges: [], n: 0 }; m.set(k, b) } return b }
     const getPoints = (m: Map<string, PointBatch>, k: string): PointBatch => { let b = m.get(k); if (!b) { b = { pos: [] }; m.set(k, b) } return b }
     const bgHex = '#' + this.bgColor.getHexString()
@@ -2154,6 +2199,15 @@ export class Viewport {
         const selected = selection.has(e.id)
         const colorHex = this.layerHex(layer, e.color)
 
+        if (!selected && (e.type === 'TEXT' || e.type === 'ATTDEF')) {
+          // Su caja de selección va a un lote invisible (una sola malla para miles de textos).
+          const k = `${orderOf(e)}|${colorHex}|pick`
+          let b = textPickB.get(k)
+          if (!b) textPickB.set(k, (b = { pos: [], nor: [], ranges: [], n: 0 }))
+          const t = e.type === 'TEXT' ? e : { id: e.id, type: 'TEXT' as const, layer: e.layer, props: attdefText(e.props) }
+          this.buildText(t, new THREE.Color(colorHex), false, b)
+          continue
+        }
         // Individuales: seleccionadas (resaltado), anotaciones y polilíneas anchas.
         if ((selected && e.type !== 'SHADE') || e.type === 'DIMENSION' || e.type === 'TEXT' || e.type === 'ATTDEF') {
           individual(e)
@@ -2192,13 +2246,14 @@ export class Viewport {
           if (showMesh) {
             const b = getMesh(`${ro}|${style === 'hidden' ? `${bgHex}|flat` : this.faceHex(colorHex)}`)
             b.ranges.push({ s: b.n, id: e.id })
-            for (let i = 0; i < m.pos.length; i++) { b.pos.push(m.pos[i]); b.nor.push(m.nor[i]) }
-            b.n += m.pos.length / 3
+            b.parts.push(m)
+            b.n += m.idx.length
+            b.verts += m.pos.length / 3
           }
-          if (showEdges) {
-            const b = getLine(edgeB, `${ro}|${style === 'shadedEdges' ? '#111111' : colorHex}${lwKey(layer, e.lineWeight)}`)
+          if (showEdges && m.edges.length) {
+            const b = getEdges(`${ro}|${style === 'shadedEdges' ? '#111111' : colorHex}${lwKey(layer, e.lineWeight)}`)
             b.ranges.push({ s: b.n, id: e.id })
-            for (let i = 0; i < m.edges.length; i++) b.pos.push(m.edges[i])
+            b.parts.push(m.edges)
             b.n += m.edges.length / 3
           }
           continue
@@ -2212,17 +2267,16 @@ export class Viewport {
             const nr = ng.getAttribute('normal')
             const b = getMesh(`${ro}|${style === 'hidden' ? `${bgHex}|flat` : this.faceHex(colorHex)}`)
             b.ranges.push({ s: b.n, id: e.id })
-            const pa = p.array as ArrayLike<number>
-            const na = nr.array as ArrayLike<number>
-            for (let i = 0; i < pa.length; i++) { b.pos.push(pa[i]); b.nor.push(na[i]) }
+            b.parts.push({ pos: p.array as ArrayLike<number>, nor: nr.array as ArrayLike<number> })
             b.n += p.count
+            b.verts += p.count
             if (ng !== g) ng.dispose()
           }
           if (showEdges) {
             const pa: ArrayLike<number> = solidEdgePositions(e.props)
-            const b = getLine(edgeB, `${ro}|${style === 'shadedEdges' ? '#111111' : colorHex}${lwKey(layer, e.lineWeight)}`)
+            const b = getEdges(`${ro}|${style === 'shadedEdges' ? '#111111' : colorHex}${lwKey(layer, e.lineWeight)}`)
             b.ranges.push({ s: b.n, id: e.id })
-            for (let i = 0; i < pa.length; i++) b.pos.push(pa[i])
+            b.parts.push(pa)
             b.n += pa.length / 3
           }
           if (solidThreads(e.props).length) {
@@ -2298,11 +2352,12 @@ export class Viewport {
     }
 
     if (showMesh) for (const [k, b] of meshB) this.addMeshBatch(b, k)
-    if (showEdges) for (const [k, b] of edgeB) this.addLineBatch(b, k)
+    if (showEdges) for (const [k, b] of edgeB) this.addLineBatch({ pos: joinParts(b.parts, b.n * 3), ranges: b.ranges, n: b.n }, k)
     for (const [k, b] of lineB) this.addLineBatch(b, k)
     for (const [k, b] of pointB) this.addPointBatch(b, k)
     for (const [k, b] of pickB) this.addLineBatch(b, k, true)
     for (const [k, b] of fillB) this.addFillBatch(b, k)
+    for (const [k, b] of textPickB) this.addFillBatch(b, k, false)
     for (const [k, b] of lodB) this.addLodPoints(b, k)
     for (const [k, b] of markB) this.addPointMarks(b, k)
   }
@@ -2365,7 +2420,7 @@ export class Viewport {
    * Relleno de sombreados: `solid` se ve; `pick` es invisible y sólo sirve para seleccionar un
    * sombreado haciendo clic dentro. Ambos pierden contra las líneas cercanas al cursor (`lowPick`).
    */
-  private addFillBatch(b: MeshBatch, key: string): void {
+  private addFillBatch(b: MeshBatch, key: string, lowPick = true): void {
     if (!b.pos.length) return
     const [ro, colorHex, kind] = key.split('|')
     const g = new THREE.BufferGeometry()
@@ -2374,19 +2429,33 @@ export class Viewport {
     const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex), side: THREE.DoubleSide, visible, ...FACE_OFFSET }))
     mesh.userData.ranges = b.ranges
     mesh.userData.rangeKind = 'mesh'
-    mesh.userData.lowPick = true
+    if (lowPick) mesh.userData.lowPick = true
     mesh.renderOrder = Number(ro)
     this.entityGroup.add(mesh)
   }
 
   /** Crea una malla fusionada (un draw call) a partir de un batch, con `ranges` para el pick. La clave
    *  del lote es `orden|color`: el orden de la capa pasa a `renderOrder`. */
-  private addMeshBatch(b: MeshBatch, key: string): void {
-    if (b.pos.length === 0) return
+  private addMeshBatch(b: FaceBatch, key: string): void {
+    if (b.n === 0) return
     const [ro, colorHex, flat] = key.split('|')
+    const pos = new Float32Array(b.verts * 3)
+    const nor = new Float32Array(b.verts * 3)
+    const idx = new Uint32Array(b.n)
+    let v = 0
+    let w = 0
+    for (const p of b.parts) {
+      pos.set(p.pos, v * 3)
+      nor.set(p.nor, v * 3)
+      const count = p.pos.length / 3
+      if (p.idx) for (let i = 0; i < p.idx.length; i++) idx[w++] = p.idx[i] + v
+      else for (let i = 0; i < count; i++) idx[w++] = v + i
+      v += count
+    }
     const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3))
-    g.setAttribute('normal', new THREE.Float32BufferAttribute(b.nor, 3))
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    g.setAttribute('normal', new THREE.BufferAttribute(nor, 3))
+    g.setIndex(new THREE.BufferAttribute(idx, 1))
     const mesh = new THREE.Mesh(
       g,
       flat
@@ -2401,11 +2470,11 @@ export class Viewport {
 
   /** Crea un LineSegments fusionado (un draw call) a partir de un batch, con `ranges` para el pick.
    *  `pickOnly`: invisible (recorrido completo de una línea con trazos). */
-  private addLineBatch(b: LineBatch, key: string, pickOnly = false): void {
+  private addLineBatch(b: LineBatch | { pos: Float32Array; ranges: LineBatch['ranges']; n: number }, key: string, pickOnly = false): void {
     if (b.pos.length === 0) return
     const [ro, colorHex, lw] = key.split('|')
     const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3))
+    g.setAttribute('position', b.pos instanceof Float32Array ? new THREE.BufferAttribute(b.pos, 3) : new THREE.Float32BufferAttribute(b.pos, 3))
     const seg = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: new THREE.Color(colorHex), visible: !pickOnly }))
     seg.userData.ranges = b.ranges
     seg.userData.rangeKind = 'line'

@@ -2,7 +2,7 @@ import { DimensionArc, DwgReader, DxfReader, DxfWriter, GraphicsType, Insert, Pr
 
 import { acisEdges } from './acis'
 import { acisMesh, SOLID_MESH_REF } from './acisMesh'
-import type { MeshProps } from '../document/types'
+import { packMesh, type PackedMesh } from './meshTransfer'
 
 /**
  * DWG → DXF con acad-ts (MIT, port a TypeScript de ACadSharp). Import estático a propósito: lo usan el hilo aparte
@@ -16,13 +16,13 @@ export interface CadConversion {
   /** Sólidos que quedaron como sus aristas (sin caras legibles). */
   wireSolids: number
   /** Mallas de los sólidos leídos con sus caras: el DXF las nombra por su posición acá (ver `SOLID_MESH_REF`). */
-  solidMeshes: MeshProps[]
+  solidMeshes: PackedMesh[]
 }
 
-export function convertDwgToDxfBytes(data: ArrayBuffer): CadConversion {
+export function convertDwgToDxfBytes(data: ArrayBuffer, light = false): CadConversion {
   const doc = DwgReader.readFromStream(data, null)
-  const solidMeshes: MeshProps[] = []
-  const wireSolids = solidsAsWires(doc, solidMeshes)
+  const solidMeshes: PackedMesh[] = []
+  const wireSolids = solidsAsWires(doc, solidMeshes, light)
   simplifyForDxf(doc)
   return { bytes: writeDxfBytes(doc), wireSolids, solidMeshes }
 }
@@ -31,10 +31,10 @@ export function convertDwgToDxfBytes(data: ArrayBuffer): CadConversion {
 export const isBinaryDxf = (b: Uint8Array): boolean => b.length > 18 && new TextDecoder('latin1').decode(b.subarray(0, 18)) === 'AutoCAD Binary DXF'
 
 /** DXF binario → DXF de texto (lo lee acad-ts y lo vuelve a escribir). */
-export function binaryDxfToDxfBytes(data: ArrayBuffer): CadConversion {
+export function binaryDxfToDxfBytes(data: ArrayBuffer, light = false): CadConversion {
   const doc = DxfReader.readFromStream(new Uint8Array(data))
-  const solidMeshes: MeshProps[] = []
-  const wireSolids = solidsAsWires(doc, solidMeshes)
+  const solidMeshes: PackedMesh[] = []
+  const wireSolids = solidsAsWires(doc, solidMeshes, light)
   simplifyForDxf(doc)
   return { bytes: writeDxfBytes(doc), wireSolids, solidMeshes }
 }
@@ -77,17 +77,17 @@ function wirePoint(w: ModelerGeometryWire, p: XYZ): XYZ {
  * tienen caras legibles se reemplazan por sus aristas: las guardadas como puntos (lo que el CAD clásico dibuja en
  * alambre) o las del modelo. Todo en su capa, color y tipo de línea. Devuelve cuántos quedaron como aristas.
  */
-export function solidsAsWires(doc: CadDocument, meshes: MeshProps[] = []): number {
+export function solidsAsWires(doc: CadDocument, meshes: PackedMesh[] = [], light = false): number {
   let n = 0
   for (const br of doc.blockRecords ?? []) {
     for (const e of [...br.entities]) {
       if (!(e instanceof ModelerGeometry)) continue
-      const mesh = e.acisData?.length ? acisMesh(e.acisData) : null
+      const mesh = e.acisData?.length ? acisMesh(e.acisData, light) : null
       if (mesh) {
         const ref = new Mesh()
         ref.vertices = [new XYZ(meshes.length, SOLID_MESH_REF, SOLID_MESH_REF)]
         ref.faces = []
-        meshes.push({ vertices: mesh.vertices, faces: mesh.faces })
+        meshes.push(packMesh(mesh))
         ref.layer = e.layer
         ref.color = e.color
         ref.lineType = e.lineType

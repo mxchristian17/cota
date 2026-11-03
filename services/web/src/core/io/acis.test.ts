@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { acisEdges, satFromDxf } from './acis'
+import { acisEdges, acisRecords, modelOf, satFromDxf } from './acis'
 
 /** Un cuerpo con una recta y un arco de 90° de radio 10 en el origen, trasladado por su `transform` a (100, 0, 0). */
 const SAT = `400 2 1 0
@@ -28,6 +28,13 @@ End-of-ACIS-data
 describe('ACIS', () => {
   const edges = acisEdges(SAT)
 
+  it('malla liviana (teléfonos): arcos en menos tramos, con un tope de tramos por vuelta', () => {
+    const recs = acisRecords(SAT)
+    const [full, light] = [modelOf(recs), modelOf(recs, true)]
+    for (const r of [5, 10, 100]) expect(light.angleStep(r)).toBeGreaterThan(full.angleStep(r))
+    expect((2 * Math.PI) / light.angleStep(1e6)).toBeCloseTo(18)
+    expect((2 * Math.PI) / full.angleStep(1e6)).toBeCloseTo(36)
+  })
   it('una recta queda con sus dos vértices, transformada', () => {
     expect(edges[0]).toEqual([[100, 0, 0], [110, 0, 0]])
   })

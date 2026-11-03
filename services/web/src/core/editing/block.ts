@@ -57,7 +57,8 @@ export function insertXDir(ins: Pick<InsertProps, 'rotation' | 'normal'>): Vec3 
 }
 
 /** Mapa punto→mundo del INSERT. */
-function pointMap(ins: InsertProps): (p: Vec3) => Vec3 {
+/** Punto del bloque → punto del dibujo según una inserción. */
+export function pointMap(ins: InsertProps): (p: Vec3) => Vec3 {
   const D = dirMap(ins)
   const [px, py, pz] = ins.position
   return (p) => {

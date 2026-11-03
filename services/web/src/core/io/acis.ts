@@ -217,7 +217,7 @@ export const isReversed = (r: Rec, from: number): boolean => {
 }
 
 /** El modelo leído: puntos, transformación del cuerpo y arista → puntos (de su primer vértice al segundo). */
-export function modelOf(recs: Rec[]) {
+export function modelOf(recs: Rec[], light = false) {
   const pointOf = (r: Rec | undefined): Pt | null => {
     if (!r) return null
     if (kindOf(r) === 'vertex') return pointOf(r.items.map((x) => ref(recs, x)).find((q) => kindOf(q) === 'point'))
@@ -237,18 +237,24 @@ export function modelOf(recs: Rec[]) {
       (p[0] * m[2] + p[1] * m[5] + p[2] * m[8]) * k + m[11],
     ]
   }
-  // Tolerancia de cuerda: 0,1 % del tamaño de la pieza (los puntos del modelo, antes de su transformación).
+  // Tolerancia de cuerda: 0,1 % del tamaño de la pieza (los puntos del modelo, antes de su transformación). Liviana (en
+  // un teléfono): el triple, y una vuelta en 18 tramos en vez de 36; un ensamble grande queda con la mitad de triángulos.
   const lo: Pt = [Infinity, Infinity, Infinity]
   const hi: Pt = [-Infinity, -Infinity, -Infinity]
   for (const r of recs) {
     if (kindOf(r) !== 'point') continue
     const p = pointOf(r)
-    if (p) for (let i = 0; i < 3; i++) (lo[i] = Math.min(lo[i], p[i])), (hi[i] = Math.max(hi[i], p[i]))
+    if (p)
+      for (let i = 0; i < 3; i++) {
+        lo[i] = Math.min(lo[i], p[i])
+        hi[i] = Math.max(hi[i], p[i])
+      }
   }
   const size = isFinite(lo[0]) ? Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) : 1
-  const tol = Math.max(size * 1e-3, 1e-9)
+  const tol = Math.max(size * (light ? 3e-3 : 1e-3), 1e-9)
+  const [minStep, maxStep] = light ? [(2 * Math.PI) / 18, Math.PI / 3] : [(2 * Math.PI) / 36, Math.PI / 4]
   /** Paso angular para que la cuerda de un arco de radio `r` no se aparte más que la tolerancia. */
-  const angleStep = (r: number) => (r > tol ? Math.min(Math.PI / 4, Math.max((2 * Math.PI) / 36, 2 * Math.acos(1 - tol / r))) : Math.PI / 4)
+  const angleStep = (r: number) => (r > tol ? Math.min(maxStep, Math.max(minStep, 2 * Math.acos(1 - tol / r))) : maxStep)
   /** Puntos de una curva muestreada, sin los que no se apartan de la recta entre sus vecinos (Douglas–Peucker). */
   const simplify = (p: Pt[]): Pt[] => {
     if (p.length <= 2) return p
@@ -268,7 +274,10 @@ export function modelOf(recs: Rec[]) {
         const ap = sub(p[i], p[a])
         const t = l2 > 0 ? Math.max(0, Math.min(1, dot(ap, ab) / l2)) : 0
         const d = Math.hypot(...sub(ap, [ab[0] * t, ab[1] * t, ab[2] * t]))
-        if (d > bd) (bd = d), (best = i)
+        if (d > bd) {
+          bd = d
+          best = i
+        }
       }
       if (best >= 0) {
         keep[best] = 1

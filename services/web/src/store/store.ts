@@ -116,6 +116,8 @@ export interface TemplateEntry {
 
 const MAX_OUTPUT = 200
 const MAX_UNDO = 100
+/** Comandos que no cambian el dibujo: no necesitan una copia para deshacer. */
+const VIEW_ONLY_COMMANDS = new Set(['ZOOM', 'PAN', 'REDRAW', 'REGEN', 'LIST', 'ID', 'DIST', 'HELP'])
 
 export interface AppState {
   readonly doc: DocumentModel
@@ -580,10 +582,10 @@ export const useStore = create<AppState>((set, get) => {
     const version = dwgVersion(data)
     if (!version) throw new Error('the file is not a DWG drawing.')
     try {
-      return await importCadInWorker('dwg', data)
+      return await importCadInWorker('dwg', data, { light: isPhone() })
     } catch (local) {
       try {
-        return importDxf(await api.dwgToDxf(data))
+        return importDxf(await api.dwgToDxf(data), { light: isPhone() })
       } catch {
         // Sin servidor (o sin conversor): el motivo útil es el del lector local.
         throw new Error(`this DWG (${version}) could not be read: ${dwgErrorMessage(local)}`)
@@ -1355,8 +1357,9 @@ export const useStore = create<AppState>((set, get) => {
         return
       }
       capturedVars = JSON.stringify(persistedSysvars())
-      // Dentro de un lote de multicomandos el paso de deshacer es el del lote entero.
-      capturedBefore = scriptDepth ? null : doc.toJSON()
+      // Dentro de un lote de multicomandos el paso de deshacer es el del lote entero. Los que sólo miran no dejan paso
+      // (copiar un dibujo de decenas de miles de objetos antes de cada ZOOM se notaba en un teléfono).
+      capturedBefore = scriptDepth || VIEW_ONLY_COMMANDS.has(name) ? null : doc.toJSON()
       capturedRev = doc.revision
     },
     onAfterCommand: (name) => {
@@ -2773,7 +2776,7 @@ export const useStore = create<AppState>((set, get) => {
           // En el hilo aparte, como al abrir (también el DXF binario).
           void file
             .arrayBuffer()
-            .then((buf) => importCadInWorker('dxf', buf))
+            .then((buf) => importCadInWorker('dxf', buf, { light: isPhone() }))
             .then((r) => runImport(() => applyDxf(r), (n) => `Imported ${n} entity(ies) from DXF.`))
             .catch((err) => print(`DXF import failed: ${err instanceof Error ? err.message : String(err)}`))
           return
@@ -2830,7 +2833,7 @@ export const useStore = create<AppState>((set, get) => {
             r = await readDwg(await file.arrayBuffer())
           } else {
             print('Reading DXF…')
-            r = await importCadInWorker('dxf', await file.arrayBuffer())
+            r = await importCadInWorker('dxf', await file.arrayBuffer(), { light: isPhone() })
           }
           pushSnapshot('open')
           doc.reset()
@@ -3244,7 +3247,7 @@ export const useStore = create<AppState>((set, get) => {
         if (fileName.toLowerCase().endsWith('.dxf')) {
           // En el hilo aparte, como al abrir del equipo (también el DXF binario).
           const f = await handle.getFile()
-          const r = await importCadInWorker('dxf', f.arrayBuffer ? await f.arrayBuffer() : (new TextEncoder().encode(await f.text()).buffer as ArrayBuffer))
+          const r = await importCadInWorker('dxf', f.arrayBuffer ? await f.arrayBuffer() : (new TextEncoder().encode(await f.text()).buffer as ArrayBuffer), { light: isPhone() })
           pushSnapshot('open')
           doc.reset()
           const n = applyDxf(r, true)

@@ -4,6 +4,29 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.17.0] — 2026-11-03
+
+### Added
+- **Large 3D models on phones**: the faces of 3D solids from DWG and DXF use about half the triangles on a phone. A
+  3D assembly with 1260 solids now opens on an emulated phone with about 260 MB in use.
+
+### Changed
+- Meshes are drawn smooth inside each face (cylinders and fillets no longer show their facets), with sharp edges kept
+  where faces meet at an angle.
+- Texts smaller than 3 pixels on screen are not drawn, as in the classic CAD, instead of being enlarged to a legible
+  size. Only the texts on screen create their label, so a drawing with tens of thousands of texts stays light.
+
+### Fixed
+- **Large 3D drawings no longer run out of memory after a few commands.** Each undo step kept a full copy of the
+  drawing, meshes included (hundreds of MB in a 3D assembly); the steps now share the meshes that did not change.
+- Opening a large DWG needs about a third less memory at its peak: the drawing is read record by record, the meshes
+  travel from the reader to the screen without being copied, and they are drawn from indexed buffers of the exact
+  size (half the memory).
+- Commands that only look at the drawing (ZOOM, PAN, REDRAW, LIST, ID, DIST, HELP) no longer copy it for undo, and the
+  cleanup after each command skips meshes that were already clean.
+- Turning on the layers of a drawing with 45 thousand texts takes a third of the time, and the page keeps a few
+  hundred elements instead of one per text: their selection boxes go in a single mesh.
+
 ## [2.16.0] — 2026-11-03
 
 ### Added

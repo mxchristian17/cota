@@ -1,4 +1,5 @@
-import { importDxf, type DxfImportResult } from './dxf'
+import type { DxfImportResult } from './dxf'
+import { unpackMeshes } from './meshTransfer'
 
 /**
  * DWG en el navegador, sin servidor: acad-ts (MIT, port a TypeScript de ACadSharp) lee el archivo y lo escribe como
@@ -22,13 +23,11 @@ export class CadTimeoutError extends Error {
 }
 
 /** Lectura en el hilo principal: sin Worker (tests) o si el hilo no arranca. */
-async function importCadHere(kind: 'dwg' | 'dxf', data: ArrayBuffer): Promise<DxfImportResult> {
-  const { binaryDxfToDxfBytes, convertDwgToDxfBytes, dxfHasProxies, dxfProxyShapes, isBinaryDxf } = await import('./dwgConvert')
-  const raw = new Uint8Array(data)
-  const text = kind === 'dxf' && !isBinaryDxf(raw) ? new TextDecoder().decode(raw) : null
-  const conv = kind === 'dwg' ? convertDwgToDxfBytes(data) : !text ? binaryDxfToDxfBytes(data) : null
-  const result = importDxf(conv ? new TextDecoder().decode(conv.bytes) : text!, { solidMeshes: conv?.solidMeshes, proxyShapes: text && dxfHasProxies(text) ? dxfProxyShapes(text) : undefined })
-  return conv?.wireSolids ? { ...result, wireSolids: (result.wireSolids ?? 0) + conv.wireSolids } : result
+async function importCadHere(kind: 'dwg' | 'dxf', data: ArrayBuffer, light?: boolean): Promise<DxfImportResult> {
+  const { readCad } = await import('./cadRead')
+  const result = readCad(kind, data, light)
+  unpackMeshes(result)
+  return result
 }
 
 /**
@@ -37,14 +36,15 @@ async function importCadHere(kind: 'dwg' | 'dxf', data: ArrayBuffer): Promise<Dx
  * con un mensaje en vez de quedar leyendo para siempre. Sin Worker o si el hilo no arranca (sin conexión con una
  * versión vieja en caché), se lee en el hilo principal.
  */
-export function importCadInWorker(kind: 'dwg' | 'dxf', data: ArrayBuffer, timeoutMs = CAD_TIMEOUT_MS): Promise<DxfImportResult> {
-  if (typeof Worker === 'undefined') return importCadHere(kind, data)
+export function importCadInWorker(kind: 'dwg' | 'dxf', data: ArrayBuffer, opts: { timeoutMs?: number; light?: boolean } = {}): Promise<DxfImportResult> {
+  const { timeoutMs = CAD_TIMEOUT_MS, light } = opts
+  if (typeof Worker === 'undefined') return importCadHere(kind, data, light)
   return new Promise((resolve, reject) => {
     let worker: Worker
     try {
       worker = new Worker(new URL('./cadWorker.ts', import.meta.url), { type: 'module' })
     } catch {
-      importCadHere(kind, data).then(resolve, reject)
+      importCadHere(kind, data, light).then(resolve, reject)
       return
     }
     let answered = false
@@ -59,17 +59,21 @@ export function importCadInWorker(kind: 'dwg' | 'dxf', data: ArrayBuffer, timeou
     worker.onmessage = (e: MessageEvent<{ ok: boolean; result?: DxfImportResult; error?: string }>) => {
       answered = true
       done()
-      if (e.data.ok && e.data.result) resolve(e.data.result)
+      if (e.data.ok && e.data.result) {
+        // Con el lector ya cerrado (su memoria se libera), las mallas vuelven a listas de vértices y caras.
+        unpackMeshes(e.data.result)
+        resolve(e.data.result)
+      }
       else reject(new Error(e.data.error ?? 'the file could not be read'))
     }
     worker.onerror = (e) => {
       e.preventDefault()
       done()
       // El hilo no llegó a responder (no cargó): se intenta en el hilo principal.
-      if (!answered) importCadHere(kind, data).then(resolve, reject)
+      if (!answered) importCadHere(kind, data, light).then(resolve, reject)
       else reject(new Error(e.message || 'the reader stopped'))
     }
-    worker.postMessage({ kind, data }) // se copia: el original sigue disponible para el conversor del servidor
+    worker.postMessage({ kind, data, light }) // se copia: el original sigue disponible para el conversor del servidor
   })
 }
 

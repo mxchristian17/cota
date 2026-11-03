@@ -446,3 +446,30 @@ test.describe('Abrir un DWG de referencia', () => {
     expect(text).toContain('XLINE')
   })
 })
+
+test.describe('Dibujos con muchos textos', () => {
+  test('cada texto se crea al verse con un tamaño legible y se selecciona con un clic', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    await st(
+      page,
+      `for (let i = 0; i < 3000; i++) s.doc.addEntity({ type: 'TEXT', layer: '0', props: { position: [(i % 60) * 20, Math.floor(i / 60) * 10, 0], text: 'T' + i, height: 2.5, rotation: 0, justify: 'left', normal: [0, 0, 1], kind: 'text' } }); s.doc.touch()`,
+    )
+    const labels = () => page.evaluate(() => [...document.querySelectorAll('div')].filter((d) => /^T\d+$/.test(d.textContent ?? '')).length)
+    // Todo el dibujo a la vista: cada texto mide menos de 3 px y no se dibuja (antes, 3000 elementos de 7 px).
+    await cmd(page, 'ZOOM', 'E')
+    await page.waitForTimeout(300)
+    expect(await labels()).toBe(0)
+    // De cerca: sólo los de la pantalla y sus alrededores.
+    await cmd(page, 'ZOOM', 'W', '-5,-5', '95,45')
+    await page.waitForTimeout(300)
+    const near = await labels()
+    expect(near).toBeGreaterThan(10)
+    expect(near).toBeLessThan(600)
+    await expect(page.locator('div', { hasText: /^T61$/ })).toBeVisible()
+    // Un clic sobre un texto lo selecciona (las cajas de todos van en una sola malla invisible).
+    await clickAt(page, [22, 11, 0])
+    await page.waitForTimeout(200)
+    expect(await st<string[]>(page, 'return s.selection.map((id) => s.doc.getEntity(id).props.text)')).toEqual(['T61'])
+  })
+})

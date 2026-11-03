@@ -43,11 +43,12 @@ function sphereOf(points: Iterable<Vec3>): { c: Vec3; r: number } | null {
 }
 
 /** Clave del contenido geométrico de una entidad 3D. */
-/** Huellas de las mallas, por su objeto de propiedades (una malla grande no se pasa entera a texto en cada zoom). */
+/** Huellas de las mallas, por su lista de vértices (una malla grande no se pasa entera a texto en cada zoom; deshacer
+ * copia el dibujo pero comparte esa lista). */
 const meshKeys = new WeakMap<object, string>()
 export const sizeKey = (e: Entity): string => {
   if (e.type !== 'MESH3D') return `${e.type}:${JSON.stringify(e.props)}`
-  let k = meshKeys.get(e.props)
+  let k = meshKeys.get(e.props.vertices)
   if (k === undefined) {
     // FNV-1a sobre la cantidad de vértices y caras y unos 64 vértices repartidos.
     const v = e.props.vertices
@@ -55,7 +56,7 @@ export const sizeKey = (e: Entity): string => {
     const step = Math.max(1, Math.floor(v.length / 64))
     for (let i = 0; i < v.length; i += step) for (const x of v[i]) h = Math.imul(h ^ Math.round(x * 1e4), 0x01000193)
     k = `MESH3D:${v.length}:${e.props.faces.length}:${(h >>> 0).toString(36)}`
-    meshKeys.set(e.props, k)
+    meshKeys.set(e.props.vertices, k)
   }
   return k
 }

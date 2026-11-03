@@ -130,7 +130,7 @@ describe('mensajes de error de DWG', () => {
     }
     vi.stubGlobal('Worker', Stuck)
     try {
-      await expect(importCadInWorker('dwg', new ArrayBuffer(8), 30)).rejects.toBeInstanceOf(CadTimeoutError)
+      await expect(importCadInWorker('dwg', new ArrayBuffer(8), { timeoutMs: 30 })).rejects.toBeInstanceOf(CadTimeoutError)
       expect(terminated).toBe(true)
     } finally {
       vi.unstubAllGlobals()

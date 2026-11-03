@@ -8,9 +8,9 @@ import type { DxfImportResult } from './dxf'
  * entidad, guardado en distintas versiones de DWG y DXF. Validan el camino real de apertura (lector de DWG, DXF
  * binario e importador). Cada tipo tiene su cantidad: un avance o un retroceso cambia estos números.
  */
-const read = (name: string, kind: 'dwg' | 'dxf') => {
+const read = (name: string, kind: 'dwg' | 'dxf', light = false) => {
   const b = readFileSync(new URL(`./__fixtures__/acadsharp/${name}`, import.meta.url))
-  return importCadInWorker(kind, b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer)
+  return importCadInWorker(kind, b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer, { light })
 }
 
 const byType = (r: DxfImportResult) => {
@@ -30,6 +30,12 @@ describe('muestras estándar de DWG/DXF (ACadSharp)', () => {
     expect(r.meshedSolids).toBe(3) // los sólidos y regiones del ACIS, con sus caras
     expect(r.wireSolids).toBeUndefined()
     expect(r.layouts?.map((l) => l.name)).toEqual(['Layout1', 'Layout2', 'MyLayout'])
+  })
+
+  it('en un teléfono (malla liviana) se leen las mismas entidades', async () => {
+    const r = await read('sample_AC1032.dwg', 'dwg', true)
+    expect(byType(r)).toEqual(DWG_2018)
+    expect(r.meshedSolids).toBe(3)
   })
 
   it('DXF binario 2018: lo mismo que el DWG (antes entraba vacío)', async () => {

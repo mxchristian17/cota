@@ -425,7 +425,7 @@ function wholeSurface(s: Surface, flipped: boolean): FaceMesh | null {
 function zipChains(s: Surface, k: 0 | 1, A: UV[], B: UV[], ptsOf: Map<UV, Pt>, step: number[], pB: (p: UV) => Pt = (p) => ptsOf.get(p)!) {
   const other: 0 | 1 = k === 0 ? 1 : 0
   const vOf = (row: UV[], u: number) => {
-    let j = row.findIndex((p) => p[k] >= u)
+    const j = row.findIndex((p) => p[k] >= u)
     if (j <= 0) return row[Math.max(0, j)][other]
     const [p, q] = [row[j - 1], row[j]]
     const t = q[k] - p[k] > 1e-12 ? (u - p[k]) / (q[k] - p[k]) : 0
@@ -565,15 +565,15 @@ export interface AcisMesh {
   stats: { analytic: number; planar: number; failed: number }
 }
 
-/** Malla de todas las caras de un modelo ACIS; null si no tiene caras legibles. */
-export function acisMesh(data: Uint8Array | string): AcisMesh | null {
+/** Malla de todas las caras de un modelo ACIS; null si no tiene caras legibles. `light`: menos triángulos (teléfonos). */
+export function acisMesh(data: Uint8Array | string, light = false): AcisMesh | null {
   let recs: Rec[]
   try {
     recs = acisRecords(data)
   } catch {
     return null
   }
-  const { place, edgePoints, angleStep } = modelOf(recs)
+  const { place, edgePoints, angleStep } = modelOf(recs, light)
   const vertices: Vec3[] = []
   const faces: number[][] = []
   const stats: AcisMesh['stats'] = { analytic: 0, planar: 0, failed: 0 }

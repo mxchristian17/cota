@@ -1,8 +1,8 @@
 import { BASELINE_DROP, LINE_SPACING, attdefText, textAxes, textSize } from '../geom/text'
 import { decodeTextCodes, encodeTextCodes } from '../text/codes'
 import type { Vec3 } from '../math'
-import type { DrawingVars, Entity, EntityProps, EntityType, InsertProps, Layer, LineType, LinetypeDefData, MeshProps, RectangleProps, TextProps } from '../document/types'
-import { transformEntity as transformInsertEntity } from '../editing/block'
+import type { DrawingVars, Entity, EntityProps, EntityType, InsertProps, Layer, LineType, LinetypeDefData, RectangleProps, TextProps } from '../document/types'
+import { pointMap, transformEntity as transformInsertEntity } from '../editing/block'
 import { BYBLOCK, BYLAYER, CONTINUOUS, linetypeLabel, patternLength } from '../linetype/linetypes'
 import { hatchDxf, parseHatch } from './dxfHatch'
 import { dimDisplay } from '../dimension/dimGeometry'
@@ -13,6 +13,7 @@ import { angleFromOcs, angleToOcs, fromOcs, isWorldExtrusion, toOcs } from './dx
 import { normAngle } from '../geom/arc'
 import { acisEdges, sabFromHex, satFromDxf } from './acis'
 import { acisMesh, SOLID_MESH_REF } from './acisMesh'
+import { packedOf, type PackedMesh } from './meshTransfer'
 import { image, infiniteLine, mline, multileader, oleFrame, tolerance, underlay, viewBasis, type Piece } from './dxfExtra'
 
 /**
@@ -426,14 +427,13 @@ function str(codes: Array<[number, string]>, code: number): string | undefined {
   return f ? f[1].trim() : undefined
 }
 
-/** Parsea DXF ASCII a specs de layers/entidades. Robusto ante DXF malformado. */
-export function importDxf(text: string, opts: { solidMeshes?: MeshProps[]; proxyShapes?: Map<string, Array<{ pts: Vec3[] } | { vertices: Vec3[]; faces: number[][] }>> } = {}): DxfImportResult {
-  // Records por cada par (0, TYPE), recorriendo el texto de a dos líneas (código, valor) sin partirlo entero: con un
-  // DXF de 20 MB, el arreglo de líneas y el de pares costaban más de 100 MB (en un teléfono, más de lo que hay).
-  const records: Rec[] = []
-  let cur: Rec | null = null
-  // POLYLINE abierta: los VERTEX que siguen son suyos hasta el SEQEND.
-  let poly: Rec | null = null
+/**
+ * Records del DXF por cada par (0, TYPE), de a uno: se recorre el texto de a dos líneas (código, valor) sin partirlo
+ * entero, y quien los lee guarda sólo los que necesita después (bloques, inserciones). Juntarlos todos antes de
+ * interpretarlos costaba más de 150 MB con el DXF de un ensamble 3D grande (en un teléfono, más de lo que hay). Una
+ * POLYLINE sale completa, con sus VERTEX como hijos, al empezar el record siguiente a su SEQEND.
+ */
+function* dxfRecords(text: string): Generator<Rec> {
   let pos = 0
   const line = (): string | null => {
     if (pos >= text.length) return null
@@ -443,6 +443,11 @@ export function importDxf(text: string, opts: { solidMeshes?: MeshProps[]; proxy
     pos = end + 1
     return v
   }
+  let cur: Rec | null = null
+  // POLYLINE abierta: los VERTEX que siguen son suyos hasta el SEQEND.
+  let poly: Rec | null = null
+  /** El último record de primer nivel: está completo cuando empieza el siguiente. */
+  let ready: Rec | null = null
   for (;;) {
     const c = line()
     const val = line()
@@ -455,14 +460,21 @@ export function importDxf(text: string, opts: { solidMeshes?: MeshProps[]; proxy
       if (poly && type === 'VERTEX') poly.children!.push(cur)
       else if (poly && type === 'SEQEND') poly = null
       else {
+        if (ready) yield ready
         poly = type === 'POLYLINE' ? Object.assign(cur, { children: [] }) : null
-        records.push(cur)
+        ready = cur
       }
     } else if (cur) {
       cur.codes.push([code, val])
     }
   }
+  if (ready) yield ready
+}
 
+/** Parsea DXF ASCII a specs de layers/entidades. Robusto ante DXF malformado. */
+export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: PackedMesh[]; proxyShapes?: Map<string, Array<{ pts: Vec3[] } | { vertices: Vec3[]; faces: number[][] }>> } = {}): DxfImportResult {
+  // Los records se leen y se procesan de a uno (ver `dxfRecords`). Los de OBJECTS que hacen falta antes (los modelos
+  // ACIS binarios y los archivos de imágenes), en una pasada previa sólo si el texto los tiene.
   const layers: DxfLayerSpec[] = []
   const entities: DxfEntitySpec[] = []
   const unsupported = new Set<string>()
@@ -494,20 +506,22 @@ export function importDxf(text: string, opts: { solidMeshes?: MeshProps[]; proxy
   let wireSolids = 0
   /** Modelos ACIS binarios de un DXF 2013+: por el handle de su entidad. */
   const asmData = new Map<string, string[]>()
-  for (const r of records) {
-    if (r.type !== 'ACDSRECORD') continue
-    const id = r.codes.find(([k]) => k === 320)?.[1].trim().toUpperCase()
-    const hex = r.codes.filter(([k]) => k === 310).map(([, v]) => v.trim())
-    if (id && hex.length) asmData.set(id, hex)
-  }
   /** Archivos de las imágenes y referencias externas (sección OBJECTS, que viene después): por el handle de su definición. */
   const externalFiles = new Map<string, string>()
-  for (const r of records) {
-    if (!/^(IMAGEDEF|PDFDEFINITION|DWFDEFINITION|DGNDEFINITION)$/.test(r.type)) continue
-    const h = str(r.codes, 5)
-    const f = str(r.codes, 1)
-    if (h && f) externalFiles.set(h.toUpperCase(), f)
-  }
+  const hasAsm = text.includes('ACDSRECORD')
+  const hasFiles = /\n(IMAGEDEF|PDFDEFINITION|DWFDEFINITION|DGNDEFINITION)\r?\n/.test(text)
+  if (hasAsm || hasFiles)
+    for (const r of dxfRecords(text)) {
+      if (r.type === 'ACDSRECORD') {
+        const id = r.codes.find(([k]) => k === 320)?.[1].trim().toUpperCase()
+        const hex = r.codes.filter(([k]) => k === 310).map(([, v]) => v.trim())
+        if (id && hex.length) asmData.set(id, hex)
+      } else if (/^(IMAGEDEF|PDFDEFINITION|DWFDEFINITION|DGNDEFINITION)$/.test(r.type)) {
+        const h = str(r.codes, 5)
+        const f = str(r.codes, 1)
+        if (h && f) externalFiles.set(h.toUpperCase(), f)
+      }
+    }
   /** Alto del texto de un estilo de cota (DIMTXT × DIMSCALE), para las tolerancias. */
   const dimTextHeight = (name: string | undefined): number => {
     const r = dimStyleRecs.find((d) => (str(d.codes, 2) ?? '').toUpperCase() === (name ?? '').toUpperCase())
@@ -588,7 +602,7 @@ export function importDxf(text: string, opts: { solidMeshes?: MeshProps[]; proxy
         const handle = (str(c, 5) ?? '').toUpperCase()
         const stored = asmData.get(handle)
         const model = stored ? sabFromHex(stored) : satFromDxf(c)
-        const mesh = acisMesh(model)
+        const mesh = acisMesh(model, opts.light)
         if (mesh) {
           meshedSolids++
           return [{ type: 'MESH3D', props: { vertices: mesh.vertices, faces: mesh.faces } as EntityProps }]
@@ -635,8 +649,7 @@ export function importDxf(text: string, opts: { solidMeshes?: MeshProps[]; proxy
     return keep.some(([k]) => k === 2) ? { type: 'INSERT', codes: keep } : null
   }
 
-  for (let r = 0; r < records.length; r++) {
-    const rec = records[r]
+  for (const rec of dxfRecords(text)) {
     if (rec.type === 'SECTION') {
       section = str(rec.codes, 2) ?? ''
       if (section === 'HEADER') {
@@ -837,10 +850,26 @@ export function importDxf(text: string, opts: { solidMeshes?: MeshProps[]; proxy
         continue
       }
       if (!it.spec) continue
+      const layerName = frozen ?? (it.spec.layerName === '0' ? here : it.spec.layerName)
+      const packed = packedOf(it.spec.props)
+      if (packed) {
+        // Malla de un sólido (empaquetada): se ubica punto por punto, sin armar listas; las caras son las del bloque.
+        const maps = chain.map(pointMap)
+        const pos = new Float64Array(packed.pos.length)
+        for (let i = 0; i < pos.length; i += 3) {
+          let q: Vec3 = [packed.pos[i], packed.pos[i + 1], packed.pos[i + 2]]
+          for (const P of maps) q = P(q)
+          pos[i] = q[0]
+          pos[i + 1] = q[1]
+          pos[i + 2] = q[2]
+        }
+        out.push({ ...it.spec, props: { packed: { pos, faces: packed.faces } } as unknown as EntityProps, layerName })
+        continue
+      }
       let e = { id: '', type: it.spec.type, layer: '', props: it.spec.props } as unknown as Entity
       for (const t of chain) e = transformInsertEntity(e, t)
       // El tipo puede cambiar al transformar (un RECTANGLE girado o fuera de planta pasa a POLYLINE).
-      out.push({ ...it.spec, type: e.type, props: e.props as EntityProps, layerName: frozen ?? (it.spec.layerName === '0' ? here : it.spec.layerName) })
+      out.push({ ...it.spec, type: e.type, props: e.props as EntityProps, layerName })
     }
   }
   for (const rec of inserts) expand(rec, [], str(rec.codes, 8) ?? '0', 0)

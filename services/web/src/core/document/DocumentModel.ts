@@ -1,6 +1,7 @@
 import { viewDimFactor } from '../drawing/viewDims'
 import type { NamedView } from '../view'
 import { cleanNumbersDeep } from '../geom/clean'
+import { cloneDocument, cloneEntity } from './cloneShared'
 import { modelToPaperEntity, parseProxyId } from '../layout/transspatial'
 import { setModelAnnoScale } from '../dimension/dimGeometry'
 import { annoScaleOf, paperPerModel } from '../layout/scale'
@@ -21,6 +22,9 @@ import {
   type DimVars,
   type DimVarName,
 } from '../dimension/style'
+
+/** Listas de vértices de mallas ya limpias de ruido (un ensamble grande no se recorre entero tras cada comando). */
+const cleanMeshVerts = new WeakSet<object>()
 
 export const SCHEMA_VERSION = 1
 
@@ -767,7 +771,7 @@ export class DocumentModel {
       id: this.nextLayoutId(),
       name: this.checkLayoutName(name ?? this.nextLayoutName()),
       pageSetup: structuredClone(pageSetup ?? defaultPageSetup()),
-      entities: entities.map((e) => ({ ...structuredClone(e), id: this.nextEntityId() })),
+      entities: entities.map((e) => ({ ...cloneEntity(e), id: this.nextEntityId() })),
       ...(entities.length > 0 ? { initialized: true } : {}),
     }
     this.data.layouts = [...this.layouts, layout]
@@ -914,7 +918,15 @@ export class DocumentModel {
   cleanNumbers(): number {
     const lists: Entity[][] = [this.data.entities, ...(this.data.layouts ?? []).map((l) => l.entities), ...(this.data.blocks ?? []).map((b) => b.entities)]
     let n = 0
-    for (const list of lists) for (const e of list) n += cleanNumbersDeep(e.props)
+    for (const list of lists)
+      for (const e of list) {
+        if (e.type !== 'MESH3D') n += cleanNumbersDeep(e.props)
+        else if (e.props.vertices && !cleanMeshVerts.has(e.props.vertices)) {
+          // Las caras son índices (enteros); los vértices, una vez: las ediciones reemplazan la lista entera.
+          n += cleanNumbersDeep(e.props.vertices)
+          cleanMeshVerts.add(e.props.vertices)
+        }
+      }
     if (n) this._rev++
     return n
   }
@@ -922,7 +934,7 @@ export class DocumentModel {
   /** Vuelve a insertar una entidad conservando su id (deshacer dentro de un comando). */
   restoreEntity(entity: Entity): void {
     if (this.getEntity(entity.id)) return
-    this.entities.push(structuredClone(entity))
+    this.entities.push(cloneEntity(entity))
     this._rev++
   }
 
@@ -976,13 +988,13 @@ export class DocumentModel {
     this._rev++
   }
 
-  /** Serializa a un objeto plano (deep copy). */
+  /** Serializa a un objeto plano (copia profunda; las mallas comparten vértices y caras, ver `cloneDocument`). */
   toJSON(): DocumentData {
-    return structuredClone(this.data)
+    return cloneDocument(this.data)
   }
 
   static fromJSON(data: DocumentData): DocumentModel {
-    return new DocumentModel(structuredClone(data))
+    return new DocumentModel(cloneDocument(data))
   }
 
   /**
@@ -993,7 +1005,7 @@ export class DocumentModel {
     const tab = this.activeTab
     const ms = this.msVp
     const max = this.maxVp
-    this.data = structuredClone(data)
+    this.data = cloneDocument(data)
     this.hatchSigs.clear()
     this.normalize()
     this.reseed()
