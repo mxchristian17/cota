@@ -169,3 +169,29 @@ describe('mensajes de error de DWG', () => {
     expect((inBlock?.props as unknown as { end: number[] }).end).toEqual([100, 0, 20])
   })
 })
+
+describe('entidades proxy de un DXF', () => {
+  it('su dibujo de reemplazo entra como polilíneas', async () => {
+    const { dxfProxyShapes } = await import('./dwgConvert')
+    const { importDxf } = await import('./dxf')
+    // Un comando "polilínea" (6) con tres puntos: tamaño, tipo, cantidad y los puntos en doubles.
+    const pts = [[0, 0, 0], [10, 0, 0], [10, 5, 0]]
+    const cmd = new DataView(new ArrayBuffer(12 + pts.length * 24))
+    cmd.setInt32(0, cmd.byteLength, true)
+    cmd.setInt32(4, 6, true)
+    cmd.setInt32(8, pts.length, true)
+    pts.flat().forEach((v, i) => cmd.setFloat64(12 + i * 8, v, true))
+    const all = new Uint8Array(8 + cmd.byteLength)
+    const head = new DataView(all.buffer)
+    head.setInt32(0, all.length, true)
+    head.setInt32(4, 1, true)
+    all.set(new Uint8Array(cmd.buffer), 8)
+    const hex = [...all].map((b) => b.toString(16).padStart(2, '0')).join('').toUpperCase()
+    const text = `  0\nSECTION\n  2\nENTITIES\n  0\nACAD_PROXY_ENTITY\n  5\nAB\n  8\n0\n 92\n${all.length}\n310\n${hex}\n 93\n0\n  0\nENDSEC\n  0\nEOF\n`
+    const shapes = dxfProxyShapes(text)
+    expect(shapes.get('AB')).toEqual([{ pts }])
+    const r = importDxf(text, { proxyShapes: shapes })
+    expect(r.entities.map((e) => e.type)).toEqual(['POLYLINE'])
+    expect(r.unsupported).toEqual([])
+  })
+})

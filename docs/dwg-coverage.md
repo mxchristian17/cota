@@ -31,7 +31,8 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 | WIPEOUT | Skipped, with a notice | — | The mask is not applied |
 | SHAPE | Point, with a notice | Point | Its drawing is in an external shape file |
 | LIGHT, SUN | Ignored | — | Not drawing content |
-| ACAD_PROXY_ENTITY, SECTION, POINTCLOUD, COORDINATION MODEL, OLEFRAME | Listed as unsupported on open | — | |
+| ACAD_PROXY_ENTITY | By its replacement drawing (DXF); left out (DWG) | The same pieces | Texts of the replacement drawing are not read |
+| SECTION, POINTCLOUD, COORDINATION MODEL, OLEFRAME | Listed as unsupported on open | — | |
 
 Cota's 3D solids are exported as meshes of their faces (3DFACE), so a part looks the same but stops being a solid.
 
@@ -40,4 +41,4 @@ Cota's 3D solids are exported as meshes of their faces (3DFACE), so a part looks
 1. NURBS faces of ACIS solids following their surface (today, over their best-fit plane).
 2. Blocks and layouts on export (today blocks are expanded and layouts stay out of the file).
 3. WIPEOUT masks, which need a draw order for the fills.
-4. Proxy entities, by their stored graphics.
+4. Proxy entities in DWG files (the reader drops them).

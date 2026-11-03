@@ -23,10 +23,11 @@ export class CadTimeoutError extends Error {
 
 /** Lectura en el hilo principal: sin Worker (tests) o si el hilo no arranca. */
 async function importCadHere(kind: 'dwg' | 'dxf', data: ArrayBuffer): Promise<DxfImportResult> {
-  const { binaryDxfToDxfBytes, convertDwgToDxfBytes, isBinaryDxf } = await import('./dwgConvert')
+  const { binaryDxfToDxfBytes, convertDwgToDxfBytes, dxfHasProxies, dxfProxyShapes, isBinaryDxf } = await import('./dwgConvert')
   const raw = new Uint8Array(data)
-  const conv = kind === 'dwg' ? convertDwgToDxfBytes(data) : isBinaryDxf(raw) ? binaryDxfToDxfBytes(data) : null
-  const result = importDxf(new TextDecoder().decode(conv ? conv.bytes : raw), { solidMeshes: conv?.solidMeshes })
+  const text = kind === 'dxf' && !isBinaryDxf(raw) ? new TextDecoder().decode(raw) : null
+  const conv = kind === 'dwg' ? convertDwgToDxfBytes(data) : !text ? binaryDxfToDxfBytes(data) : null
+  const result = importDxf(conv ? new TextDecoder().decode(conv.bytes) : text!, { solidMeshes: conv?.solidMeshes, proxyShapes: text && dxfHasProxies(text) ? dxfProxyShapes(text) : undefined })
   return conv?.wireSolids ? { ...result, wireSolids: (result.wireSolids ?? 0) + conv.wireSolids } : result
 }
 

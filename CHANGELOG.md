@@ -4,6 +4,16 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.16.0] — 2026-11-03
+
+### Added
+- **Proxy entities from DXF files** (the custom objects of the CAD's mechanical, architectural or civil editions) come
+  in by the replacement drawing the file keeps for them: lines, polylines, circles, arcs and meshes. In DWG files they
+  are still left out: the DWG reader does not deliver them yet.
+
+### Fixed
+- 3D solids and regions from DXF R13 and R14 files open with their faces (their older ACIS format was not read).
+
 ## [2.15.1] — 2026-11-03
 
 ### Fixed

@@ -1,4 +1,4 @@
-import { binaryDxfToDxfBytes, convertDwgToDxfBytes, isBinaryDxf } from './dwgConvert'
+import { binaryDxfToDxfBytes, convertDwgToDxfBytes, dxfHasProxies, dxfProxyShapes, isBinaryDxf } from './dwgConvert'
 import { importDxf } from './dxf'
 
 /**
@@ -14,8 +14,9 @@ ctx.onmessage = (e) => {
   try {
     const { kind, data } = e.data
     const raw = new Uint8Array(data)
-    const conv = kind === 'dwg' ? convertDwgToDxfBytes(data) : isBinaryDxf(raw) ? binaryDxfToDxfBytes(data) : null
-    const result = importDxf(new TextDecoder().decode(conv ? conv.bytes : raw), { solidMeshes: conv?.solidMeshes })
+    const text = kind === 'dxf' && !isBinaryDxf(raw) ? new TextDecoder().decode(raw) : null
+    const conv = kind === 'dwg' ? convertDwgToDxfBytes(data) : !text ? binaryDxfToDxfBytes(data) : null
+    const result = importDxf(conv ? new TextDecoder().decode(conv.bytes) : text!, { solidMeshes: conv?.solidMeshes, proxyShapes: text && dxfHasProxies(text) ? dxfProxyShapes(text) : undefined })
     ctx.postMessage({ ok: true, result: conv?.wireSolids ? { ...result, wireSolids: (result.wireSolids ?? 0) + conv.wireSolids } : result })
   } catch (err) {
     ctx.postMessage({ ok: false, error: err instanceof Error ? err.message : String(err) })

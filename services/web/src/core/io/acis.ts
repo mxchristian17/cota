@@ -17,11 +17,13 @@ const isRef = (x: Item): x is { ref: number } => typeof x === 'object'
 
 /** Registros de un SAT: `tipo datos… #`, con la primera parte de encabezado (3 renglones). */
 function parseSat(text: string): Rec[] {
-  const nl1 = text.indexOf('\n')
-  const nl2 = text.indexOf('\n', nl1 + 1)
-  const nl3 = text.indexOf('\n', nl2 + 1)
+  // Encabezado: versión, cantidad de registros, de cuerpos y marcas; desde ACIS 4 (versión 400) le siguen el renglón del
+  // programa y el de las unidades. Los SAT viejos (106 en los DXF R13/R14) van directo a los registros.
+  const version = parseInt(text, 10)
+  let start = text.indexOf('\n') + 1
+  if (!(version < 400)) for (let k = 0; k < 2; k++) start = text.indexOf('\n', start) + 1
   const recs: Rec[] = []
-  for (const raw of text.slice(nl3 + 1).split('#')) {
+  for (const raw of text.slice(start).split('#')) {
     const tokens = raw.trim().split(/\s+/)
     if (!tokens[0] || /^(End-of|Begin-of)/.test(tokens[0])) continue
     recs.push({

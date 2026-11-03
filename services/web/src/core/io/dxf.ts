@@ -427,7 +427,7 @@ function str(codes: Array<[number, string]>, code: number): string | undefined {
 }
 
 /** Parsea DXF ASCII a specs de layers/entidades. Robusto ante DXF malformado. */
-export function importDxf(text: string, opts: { solidMeshes?: MeshProps[] } = {}): DxfImportResult {
+export function importDxf(text: string, opts: { solidMeshes?: MeshProps[]; proxyShapes?: Map<string, Array<{ pts: Vec3[] } | { vertices: Vec3[]; faces: number[][] }>> } = {}): DxfImportResult {
   // Records por cada par (0, TYPE), recorriendo el texto de a dos líneas (código, valor) sin partirlo entero: con un
   // DXF de 20 MB, el arreglo de líneas y el de pares costaban más de 100 MB (en un teléfono, más de lo que hay).
   const records: Rec[] = []
@@ -569,6 +569,12 @@ export function importDxf(text: string, opts: { solidMeshes?: MeshProps[] } = {}
       case 'LIGHT':
       case 'SUN':
         return [] // no son dibujo
+      case 'ACAD_PROXY_ENTITY': {
+        // Su dibujo de reemplazo, ya interpretado (ver `dxfProxyShapes`).
+        const shapes = opts.proxyShapes?.get((str(c, 5) ?? '').toUpperCase())
+        if (!shapes) return null
+        return shapes.map((s): Piece => ('pts' in s ? (s.pts.length === 2 ? { type: 'LINE', props: { start: s.pts[0], end: s.pts[1] } } : { type: 'POLYLINE', props: { vertices: s.pts, closed: false } }) : { type: 'MESH3D', props: { vertices: s.vertices, faces: s.faces } as EntityProps }))
+      }
       case '3DSOLID':
       case 'REGION':
       case 'BODY':
