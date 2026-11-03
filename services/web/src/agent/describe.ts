@@ -71,6 +71,8 @@ export function describe(e: Entity): string {
       const th = solidThreads(e.props).map((t) => t.info.designation)
       return `SOLID3D ${solidSummary(e.props)}${th.length ? ` threads ${th.join(', ')}` : ''}`
     }
+    case 'IMAGE':
+      return `IMAGE ${e.props.file.split(/[\\/]/).pop()} ${e.props.size[0]}×${e.props.size[1]} px at ${p3(e.props.origin)}${e.props.data ? '' : ' (file not loaded)'}`
     default:
       return `${e.type}${p.name ? ` ${String(p.name)}` : ''}`
   }

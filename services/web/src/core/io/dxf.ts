@@ -1,7 +1,7 @@
 import { BASELINE_DROP, LINE_SPACING, attdefText, textAxes, textSize } from '../geom/text'
 import { decodeTextCodes, encodeTextCodes } from '../text/codes'
 import type { Vec3 } from '../math'
-import type { DrawingVars, Entity, EntityProps, EntityType, InsertProps, Layer, LineType, LinetypeDefData, RectangleProps, TextProps } from '../document/types'
+import type { DrawingVars, Entity, EntityProps, EntityType, ImageProps, InsertProps, Layer, LineType, LinetypeDefData, RectangleProps, TextProps } from '../document/types'
 import { pointMap, transformEntity as transformInsertEntity } from '../editing/block'
 import { BYBLOCK, BYLAYER, CONTINUOUS, linetypeLabel, patternLength } from '../linetype/linetypes'
 import { hatchDxf, parseHatch } from './dxfHatch'
@@ -202,6 +202,8 @@ function entityDxf(e: Entity, layerName: string): string | null {
       return entityDxf({ id: e.id, type: 'TEXT', layer: e.layer, props: attdefText(e.props), lineType: e.lineType, ltScale: e.ltScale }, layerName)
     case 'HATCH':
       return hatchDxf(e.props, h)
+    case 'IMAGE': // necesita su definición en OBJECTS (ver `exportDxf`)
+      return null
     case 'SHADE': {
       // Sombreado de una vista: un SOLID 2D por triángulo, con su color verdadero (420).
       const t = e.props.tris
@@ -299,15 +301,44 @@ export function exportDxf(entities: Entity[], layers: Layer[], currentLayer?: st
   // Cotas nativas: DIMENSION + bloque *Dn + tabla DIMSTYLE.
   const dims = new DxfDimWriter(dimStyles)
   let ents = p(0, 'SECTION') + p(2, 'ENTITIES')
+  // Imágenes: la entidad apunta (340) a su definición (IMAGEDEF, en OBJECTS) con el archivo; los píxeles no viajan.
+  const imageDefs = new Map<string, { handle: string; p: ImageProps }>()
   for (const e of entities) {
     const layerName = nameById.get(e.layer) ?? '0'
+    if (e.type === 'IMAGE') {
+      const key = `${e.props.file}|${e.props.size.join('x')}`
+      const def = imageDefs.get(key) ?? { handle: (0x1000 + imageDefs.size).toString(16).toUpperCase(), p: e.props }
+      imageDefs.set(key, def)
+      ents += imageDxf(e.props, p(8, layerName) + commonCodes(e), def.handle)
+      continue
+    }
     const dxf = (e.type === 'DIMENSION' ? dims.dimension(e, layerName) : null) ?? entityDxf(e, layerName)
     if (dxf) ents += dxf
   }
   ents += p(0, 'ENDSEC')
   tables += dims.table() + p(0, 'ENDSEC')
+  let objects = ''
+  if (imageDefs.size) {
+    objects = p(0, 'SECTION') + p(2, 'OBJECTS')
+    for (const { handle, p: ip } of imageDefs.values()) {
+      objects += p(0, 'IMAGEDEF') + p(5, handle) + p(100, 'AcDbRasterImageDef') + p(90, 0) + p(1, ip.file) + p(10, ip.size[0]) + p(20, ip.size[1])
+      objects += p(11, Math.hypot(...ip.u)) + p(21, Math.hypot(...ip.v)) + p(280, 1) + p(281, 0)
+    }
+    objects += p(0, 'ENDSEC')
+  }
 
-  return header + tables + dims.blocksSection() + ents + p(0, 'EOF')
+  return header + tables + dims.blocksSection() + ents + objects + p(0, 'EOF')
+}
+
+function imageDxf(ip: ImageProps, head: string, def: string): string {
+  const v3 = (c: number, v: Vec3) => p(c, v[0]) + p(c + 10, v[1]) + p(c + 20, v[2])
+  let s = p(0, 'IMAGE') + head + p(100, 'AcDbRasterImage') + p(90, 0) + v3(10, ip.origin) + v3(11, ip.u) + v3(12, ip.v) + p(13, ip.size[0]) + p(23, ip.size[1]) + p(340, def)
+  s += p(70, ip.clip ? 7 : 3) + p(280, ip.clip ? 1 : 0) + p(281, 50) + p(282, 50) + p(283, ip.fade ?? 0)
+  if (ip.clip) {
+    s += p(71, ip.clip.length === 2 ? 1 : 2) + p(91, ip.clip.length)
+    for (const [x, y] of ip.clip) s += p(14, x) + p(24, y)
+  }
+  return s
 }
 
 // --- Import ---
@@ -560,7 +591,6 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
         return s && (s.props as { controlPoints: Vec3[] }).controlPoints.length >= 2 ? [s] : null
       }
       case 'IMAGE':
-        noteSimplified('IMAGE')
         return image(c, externalFiles)
       case 'PDFUNDERLAY':
       case 'DWFUNDERLAY':

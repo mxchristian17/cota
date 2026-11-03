@@ -1,4 +1,5 @@
 import { lineSpan } from '../geom/xline'
+import { imageRing } from '../geom/image'
 import { loopPoints } from '../hatch/geometry'
 import { shadeOutline } from '../projection/shade'
 import { pt, type Pt, type Vec3 } from '../math'
@@ -74,6 +75,8 @@ export function entityPreviewShapes(e: Entity, dx: number, dy: number, dz = 0): 
       return [{ kind: 'polyline', points: viewportRing(e.props).map(shift) }]
     case 'SHADE':
       return [{ kind: 'polyline', points: shadeOutline(e.props).map(shift) }]
+    case 'IMAGE':
+      return [{ kind: 'polyline', points: imageRing(e.props).map(shift) }]
     case 'HATCH':
       return e.props.loops.map((l) => {
         const pts = loopPoints(l, e.props.normal)

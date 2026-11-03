@@ -39,7 +39,8 @@ import { entityPattern, type LinetypeContext } from '../core/linetype/linetypes'
 import { entityDashes, linetypePaths, type DashResult } from '../core/linetype/dash'
 import { hatchFrame, hatchRegions, hatchRings, hatchStrokesCached, isSolidHatch, to3, type Ring } from '../core/hatch/geometry'
 import { isWide, polylineBand } from '../core/geom/plineWidth'
-import type { HatchEntity } from '../core/document/types'
+import type { HatchEntity, ImageEntity } from '../core/document/types'
+import { imageClip, imageFileName, imagePoint, imageRing, imageUv } from '../core/geom/image'
 import { isDoubleTap, isTap, pinchStep, touchConfig, TOUCH_AIM_OFFSET, type TouchPt } from './touchGesture'
 
 /** Distancia máxima (px) del cursor a una línea para tomarla con un clic. */
@@ -324,6 +325,9 @@ export class Viewport {
   private lastOrient = ''
   /** Render on-demand: solo se dibuja cuando algo cambió (cámara, datos, selección, snap, preview…). */
   private dirty = true
+  /** Texturas de las imágenes raster por sus datos; las que una reconstrucción deja de usar se liberan en la próxima. */
+  private imageTextures = new Map<string, { tex: THREE.Texture; seen: number }>()
+  private rebuildSeq = 0
   /** Entidades expandidas (bloques resueltos), cacheadas por revisión. */
   private expanded: Entity[] | null = null
   /** Dibujo por tamaño en pantalla: activo, clase de cada pieza (true = punto) y balde de zoom. */
@@ -1986,6 +1990,8 @@ export class Viewport {
       }
       case 'VIEWPORT':
         return viewportRing(e.props).map((v) => new THREE.Vector3(...v))
+      case 'IMAGE':
+        return imageRing(e.props).map((v) => new THREE.Vector3(...v))
       case 'ATTDEF':
         return null
       case 'SOLID3D':
@@ -2261,6 +2267,12 @@ export class Viewport {
   }
 
   private rebuild(entities: Entity[], layers: Layer[], selection: Set<string>): void {
+    for (const [k, t] of this.imageTextures) {
+      if (t.seen >= this.rebuildSeq) continue
+      t.tex.dispose()
+      this.imageTextures.delete(k)
+    }
+    this.rebuildSeq++
     this.classifyLod(entities)
     this.lodBucket = this.lodBucketKey()
     this.disposeGroup(this.entityGroup)
@@ -2332,6 +2344,14 @@ export class Viewport {
         // Individuales: seleccionadas (resaltado), anotaciones y polilíneas anchas.
         if ((selected && e.type !== 'SHADE') || e.type === 'DIMENSION' || e.type === 'TEXT' || e.type === 'ATTDEF') {
           individual(e)
+          continue
+        }
+        if (e.type === 'IMAGE') {
+          // El marco va con su capa; los píxeles, debajo de todo el dibujo (es un fondo).
+          const from = this.entityGroup.children.length
+          this.buildEntity(e, layerMap, selection)
+          const ro = selected ? 1 : orderOf(e)
+          for (const c of this.entityGroup.children.slice(from)) c.traverse((o) => (o.renderOrder = o.userData.raster ? bottom - 1 : ro))
           continue
         }
         if (e.type === 'SHADE') {
@@ -2789,6 +2809,7 @@ export class Viewport {
         this.entityGroup.add(this.buildShade(e, selected))
         return
       }
+      if (e.type === 'IMAGE') this.buildImage(e, color, selected) // y después su marco, como cualquier contorno
       const vertices = this.entityLinePoints(e)
       if (!vertices || vertices.length < 2) return
       if (e.type === 'POLYLINE' && isWide(e.props)) this.entityGroup.add(this.buildBand(e.id, polylineBand(e.props), color))
@@ -2846,6 +2867,88 @@ export class Viewport {
    * Sombreado de una vista de dibujo: triángulos con su color, pintados en orden (de atrás hacia
    * adelante, sin prueba de profundidad) y debajo de las líneas de la vista.
    */
+  /**
+   * Imagen raster: los píxeles en un polígono con textura (el recorte, triangulado) que no se elige con el cursor (se
+   * elige por el marco, como en el CAD clásico). Sin el archivo adjunto queda el nombre dentro del marco.
+   */
+  private buildImage(e: ImageEntity, color: THREE.Color, selected: boolean): void {
+    const p = e.props
+    const tex = p.data ? this.imageTexture(p.data) : null
+    if (!tex) {
+      // En la esquina de inserción (abajo a la izquierda), como venía el rótulo antes de leer la imagen.
+      const a = p.origin
+      const w = Math.hypot(...p.u) * p.size[0]
+      const h = Math.hypot(...p.v) * p.size[1]
+      const size = Math.max(Math.min(w, h) / 20, 1e-6)
+      const ux = p.u[0] / (Math.hypot(...p.u) || 1), uy = p.u[1] / (Math.hypot(...p.u) || 1)
+      const position: Vec3 = [a[0] + size * (ux - uy), a[1] + size * (uy + ux), a[2]]
+      const name = imageFileName(p)
+      if (name) this.buildText({ id: e.id, type: 'TEXT', layer: e.layer, props: { position, text: name, height: size, rotation: Math.atan2(uy, ux), justify: 'left', normal: [0, 0, 1], kind: 'text' } }, color, selected)
+      return
+    }
+    const clip = imageClip(p)
+    const tris = THREE.ShapeUtils.triangulateShape(clip.map(([x, y]) => new THREE.Vector2(x, -y)), [])
+    const pos: number[] = []
+    const uv: number[] = []
+    for (const [x, y] of clip) {
+      pos.push(...imagePoint(p, x, y))
+      uv.push(...imageUv(p, x, y))
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', this.local(pos))
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
+    g.setIndex(tris.flat())
+    // Opaca (una transparente se dibujaría después de todas las líneas y las taparía): el desvanecido mezcla con el
+    // color del fondo y lo transparente de un PNG se recorta.
+    const fade = Math.max(0, Math.min(100, p.fade ?? 0)) / 100
+    const mat = new THREE.MeshBasicMaterial({ map: tex, color: selected ? 0xb8c8ff : 0xffffff, alphaTest: 0.5, side: THREE.DoubleSide, depthWrite: false })
+    if (fade > 0) {
+      const bg = this.bgColor.clone()
+      mat.onBeforeCompile = (sh) => {
+        sh.uniforms.uFade = { value: fade }
+        sh.uniforms.uBg = { value: bg }
+        sh.fragmentShader = sh.fragmentShader
+          .replace('void main() {', 'uniform float uFade;\nuniform vec3 uBg;\nvoid main() {')
+          .replace('#include <map_fragment>', '#include <map_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb, uBg, uFade);')
+      }
+      mat.customProgramCacheKey = () => 'image-fade'
+    }
+    const mesh = new THREE.Mesh(g, mat)
+    mesh.raycast = () => {}
+    mesh.userData.raster = true
+    this.entityGroup.add(mesh)
+  }
+
+  /** Textura de unos datos de imagen; se carga en segundo plano y redibuja al llegar. Muy grande, se achica. */
+  private imageTexture(data: string): THREE.Texture {
+    const hit = this.imageTextures.get(data)
+    if (hit) {
+      hit.seen = this.rebuildSeq
+      return hit.tex
+    }
+    const tex = new THREE.Texture()
+    tex.colorSpace = THREE.SRGBColorSpace
+    tex.minFilter = THREE.LinearMipmapLinearFilter
+    tex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy())
+    this.imageTextures.set(data, { tex, seen: this.rebuildSeq })
+    const img = new Image()
+    img.onload = () => {
+      const max = Math.min(this.renderer.capabilities.maxTextureSize, 8192)
+      const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight))
+      if (k < 1) {
+        const c = document.createElement('canvas')
+        c.width = Math.max(1, Math.floor(img.naturalWidth * k))
+        c.height = Math.max(1, Math.floor(img.naturalHeight * k))
+        c.getContext('2d')?.drawImage(img, 0, 0, c.width, c.height)
+        tex.image = c
+      } else tex.image = img
+      tex.needsUpdate = true
+      this.invalidate()
+    }
+    img.src = data
+    return tex
+  }
+
   private buildShade(e: Extract<Entity, { type: 'SHADE' }>, selected: boolean): THREE.Object3D {
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', this.local(e.props.tris))
@@ -3285,6 +3388,8 @@ export class Viewport {
     this.ro.disconnect()
     this.disposeGroup(this.entityGroup)
     this.disposeGroup(this.selOverlay)
+    for (const t of this.imageTextures.values()) t.tex.dispose()
+    this.imageTextures.clear()
     this.disposeGroup(this.previewGroup)
     this.disposeGroup(this.snapGroup)
     this.disposeGroup(this.gripGroup)

@@ -40,4 +40,15 @@ describe('copias del dibujo que comparten las mallas', () => {
     doc.load(snap)
     expect((doc.getEntity(e.id) as MeshEntity).props.vertices[0][0]).toBe(0)
   })
+
+  it('las imágenes: la copia tiene sus píxeles y el original también', () => {
+    const data = 'data:image/png;base64,' + 'A'.repeat(1000)
+    const img: Entity = { id: 'i', type: 'IMAGE', layer: '0', props: { origin: [0, 0, 0], u: [1, 0, 0], v: [0, 1, 0], size: [2, 2], file: 'a.png', data } }
+    const d = { entities: [img, line('b')] } as unknown as DocumentData
+    const copy = cloneDocument(d)
+    expect((copy.entities[0].props as { data: string }).data).toBe(data)
+    expect((d.entities[0].props as { data: string }).data).toBe(data)
+    expect(copy.entities[0].props).not.toBe(img.props)
+    expect((cloneEntity(img).props as { data: string }).data).toBe(data)
+  })
 })

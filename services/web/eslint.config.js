@@ -11,4 +11,11 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },
+  {
+    // El puente MCP corre en Node (lo arranca el agente externo), no en el navegador.
+    files: ['public/**/*.mjs'],
+    languageOptions: {
+      globals: { process: 'readonly', Buffer: 'readonly', URL: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly' },
+    },
+  },
 )

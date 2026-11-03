@@ -1,4 +1,5 @@
 import { mapHatch } from '../hatch/edit'
+import { mapImage } from '../geom/image'
 import { mapShade } from '../projection/shade'
 import { commonOf } from '../document/common'
 import type { Vec3 } from '../math'
@@ -265,6 +266,8 @@ export function mirrorEntityInput(e: Entity, ax: MirrorAxis): EntityInput | null
     }
     case 'SHADE':
       return { type: 'SHADE', layer: e.layer, props: mapShade(e.props, (v) => mirrorPoint(v, ax)) }
+    case 'IMAGE':
+      return { type: 'IMAGE', layer: e.layer, props: mapImage(e.props, (v) => mirrorPoint(v, ax)) }
     case 'HATCH': {
       // MIRRHATCH = 0: el contorno se refleja, el patrón conserva su dirección.
       const p = mapHatch(e.props, (v) => mirrorPoint(v, ax), 1, true)

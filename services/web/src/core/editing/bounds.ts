@@ -1,4 +1,5 @@
 import { hatchPoints } from '../hatch/edit'
+import { imageRing } from '../geom/image'
 import { shadeOutline } from '../projection/shade'
 import { loopPoints } from '../hatch/geometry'
 import type { Entity } from '../document/types'
@@ -186,6 +187,8 @@ export function entityOutline(e: Entity): Pt[][] {
       return [viewportRing(e.props).map(fromVec3)]
     case 'SHADE':
       return [shadeOutline(e.props).map(fromVec3)]
+    case 'IMAGE':
+      return [imageRing(e.props).map(fromVec3)]
     case 'HATCH':
       return e.props.loops.map((l) => {
         const pts = loopPoints(l, e.props.normal).map(fromVec3)

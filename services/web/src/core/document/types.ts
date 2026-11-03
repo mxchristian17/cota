@@ -46,6 +46,7 @@ export type EntityType =
   | 'HATCH'
   | 'SHADE'
   | 'POINT'
+  | 'IMAGE'
 
 /** Nombre de un tipo de línea de la tabla del dibujo, p. ej. `CONTINUOUS`, `HIDDEN`, `CENTER`. */
 export type LineType = string
@@ -581,6 +582,7 @@ export type EntityProps =
   | AttdefProps
   | HatchProps
   | ShadeProps
+  | ImageProps
 
 /**
  * Propiedades comunes de todo objeto: tipo de línea (ausente = ByLayer; `BYBLOCK` o un nombre de
@@ -727,6 +729,32 @@ export interface ShadeEntity extends EntityCommon {
   props: ShadeProps
 }
 
+/**
+ * Imagen raster (IMAGE): `origin` es la esquina inferior izquierda; `u` y `v`, los vectores de un píxel a lo ancho y
+ * hacia arriba. Los píxeles van en `data` (data URL) cuando se adjuntó el archivo; si no, se ve el marco con el nombre.
+ */
+export interface ImageProps {
+  origin: Vec3
+  u: Vec3
+  v: Vec3
+  /** Ancho y alto en píxeles. */
+  size: [number, number]
+  /** Archivo de la imagen (ruta como venía en el dibujo). */
+  file: string
+  data?: string
+  /** Recorte: polígono en píxeles con origen en la esquina superior izquierda (dos puntos = rectángulo). */
+  clip?: Array<[number, number]>
+  /** Desvanecido 0..100. */
+  fade?: number
+}
+
+export interface ImageEntity extends EntityCommon {
+  id: string
+  type: 'IMAGE'
+  layer: string
+  props: ImageProps
+}
+
 export type Entity =
   | PointEntity
   | LineEntity
@@ -745,6 +773,7 @@ export type Entity =
   | AttdefEntity
   | HatchEntity
   | ShadeEntity
+  | ImageEntity
 
 /**
  * Entidad a agregar. Sin `lineType`/`ltScale` es un objeto nuevo y toma `CELTYPE`/`CELTSCALE`; con

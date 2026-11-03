@@ -1,4 +1,5 @@
 import { keepCommon } from '../document/common'
+import { mapImage } from '../geom/image'
 import { mapShade } from '../projection/shade'
 import type { Vec3 } from '../math'
 import type { ArcProps, DimensionProps, Entity, EntityInput, PolylineProps, SolidProps } from '../document/types'
@@ -277,6 +278,8 @@ function transformEntityProps(e: Entity, r: Rigid): EntityInput | null {
     }
     case 'SHADE':
       return { type: 'SHADE', layer, props: mapShade(e.props, (v) => tp(r, v)) }
+    case 'IMAGE':
+      return { type: 'IMAGE', layer, props: mapImage(e.props, (v) => tp(r, v)) }
     case 'HATCH': {
       // Lazos, origen y semillas se mueven; el ángulo del patrón gira con la base del plano.
       const h = e.props

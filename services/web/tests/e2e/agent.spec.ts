@@ -174,3 +174,60 @@ test.describe('Cota agent panel (browser mode, own API key)', () => {
     expect(await st<boolean>(page, 'return s.agentTab')).toBe(false)
   })
 })
+
+test.describe('External agent (OpenCode, Claude Code…) through the Cota MCP bridge', () => {
+  test('the agent starts the bridge, Cota connects from the panel and the agent draws, asking first', async ({ page }) => {
+    const { spawn } = await import('node:child_process')
+    const { createInterface } = await import('node:readline')
+    const port = 19068 + Math.floor(Math.random() * 500)
+    // Lo que hace OpenCode: arranca el puente y le habla MCP por stdio.
+    const bridge = spawn(process.execPath, ['public/cota-mcp.mjs', '--port', String(port)])
+    const replies = new Map<number, (m: any) => void>()
+    createInterface({ input: bridge.stdout }).on('line', (l) => {
+      const m = JSON.parse(l)
+      replies.get(m.id)?.(m)
+    })
+    let id = 0
+    const rpc = (method: string, params?: unknown) =>
+      new Promise<any>((resolve) => {
+        replies.set(++id, resolve)
+        bridge.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n')
+      })
+    try {
+      await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'opencode', version: 'test' } })
+      await page.goto('/')
+      await expect(page.getByTestId('agent-settings')).toBeVisible()
+      await expect(page.getByTestId('agent-external')).toContainText('OpenCode')
+      await expect(page.getByTestId('agent-external-file')).toHaveAttribute('href', 'cota-mcp.mjs')
+      await page.getByTestId('agent-external-port').fill(String(port))
+      await page.getByTestId('agent-external-on').click()
+      await expect(page.getByTestId('agent-external-bar')).toContainText('External agent connected', { timeout: 10_000 })
+      // Con "Ask before running" (por defecto), el script del agente externo espera el OK en el panel.
+      const drawn = rpc('tools/call', { name: 'run_commands', arguments: { script: 'RECTANGLE 0,0 100,60\nCIRCLE 50,30 4' } })
+      await expect(page.getByTestId('agent-approve')).toContainText('CIRCLE 50,30 4')
+      await page.screenshot({ path: test.info().outputPath('external-approve.png') })
+      await page.getByTestId('agent-accept').click()
+      const r = await drawn
+      expect(r.result.content[0].text).toMatch(/^OK/)
+      expect(await st<string[]>(page, 'return s.doc.entities.map((e) => e.type)')).toEqual(['RECTANGLE', 'CIRCLE'])
+      await expect(page.getByTestId('agent-feed')).toContainText('external run_commands')
+      // Lo rechazado no corre y el agente se entera.
+      const rejected = rpc('tools/call', { name: 'run_commands', arguments: { script: 'ERASE ALL ""' } })
+      await page.getByTestId('agent-reject').click()
+      expect((await rejected).result.isError).toBe(true)
+      expect(await st<number>(page, 'return s.doc.entities.length')).toBe(2)
+      // La vista llega como imagen; las consultas no piden permiso.
+      const view = await rpc('tools/call', { name: 'capture_view', arguments: {} })
+      expect(view.result.content.some((c: any) => c.type === 'image' && c.mimeType === 'image/png')).toBe(true)
+      const q = await rpc('tools/call', { name: 'query_objects', arguments: { types: ['CIRCLE'] } })
+      expect(q.result.content[0].text).toContain('CIRCLE center 50,30,0 r 4')
+      // Queda encendido al recargar; desconectar lo apaga.
+      await page.reload()
+      await expect(page.getByTestId('agent-external-bar')).toContainText('External agent connected', { timeout: 10_000 })
+      await page.getByTestId('agent-external-off').click()
+      await expect(page.getByTestId('agent-external-bar')).toHaveCount(0)
+    } finally {
+      bridge.kill()
+    }
+  })
+})

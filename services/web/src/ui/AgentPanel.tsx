@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { CONTEXT_LIMIT, serverMode, useAgentStore } from '../agent/agentStore'
 import { PROVIDERS, type ProviderId } from '../agent/providers'
+import { BRIDGE_FILE, EXTERNAL_PORT } from '../agent/external'
 import { focusCommandLine } from './focus'
 import { useStore } from '../store/store'
 
@@ -25,7 +26,7 @@ export function AgentPanel() {
 
 function AgentBody() {
   const s = useAgentStore()
-  const [showSettings, setShowSettings] = useState(!s.hasKey)
+  const [showSettings, setShowSettings] = useState(!s.hasKey && !s.external.on)
   const [text, setText] = useState('')
   const feedEnd = useRef<HTMLDivElement>(null)
   const conv = s.conversations.find((c) => c.id === s.currentId)
@@ -42,8 +43,12 @@ function AgentBody() {
   }, [s.feed.length, s.pending])
   // Los ajustes se abren solos mientras no haya key (también al saberse, al cargar, que ya hay una en el servidor).
   useEffect(() => {
-    setShowSettings(!s.hasKey)
-  }, [s.hasKey])
+    setShowSettings(!s.hasKey && !s.external.on)
+  }, [s.hasKey, s.external.on])
+  // Conectado un agente externo, la conversación necesita el lugar (sus pasos y lo que pide aprobar).
+  useEffect(() => {
+    if (s.external.status === 'connected') setShowSettings(false)
+  }, [s.external.status])
 
   const send = () => {
     const t = text
@@ -80,6 +85,14 @@ function AgentBody() {
         </button>
       </div>
       {showSettings && <Settings onDone={() => setShowSettings(false)} />}
+      {s.external.on && (
+        <div className={`agent-ext-bar agent-ext-${s.external.status}`} data-testid="agent-external-bar">
+          <span>{s.external.status === 'connected' ? '⇄ External agent connected: its steps appear below.' : `⇄ Waiting for the external agent (bridge on port ${s.external.port})…`}</span>
+          <button className="btn btn-sm" onClick={() => s.setExternal({ on: false })} data-testid="agent-external-off">
+            Disconnect
+          </button>
+        </div>
+      )}
       <div className="agent-meter" title={`${used.toLocaleString()} of ~${CONTEXT_LIMIT.toLocaleString()} tokens`} data-testid="agent-meter">
         <span>Context {pct}%</span>
         <div className="agent-bar">
@@ -151,6 +164,45 @@ function AgentBody() {
         </div>
       </div>
     </aside>
+  )
+}
+
+const EXTERNAL_DOC = 'https://github.com/mxchristian17/cota/blob/main/docs/external-agents.md'
+
+/** Agente externo (OpenCode, Claude Code…): se conecta al puente MCP que ese agente arranca en esta computadora. */
+function ExternalAgent() {
+  const ext = useAgentStore((s) => s.external)
+  const setExternal = useAgentStore((s) => s.setExternal)
+  const [port, setPort] = useState(String(ext.port))
+  const portNum = () => {
+    const n = Math.round(Number(port))
+    return n >= 1024 && n <= 65535 ? n : EXTERNAL_PORT
+  }
+  return (
+    <div className="agent-external" data-testid="agent-external">
+      <strong>External agent</strong>
+      <p className="muted agent-small">
+        An agent on this computer (OpenCode, Claude Code, Codex…) can work on this drawing with its own model (DeepSeek, for example). Start it with the Cota
+        bridge,{' '}
+        <a href={BRIDGE_FILE} download data-testid="agent-external-file">
+          {BRIDGE_FILE}
+        </a>{' '}
+        (
+        <a href={EXTERNAL_DOC} target="_blank" rel="noreferrer">
+          how
+        </a>
+        ), and connect.
+      </p>
+      <div className="agent-row agent-ext-row">
+        <label className="agent-ext-port">
+          Port
+          <input className="field" inputMode="numeric" value={port} onChange={(e) => setPort(e.target.value)} onBlur={() => ext.on && portNum() !== ext.port && setExternal({ port: portNum() })} data-testid="agent-external-port" />
+        </label>
+        <button className={`btn${ext.on ? '' : ' primary'}`} onClick={() => setExternal({ on: !ext.on, port: portNum() })} data-testid="agent-external-on">
+          {ext.on ? 'Disconnect' : 'Connect'}
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -234,6 +286,7 @@ function Settings({ onDone }: { onDone: () => void }) {
           </button>
         </div>
       )}
+      <ExternalAgent />
     </div>
   )
 }

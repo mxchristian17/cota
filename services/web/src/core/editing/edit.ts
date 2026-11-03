@@ -1,4 +1,5 @@
 import { mapHatch } from '../hatch/edit'
+import { mapImage } from '../geom/image'
 import { mapShade } from '../projection/shade'
 import { commonOf } from '../document/common'
 import type { Vec3 } from '../math'
@@ -57,6 +58,9 @@ export function translateEntity(e: Entity, dx: number, dy: number, dz = 0): void
     case 'SHADE':
       Object.assign(e.props, mapShade(e.props, t))
       break
+    case 'IMAGE':
+      Object.assign(e.props, mapImage(e.props, t))
+      break
     case 'VIEWPORT':
       // Se mueve el marco en el papel; la vista del modelo (target) no cambia.
       e.props.center = t(e.props.center)
@@ -107,6 +111,9 @@ export function scaleEntity(e: Entity, c: Vec3, f: number): void {
       break
     case 'SHADE':
       Object.assign(e.props, mapShade(e.props, s))
+      break
+    case 'IMAGE':
+      Object.assign(e.props, mapImage(e.props, s))
       break
     case 'SOLID3D':
       scaleSolid(e.props, c, f)

@@ -12,6 +12,7 @@ import { touchConfig } from '../../render/touchGesture'
 import { ABOUT } from '../../core/about'
 import type { ViewName, VisualStyle } from '../../core/view'
 import type { Entity } from '../../core/document/types'
+import { drawingImages } from '../../core/commands/impl/image'
 
 /**
  * Vista mobile para obra (PRD076): abrir dibujos, orbitar con los dedos, medir con DIST, estilos visuales, vistas,
@@ -110,6 +111,8 @@ export function MobileApp() {
   // Un dedo orbita si el dibujo es 3D (sólidos, mallas o profundidad real: las aristas de un DWG 3D son líneas); en un
   // dibujo 2D, desplaza. Se puede cambiar a mano.
   const has3D = useMemo(() => is3DDrawing(doc.modelEntities), [doc.revision, docName])
+  // Imágenes del plano sin su archivo (un DXF guarda sólo la ruta): se eligen desde el menú.
+  const noImage = useMemo(() => drawingImages(doc).filter((e) => !e.props.data).length, [doc.revision, docName])
   const [orbitPick, setOrbitPick] = useState<boolean | null>(null)
   useEffect(() => setOrbitPick(null), [docName])
   const orbit = inModel && (orbitPick ?? has3D)
@@ -140,7 +143,7 @@ export function MobileApp() {
     const fresh = output.length > prev.length ? output.slice(prev.length) : output.slice(-1)
     const line = fresh[fresh.length - 1]
     if (!line || Date.now() - opening.current > 600_000) return
-    const done = /^Opened |could not|cannot|not available|failed/i.test(line)
+    const done = /^Opened |^Loaded \d+ image|^None of the chosen|could not|cannot|not available|failed/i.test(line)
     for (const l of fresh) {
       if (/^Reading /.test(l)) setSince(Date.now())
       else said.current.push(l)
@@ -369,6 +372,20 @@ export function MobileApp() {
                 <button className="m-row" onClick={open} data-testid="m-open">
                   Open drawing…
                 </button>
+                {noImage > 0 && (
+                  <button
+                    className="m-row"
+                    onClick={() => {
+                      setSheet(null)
+                      opening.current = Date.now()
+                      said.current = []
+                      st().attachImages()
+                    }}
+                    data-testid="m-images"
+                  >
+                    Load images ({noImage})…
+                  </button>
+                )}
                 {CLOUD_ENABLED && !token && (
                   <button
                     className="m-row"

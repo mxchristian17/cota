@@ -57,6 +57,7 @@ const setup = () => {
       exportPdf: () => {},
       importFile: () => {},
       openFromDevice: () => {},
+      attachImages: () => {},
       visualStyle: () => '2dwireframe',
       exportModel: () => {},
       openOptions: () => {},

@@ -111,13 +111,13 @@ export async function runTool(host: AgentHost, name: string, args: Record<string
   const doc = host.doc
   switch (name) {
     case 'run_commands': {
-      const before = new Map(doc.entities.map((e) => [e.id, JSON.stringify(e)]))
+      const before = new Map(doc.entities.map((e) => [e.id, JSON.stringify(e, noPixels)]))
       const script = String(args.script ?? '')
       const r = await host.runScript(script)
       const inputs = parseScript(script)
       const after = doc.entities
       const created = after.filter((e) => !before.has(e.id))
-      const changed = after.filter((e) => before.has(e.id) && before.get(e.id) !== JSON.stringify(e))
+      const changed = after.filter((e) => before.has(e.id) && before.get(e.id) !== JSON.stringify(e, noPixels))
       const alive = new Set(after.map((e) => e.id))
       const deleted = [...before.keys()].filter((id) => !alive.has(id))
       const t = r.transcript.length > MAX_TRANSCRIPT ? ['…', ...r.transcript.slice(-MAX_TRANSCRIPT)] : r.transcript
@@ -227,10 +227,13 @@ function viewGeometry(doc: DocumentModel, e: Entity): string {
   return lines.join('\n')
 }
 
+/** Los píxeles de una imagen (megas de data URL) no se comparan ni se le muestran al modelo: queda su largo. */
+const noPixels = (k: string, v: unknown): unknown => (k === 'data' && typeof v === 'string' && v.startsWith('data:') ? `(${v.length} chars of pixels)` : v)
+
 /** Propiedades de un objeto en JSON compacto (números cortos). */
 function compact(e: Entity): string {
   const round = (v: unknown): unknown =>
-    typeof v === 'number' ? Number(n(v)) : Array.isArray(v) ? v.map(round) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'style').map(([k, x]) => [k, round(x)])) : v
+    typeof v === 'number' ? Number(n(v)) : Array.isArray(v) ? v.map(round) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'style').map(([k, x]) => [k, round(noPixels(k, x))])) : v
   const s = JSON.stringify({ id: e.id, type: e.type, layer: e.layer, ...(e.color ? { color: e.color } : {}), props: round(e.props) })
   return s.length > 4000 ? `${describe(e)} (parameters too long to show: ${s.length} chars)` : s
 }

@@ -508,3 +508,53 @@ test.describe('Planos georreferenciados (coordenadas de millones)', () => {
   })
 })
 
+
+test.describe('Imágenes de fondo', () => {
+  // Un plano que usa una imagen (el DXF guarda sólo la ruta) y la imagen: 4 × 2 píxeles rojos.
+  const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAEklEQVR4nGO8IyfHAANMDEgAABtMARynZZQCAAAAAElFTkSuQmCC'
+  const rec = (type: string, ...codes: Array<[number, string | number]>) => `0\n${type}\n${codes.map(([c, v]) => `${c}\n${v}\n`).join('')}`
+  const DXF =
+    '0\nSECTION\n2\nENTITIES\n' +
+    rec('LINE', [8, '0'], [10, 990], [20, 2001], [30, 0], [11, 1010], [21, 2001], [31, 0]) +
+    rec('IMAGE', [8, 'MAPA'], [10, 1000], [20, 2000], [30, 0], [11, 2], [21, 0], [31, 0], [12, 0], [22, 2], [32, 0], [13, 4], [23, 2], [340, 'AB']) +
+    '0\nENDSEC\n0\nSECTION\n2\nOBJECTS\n' +
+    rec('IMAGEDEF', [5, 'AB'], [1, 'C:\\planos\\mapa.png'], [10, 4], [20, 2]) +
+    '0\nENDSEC\n0\nEOF\n'
+
+  test('se abre el plano junto con su imagen: se ve en su lugar, debajo de las líneas, y se elige por el marco', async ({ page }) => {
+    await page.goto('/')
+    const input = page.getByTestId('command-input')
+    await expect(input).toBeVisible()
+    const chooser = page.waitForEvent('filechooser')
+    await input.fill('OPEN')
+    await page.keyboard.press('Enter')
+    await (await chooser).setFiles([
+      { name: 'plano.dxf', mimeType: 'application/dxf', buffer: Buffer.from(DXF) },
+      { name: 'mapa.png', mimeType: 'image/png', buffer: Buffer.from(PNG, 'base64') },
+    ])
+    await expect(page.locator('.cmd-output')).toContainText('Loaded 1 image', { timeout: 20_000 })
+    await expect(page.locator('.cmd-output')).toContainText('use external files (mapa.png)')
+    // La textura llega en segundo plano: el polígono va de la esquina a 8 × 4 unidades, debajo de la línea.
+    await expect.poll(() => st<number>(page, `let w = 0; s.activeViewport.entityGroup.traverse((o) => { if (o.userData.raster) w = o.material.map?.image?.width ?? 0 }); return w`)).toBe(4)
+    const r = await st<{ box: number[]; below: boolean }>(
+      page,
+      `let box = [], ro = 0, line = 0
+       s.activeViewport.entityGroup.updateMatrixWorld(true)
+       s.activeViewport.entityGroup.traverse((o) => {
+         if (o.userData.raster) { o.geometry.computeBoundingBox(); const b = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld); box = [b.min.x, b.min.y, b.max.x, b.max.y]; ro = o.renderOrder }
+         else if (o.isLine || o.isLineSegments) line = Math.max(line, o.renderOrder)
+       })
+       return { box, below: ro < line }`,
+    )
+    expect(r.box.map((v) => Math.round(v * 1000) / 1000)).toEqual([1000, 2000, 1008, 2004])
+    expect(r.below).toBe(true)
+    // Un clic adentro (lejos del marco) no la elige; sobre el marco, sí.
+    await clickAt(page, [1004, 2003, 0])
+    await page.waitForTimeout(450)
+    expect(await st<number>(page, 'return s.selection.length')).toBe(0)
+    await page.keyboard.press('Escape') // el clic en el vacío empezó una ventana de selección
+    await clickAt(page, [1008, 2003, 0])
+    await page.waitForTimeout(450)
+    expect(await st<string[]>(page, `return s.selection.map((id) => s.doc.getEntity(id).type)`)).toEqual(['IMAGE'])
+  })
+})

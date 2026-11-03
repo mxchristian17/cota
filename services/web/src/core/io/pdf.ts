@@ -1,4 +1,5 @@
 import { lineSpan } from '../geom/xline'
+import { imageRing } from '../geom/image'
 import { layerShown } from '../layers/visibility'
 import type { Entity, Layer, PlotStyle, ShadeProps } from '../document/types'
 import { entityBounds } from '../editing/bounds'
@@ -406,6 +407,10 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
       case 'VIEWPORT':
         // Sólo el marco (su contenido lo proyecta el ploteo del layout).
         out += polyStroke(viewportRing(e.props).map((v) => [v[0], v[1]]), t)
+        break
+      case 'IMAGE':
+        // El marco (los píxeles todavía no se imprimen).
+        out += polyStroke(imageRing(e.props).map((v) => [v[0], v[1]]), t)
         break
     }
   }

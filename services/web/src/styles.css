@@ -2034,7 +2034,7 @@ div.lt-row {
 .agent-meter { font-size: 11px; }
 .agent-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--border, #3a3a3a); overflow: hidden; }
 .agent-bar > div { height: 100%; background: var(--accent, #3b82f6); }
-.agent-feed { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
+.agent-feed { flex: 1; min-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
 .agent-msg { white-space: pre-wrap; padding: 6px 8px; border-radius: 6px; line-height: 1.4; }
 .agent-user { align-self: flex-end; background: var(--accent-soft, rgba(59,130,246,.18)); max-width: 90%; }
 .agent-assistant { background: var(--field, rgba(255,255,255,.04)); }
@@ -2044,8 +2044,14 @@ div.lt-row {
 .agent-approve { border: 1px solid var(--border, #3a3a3a); border-radius: 6px; padding: 6px; display: flex; flex-direction: column; gap: 6px; }
 .agent-approve pre { margin: 0; max-height: 180px; overflow: auto; font-size: 11px; white-space: pre-wrap; }
 .agent-input textarea { width: 100%; min-height: 64px; resize: vertical; }
-.agent-settings { border-bottom: 1px solid var(--border, #3a3a3a); padding-bottom: 6px; }
+.agent-settings { border-bottom: 1px solid var(--border, #3a3a3a); padding-bottom: 6px; flex: none; max-height: 55%; overflow-y: auto; }
 .agent-small, .agent-hint { font-size: 11px; margin: 0; }
+.agent-external { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--border, #3a3a3a); padding-top: 6px; margin-top: 4px; }
+.agent-ext-row { justify-content: space-between; }
+.agent-ext-port { display: flex; align-items: center; gap: 6px; }
+.agent-ext-port .field { width: 72px; }
+.agent-ext-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 11px; padding: 3px 6px; border-radius: 4px; background: var(--field, rgba(255,255,255,.04)); color: var(--text-muted, #aaa); }
+.agent-ext-connected { color: var(--text, #ddd); box-shadow: inset 3px 0 0 #22c55e; }
 .btn-sm { padding: 1px 6px; font-size: 11px; }
 
 /* Mira de medir con el dedo (vista mobile): anillo en el punto apuntado y una línea hasta el dedo, que queda abajo. */

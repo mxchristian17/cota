@@ -4,6 +4,23 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.20.0] — 2026-11-03
+
+### Added
+- **Pictures in drawings**: the raster images a DXF or DWG uses (a georeferenced map behind a survey plan, a logo in a
+  title block) are shown in their place, under the lines, with their clip and fade. A drawing stores only the path of
+  each picture: choose the picture together with the drawing when opening it, or load it later with the new `IMAGE`
+  command (on a phone, Menu ▸ Load images). The pictures are saved inside the `.cota` file and DXF export writes the
+  image with its path. Until the file is loaded, its frame and name are shown as before; plots show the frame for now.
+- **External agents**: an agent that runs on your computer and speaks MCP (the Model Context Protocol) can work on the
+  drawing open in Cota with its own model, through the Cota bridge `cota-mcp.mjs` (a single script with no
+  dependencies, served with the app). It gets the same tools as Cota's agent, its steps are listed in the agent panel
+  and, with *Ask before running*, each script waits for your OK. Turn it on in the agent panel ⚙ ▸ **External agent**;
+  setup in [external agents](docs/external-agents.md).
+
+### Changed
+- The agent panel keeps room for the conversation (and the Run button) when its settings are open.
+
 ## [2.19.0] — 2026-11-03
 
 ### Added

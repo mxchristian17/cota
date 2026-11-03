@@ -150,6 +150,8 @@ export function entityGrips(e: Entity): Grip[] {
       return [{ point: hatchCenter(e.props), role: { t: 'move' } }]
     case 'SHADE':
       return []
+    case 'IMAGE':
+      return [{ point: e.props.origin, role: { t: 'move' } }]
     case 'VIEWPORT':
       // Recortado: un grip por vértice del contorno (VPCLIP), como el CAD clásico.
       if (e.props.clip && e.props.clip.length >= 3) {

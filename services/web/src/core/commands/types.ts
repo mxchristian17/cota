@@ -188,6 +188,8 @@ export interface AppHooks {
   importFile(): void
   /** OPEN ▸ Device: selector de archivos del sistema (.cota/.dxf/.dwg). */
   openFromDevice(): void
+  /** IMAGE ▸ Reload: selector de los archivos de las imágenes del dibujo. */
+  attachImages(): void
   /** Exporta el dibujo al formato indicado (descarga en el navegador). */
   exportModel(format: 'OBJ' | 'DXF' | 'DWG'): void
   /** Abre el diálogo de configuración de UI (temas/colores). */

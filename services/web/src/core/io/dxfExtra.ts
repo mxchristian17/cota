@@ -1,6 +1,6 @@
 import { decodeTextCodes } from '../text/codes'
 import type { Vec3 } from '../math'
-import type { EntityProps, EntityType } from '../document/types'
+import type { EntityProps, EntityType, ImageProps } from '../document/types'
 
 /**
  * Entidades de DWG/DXF que Cota dibuja con sus piezas simples: multilíneas, multidirectrices, tolerancias geométricas,
@@ -200,15 +200,19 @@ function frame(corners: Vec3[], label: string): Piece[] {
   return pieces
 }
 
-/** IMAGE: 10 = esquina, 11/12 = vectores de un píxel, 13/23 = tamaño en píxeles, 340 = definición con el archivo. */
+/**
+ * IMAGE: 10 = esquina, 11/12 = vectores de un píxel, 13/23 = tamaño en píxeles, 340 = definición con el archivo,
+ * 280 = recorte activo con su contorno en píxeles (14/24), 283 = desvanecido. Los píxeles viven en el archivo: se
+ * adjuntan después (ver `attachImages`).
+ */
 export function image(c: Codes, files: Map<string, string>): Piece[] {
-  const o = pointOf(c, 10)
-  const u = pointOf(c, 11)
-  const v = pointOf(c, 12)
-  const sx = num(c, 13, 1)
-  const sy = num(c, 23, 1)
-  const a = add(o, u, sx)
-  return frame([o, a, add(a, v, sy), add(o, v, sy)], baseName(files.get((str(c, 340) ?? '').toUpperCase())))
+  const size: [number, number] = [Math.max(1, num(c, 13, 1)), Math.max(1, num(c, 23, 1))]
+  const xs = c.filter(([k]) => k === 14).map(([, x]) => Number(x))
+  const ys = c.filter(([k]) => k === 24).map(([, y]) => Number(y))
+  const clip = num(c, 280, 0) === 1 && xs.length >= 2 ? xs.map((x, i): [number, number] => [x, ys[i] ?? 0]) : undefined
+  const fade = num(c, 283, 0)
+  const props: ImageProps = { origin: pointOf(c, 10), u: pointOf(c, 11), v: pointOf(c, 12), size, file: files.get((str(c, 340) ?? '').toUpperCase()) ?? '', ...(clip ? { clip } : {}), ...(fade > 0 ? { fade } : {}) }
+  return [{ type: 'IMAGE', props }]
 }
 
 /** PDFUNDERLAY / DWFUNDERLAY / DGNUNDERLAY: el archivo vive fuera; se marca el punto de inserción con su nombre. */

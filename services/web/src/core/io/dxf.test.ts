@@ -3,7 +3,7 @@ import { exportDxf, importDxf, plainMtext } from './dxf'
 import { textTop } from '../geom/text'
 import type { TextProps } from '../document/types'
 import { DEFAULT_DIM_STYLE } from '../dimension/dimGeometry'
-import type { DimensionProps, Entity, Layer } from '../document/types'
+import type { DimensionProps, Entity, ImageProps, Layer } from '../document/types'
 import { formatDim, measureDim } from '../dimension/dimGeometry'
 import { BUILTIN_DIM_VARS } from '../dimension/style'
 
@@ -591,13 +591,17 @@ describe('entidades de DWG/DXF que Cota dibuja con piezas simples', () => {
     expect(r.entities.filter((e) => e.type === 'TEXT').map((e) => (e.props as { text: string }).text)).toEqual(['0.2', 'A'])
   })
 
-  it('IMAGE: su marco y el nombre del archivo, con el aviso', () => {
+  it('IMAGE: la imagen con su lugar, su tamaño y el archivo; vuelve igual al exportar', () => {
     const r = importDxf(
-      `${dxf(rec('IMAGE', [10, 1], [20, 1], [30, 0], [11, 0.5], [21, 0], [31, 0], [12, 0], [22, 0.5], [32, 0], [13, 20], [23, 10], [340, 'AB']))}0\nSECTION\n2\nOBJECTS\n0\nIMAGEDEF\n5\nAB\n1\nC:\\fotos\\logo.png\n0\nENDSEC\n`,
+      `${dxf(rec('IMAGE', [10, 1], [20, 1], [30, 0], [11, 0.5], [21, 0], [31, 0], [12, 0], [22, 0.5], [32, 0], [13, 20], [23, 10], [340, 'AB'], [280, 1], [71, 1], [91, 2], [14, 1.5], [24, 2.5], [14, 9.5], [24, 7.5], [283, 30]))}0\nSECTION\n2\nOBJECTS\n0\nIMAGEDEF\n5\nAB\n1\nC:\\fotos\\logo.png\n0\nENDSEC\n`,
     )
-    expect((r.entities[0].props as { vertices: number[][] }).vertices).toEqual([[1, 1, 0], [11, 1, 0], [11, 6, 0], [1, 6, 0]])
-    expect((r.entities[1].props as { text: string }).text).toBe('logo.png')
-    expect(r.simplified).toEqual({ IMAGE: 1 })
+    expect(r.entities).toHaveLength(1)
+    const e = r.entities[0]
+    expect(e.type).toBe('IMAGE')
+    expect(e.props).toEqual({ origin: [1, 1, 0], u: [0.5, 0, 0], v: [0, 0.5, 0], size: [20, 10], file: 'C:\\fotos\\logo.png', clip: [[1.5, 2.5], [9.5, 7.5]], fade: 30 })
+    expect(r.simplified).toBeUndefined()
+    const back = importDxf(exportDxf([{ id: 'i', type: 'IMAGE', layer: 'A', props: { ...(e.props as ImageProps), data: 'data:image/png;base64,AAAA' } }], [lineLayer]))
+    expect(back.entities[0].props).toEqual(e.props) // los píxeles no viajan: el DXF guarda la ruta
   })
 
   it('una malla se exporta como caras 3D', () => {

@@ -1,4 +1,5 @@
 import { BYBLOCK, BYLAYER_OF } from '../linetype/linetypes'
+import { mapImage } from '../geom/image'
 import { mapShade } from '../projection/shade'
 import { mapHatch } from '../hatch/edit'
 import type { Vec3 } from '../math'
@@ -228,6 +229,8 @@ export function transformEntity(e: Entity, ins: InsertProps): Entity {
   switch (e.type) {
     case 'SHADE':
       return { ...e, props: mapShade(e.props, P) }
+    case 'IMAGE':
+      return { ...e, props: mapImage(e.props, P) }
     case 'POINT':
       return { ...e, props: { position: P(e.props.position) } }
     case 'LINE':

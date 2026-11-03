@@ -1,4 +1,5 @@
 import { hatchPoints, mapHatch } from '../hatch/edit'
+import { imageRing, mapImage } from '../geom/image'
 import { mapShade, shadeOutline } from '../projection/shade'
 import type { Vec3 } from '../math'
 import type { ArcProps, AttdefProps, DimensionProps, Entity, EntityInput, PolylineProps, TextProps } from '../document/types'
@@ -95,6 +96,8 @@ function entityPoints(e: Entity): Vec3[] {
       return hatchPoints(e.props)
     case 'SHADE':
       return shadeOutline(e.props)
+    case 'IMAGE':
+      return imageRing(e.props)
   }
 }
 
@@ -273,6 +276,8 @@ export function rotateEntityInput(e: Entity, center: Vec3, ang: number): EntityI
     }
     case 'SHADE':
       return { type: 'SHADE', layer: e.layer, props: mapShade(e.props, (v) => rot(v, cx, cy, cos, sin)) }
+    case 'IMAGE':
+      return { type: 'IMAGE', layer: e.layer, props: mapImage(e.props, (v) => rot(v, cx, cy, cos, sin)) }
     case 'HATCH': {
       // Giro de planta alrededor de Z: lazos, origen y semillas; el patrón gira con ellos.
       const p = mapHatch(e.props, (v) => rot(v, cx, cy, cos, sin))

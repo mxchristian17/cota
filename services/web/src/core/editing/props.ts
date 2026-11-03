@@ -252,6 +252,13 @@ export function entityFields(e: Entity): PropField[] {
     }
     case 'SHADE':
       return []
+    case 'IMAGE':
+      return [
+        { key: '_file', label: 'File', kind: 'text', value: e.props.file, readOnly: true },
+        { key: '_size', label: 'Size (px)', kind: 'text', value: `${e.props.size[0]} × ${e.props.size[1]}`, readOnly: true },
+        { key: '_attached', label: 'Image', kind: 'text', value: e.props.data ? 'Attached' : 'Not found', readOnly: true },
+        { key: 'fade', label: 'Fade', kind: 'number', value: e.props.fade ?? 0 },
+      ]
     case 'HATCH': {
       // Como la paleta del CAD clásico: Pattern (nombre, ángulo, escala) y Geometry (área); .
       const p = e.props
@@ -406,6 +413,9 @@ export function applyField(e: Entity, key: string, value: number | string | bool
       break
     }
     case 'MESH3D':
+      break
+    case 'IMAGE':
+      if (key === 'fade') e.props.fade = Math.max(0, Math.min(100, num))
       break
   }
 }

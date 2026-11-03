@@ -11,7 +11,9 @@ import { CommandEngine } from '../core/commands/CommandEngine'
 import { registerDefaultCommands } from '../core/commands/registry'
 import { applySysvars, persistedSysvars, sysvars, type PersistedSysvars } from '../core/commands/sysvars'
 import type { AppHooks, Command, Measure } from '../core/commands/types'
-import type { DimensionProps, DocumentData, DrawingVars, Entity, HatchIsland, SolidProps, EntityProps, EntityType, LineType, PageSetup } from '../core/document/types'
+import type { DimensionProps, DocumentData, DrawingVars, Entity, HatchIsland, SolidProps, EntityProps, EntityType, ImageEntity, ImageProps, LineType, PageSetup } from '../core/document/types'
+import { IMAGE_EXTS, imageFileName, isImageFile } from '../core/geom/image'
+import { drawingImages } from '../core/commands/impl/image'
 import { rebuildHatchLoops } from '../core/hatch/assoc'
 import { DEFAULT_THEME, normalizeTheme, type Theme } from '../core/theme'
 import { DEFAULT_OSNAP, normalizeOsnap, type OsnapConfig, type OsnapKind } from '../core/snap/osnap'
@@ -455,6 +457,10 @@ export interface AppState {
   openFromDevice: () => void
   /** Abre como dibujo un archivo elegido del dispositivo (sin ruta: SAVE lo guarda como nuevo). */
   openDeviceFile: (file: File) => Promise<void>
+  /** Selector de los archivos de las imágenes del dibujo (un plano guarda sólo su ruta). */
+  attachImages: () => void
+  /** Carga los píxeles de las imágenes del dibujo desde esos archivos, asociados por el nombre; devuelve cuántas. */
+  attachImageFiles: (files: File[]) => Promise<number>
   exportModel: (format: 'OBJ' | 'DXF' | 'DWG') => void
   computePreview: (cursor: Pt) => PreviewShape[]
   listCommands: () => Command[]
@@ -507,8 +513,16 @@ export interface AppState {
 const solidsAsMeshes = (list: Entity[]): Entity[] => list.map((e) => (e.type === 'SOLID3D' ? ({ ...e, type: 'MESH3D', props: solidMesh(e.props) } as Entity) : e))
 
 /** Qué se pierde de cada entidad que entra simplificada al abrir un DWG/DXF. */
+/** Contenido de un archivo como data URL (los píxeles de una imagen viajan así dentro del dibujo). */
+const fileDataUrl = (f: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result ?? ''))
+    r.onerror = () => reject(r.error ?? new Error('read failed'))
+    r.readAsDataURL(f)
+  })
+
 const SIMPLIFIED_NOTE: Record<string, string> = {
-  IMAGE: 'frame and file name: the picture is an external file',
   PDFUNDERLAY: 'file name: the underlay is an external file',
   DWFUNDERLAY: 'file name: the underlay is an external file',
   DGNUNDERLAY: 'file name: the underlay is an external file',
@@ -686,6 +700,11 @@ export const useStore = create<AppState>((set, get) => {
     if (unsupported.length) print(`Unsupported entities skipped: ${unsupported.join(', ')}.`)
     if (r.meshedSolids) print(`${r.meshedSolids} 3D solid(s) read with their faces (as meshes).`)
     if (r.wireSolids) print(`${r.wireSolids} 3D solid(s) shown by their edges (wireframe): their faces could not be read.`)
+    const noFile = entities.filter((e) => e.type === 'IMAGE' && !(e.props as ImageProps).data)
+    if (noFile.length) {
+      const names = [...new Set(noFile.map((e) => imageFileName(e.props as ImageProps)).filter(Boolean))]
+      print(`${noFile.length} image(s) use external files${names.length ? ` (${names.slice(0, 3).join(', ')}${names.length > 3 ? '…' : ''})` : ''}: load them with ${isPhone() ? 'Menu ▸ Load images' : 'IMAGE'}, or open them together with the drawing.`)
+    }
     if (r.simplified) print(`Simplified on open: ${Object.entries(r.simplified).map(([k, n]) => `${n} ${k} (${SIMPLIFIED_NOTE[k] ?? 'simplified'})`).join(', ')}.`)
     if (asDrawing && r.layouts?.length) applyDxfLayouts(r.layouts, (n) => idByName.get(n.toLowerCase()) ?? doc.firstLayerId)
     const clayer = currentLayer && idByName.get(currentLayer.toLowerCase())
@@ -1148,6 +1167,7 @@ export const useStore = create<AppState>((set, get) => {
     publish: (ids) => get().publishLayouts(ids),
     importFile: () => get().importFile(),
     openFromDevice: () => get().openFromDevice(),
+    attachImages: () => get().attachImages(),
     exportModel: (fmt) => get().exportModel(fmt),
     openOptions: () => get().openOptions(),
     openOsnap: () => get().openOsnap(),
@@ -2789,12 +2809,65 @@ export const useStore = create<AppState>((set, get) => {
     openFromDevice: () => {
       const input = document.createElement('input')
       input.type = 'file'
-      input.accept = fileAccept(`${DRAWING_EXTS.join(',')},.dxf,.dwg,${MODEL_EXTS.join(',')}`)
-      input.onchange = () => {
-        const file = input.files?.[0]
-        if (file) void get().openDeviceFile(file)
+      input.accept = fileAccept(`${DRAWING_EXTS.join(',')},.dxf,.dwg,${MODEL_EXTS.join(',')},${IMAGE_EXTS.join(',')}`)
+      // Se puede elegir el plano junto con sus imágenes: se cargan al abrirlo.
+      input.multiple = true
+      input.onchange = async () => {
+        const files = [...(input.files ?? [])]
+        const images = files.filter((f) => isImageFile(f.name))
+        const file = files.find((f) => !isImageFile(f.name))
+        if (file) await get().openDeviceFile(file)
+        else if (!drawingImages(doc).length) return void get().openDeviceFile(images[0]) // una foto sola no es un plano
+        if (images.length) await get().attachImageFiles(images)
       }
       input.click()
+    },
+    attachImages: () => {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = fileAccept(IMAGE_EXTS.join(','))
+      input.multiple = true
+      input.onchange = () => void get().attachImageFiles([...(input.files ?? [])])
+      input.click()
+    },
+    attachImageFiles: async (files) => {
+      const images = drawingImages(doc)
+      if (!images.length) {
+        print('The drawing has no images to load.')
+        return 0
+      }
+      const key = (path: string) => (path.split(/[\\/]/).pop() ?? path).toLowerCase()
+      const stem = (path: string) => key(path).replace(/\.[^.]+$/, '')
+      const wanted = new Set(images.filter((e) => !e.props.data).map((e) => key(e.props.file)))
+      // Por el nombre; si no, por el nombre sin extensión (p. ej. el TIF convertido a PNG); si falta una sola y se
+      // eligió un solo archivo, ése.
+      const pick = (e: ImageEntity): File | undefined =>
+        files.find((f) => key(f.name) === key(e.props.file)) ??
+        files.find((f) => stem(f.name) === stem(e.props.file)) ??
+        (files.length === 1 && wanted.size === 1 && !e.props.data ? files[0] : undefined)
+      const read = new Map<File, string | null>()
+      const dataOf = async (f: File): Promise<string | null> => {
+        if (!read.has(f)) read.set(f, await fileDataUrl(f).catch(() => null))
+        return read.get(f) ?? null
+      }
+      const plan: Array<{ e: ImageEntity; data: string }> = []
+      for (const e of images) {
+        const f = pick(e)
+        const data = f && (await dataOf(f))
+        if (data) plan.push({ e, data })
+      }
+      const unused = files.filter((f) => !plan.some((x) => pick(x.e) === f)).map((f) => f.name)
+      if (!plan.length) {
+        print(`None of the chosen files is an image of the drawing (it uses ${[...new Set(images.map((e) => imageFileName(e.props)))].join(', ')}).`)
+        return 0
+      }
+      pushSnapshot('image')
+      for (const { e, data } of plan) e.props.data = data
+      doc.touch()
+      bump()
+      const still = images.filter((e) => !e.props.data).length
+      print(`Loaded ${plan.length} image(s)${still ? `; ${still} still without their file` : ''}.${unused.length ? ` Not used: ${unused.join(', ')}.` : ''}`)
+      return plan.length
     },
     openDeviceFile: async (file) => {
       const lower = file.name.toLowerCase()

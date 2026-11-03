@@ -6,7 +6,8 @@ import { OPENAI_BASE, PROVIDERS, ProviderError, type ChatMessage, type ProviderC
 import { api } from '../core/io/apiClient'
 import { CLOUD_ENABLED } from '../core/io/backend'
 import { compactConversation, runAgentTurn, type AgentEvent, type ApplyMode } from './loop'
-import type { AgentHost } from './tools'
+import { runTool, type AgentHost, type ToolResult } from './tools'
+import { connectExternal, EXTERNAL_PORT, type ExternalStatus } from './external'
 
 /**
  * Estado del panel del agente (modo navegador): ajustes, conversaciones guardadas en IndexedDB (no se pierden al
@@ -83,6 +84,9 @@ interface AgentState {
   pending: { script: string; resolve: (ok: boolean) => void } | null
   /** Key escrita esperando la decisión de guardarla o no. */
   keyAwaitingDecision: string | null
+  /** Agente externo (OpenCode, Claude Code…) por el puente MCP: encendido, puerto y estado de la conexión. */
+  external: { on: boolean; port: number; status: ExternalStatus }
+  setExternal: (p: { on?: boolean; port?: number }) => void
   toggle: (open?: boolean) => void
   load: () => Promise<void>
   setSettings: (p: Partial<AgentSettings>) => void
@@ -98,6 +102,8 @@ interface AgentState {
 }
 
 let abort: AbortController | null = null
+let stopExternal: (() => void) | null = null
+const EXTERNAL_KEY = 'cota.agent.external'
 
 const DEFAULT: AgentSettings = { provider: 'anthropic', model: PROVIDERS.anthropic.model, baseUrl: '', mode: 'ask' }
 
@@ -162,6 +168,34 @@ export const useAgentStore = create<AgentState>((set, get) => {
   return {
     settings: { ...DEFAULT, ...read<Partial<AgentSettings>>(SETTINGS_KEY, {}) },
     keyDecision: read<KeyDecision | null>(DECISION_KEY, null),
+    external: { on: false, port: EXTERNAL_PORT, ...read<{ on?: boolean; port?: number }>(EXTERNAL_KEY, {}), status: 'off' },
+    setExternal: (p) => {
+      const next = { ...get().external, ...p }
+      write(EXTERNAL_KEY, { on: next.on, port: next.port })
+      set({ external: next })
+      stopExternal?.()
+      stopExternal = null
+      if (!next.on) return
+      // Lo que pide el agente externo corre como lo del propio: con "Ask before running", cada script espera el OK.
+      stopExternal = connectExternal(next.port, {
+        onStatus: (status) => {
+          if (get().external.status !== status) set({ external: { ...get().external, status } })
+        },
+        run: async (name, args): Promise<ToolResult> => {
+          if (name === 'run_commands' && get().settings.mode === 'ask') {
+            if (!useStore.getState().agentOpen) useStore.getState().setAgentPanel({ open: true }) // la pregunta tiene que verse
+            const ok = await new Promise<boolean>((resolve) => set({ pending: { script: String(args.script ?? ''), resolve } }))
+            if (!ok) {
+              set({ feed: [...get().feed, { kind: 'tool', name: `external ${name}`, summary: 'rejected by the user', isError: true }] })
+              return { text: 'The user rejected this script. Do not run it again; ask what to change.', isError: true }
+            }
+          }
+          const r = await runTool(browserHost(), name, args)
+          set({ feed: [...get().feed, { kind: 'tool', name: `external ${name}`, summary: r.text.split('\n')[0].slice(0, 120), isError: r.isError }] })
+          return r
+        },
+      })
+    },
     hasKey: false,
     conversations: [],
     currentId: null,
@@ -298,6 +332,9 @@ async function storeKey(p: ProviderId, key: string, d: KeyDecision): Promise<voi
   all[p] = key
   await idbSet(KEYS_KEY, all)
 }
+
+// Si quedó encendido, el agente externo se reconecta al abrir Cota.
+if (useAgentStore.getState().external.on) useAgentStore.getState().setExternal({})
 
 // AGENT y COMPACT (comandos) llegan por el puente.
 agentBridge.set((a) => {
