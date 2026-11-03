@@ -4,6 +4,42 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.13.0] — 2026-11-02
+
+### Added
+- **Layouts from DWG and DXF files**: paper space opens as sheets, with their page size, content and viewports. It used
+  to be mixed into the model.
+- Construction lines and rays: `XLINE` and `RAY` commands, opened from and exported to DWG and DXF as what they are.
+- More entities when opening DWG and DXF files: multilines, multileaders, geometric tolerances, arc dimensions, helixes,
+  attribute definitions outside blocks and the frames of external images and OLE objects. A message lists what comes in
+  simplified.
+- 3D solids, regions and surfaces from DWG and DXF that do not store their edges now show them, read from their ACIS data.
+- 3D solids and meshes are exported to DXF and DWG as 3D faces (they used to be left out).
+- `Ctrl+S` saves the drawing and `Ctrl+Shift+S` saves it with another name.
+- `RECT` as a shortcut of `RECTANGLE`.
+- [DWG and DXF coverage](docs/dwg-coverage.md): what happens to each entity type when opening and exporting.
+
+### Changed
+- Double-clicking any object opens its properties (polylines and hatches used to start an edit command). A block with
+  attributes still opens its attribute editor.
+- With objects selected, the layer controls show their layer, with `(+N)` if there are several, and go back to the
+  current layer when deselecting.
+- `UNDO` and `REDO` say what they undid or redid, such as `Undo: EXTRUDE.`
+- Clicks catch a line up to 10 pixels away; the line right under the cursor wins over one that is merely close.
+
+### Fixed
+- **Saving with another name** in a working folder overwrote the old file and reported its name. It now creates the new file.
+- Holding the click or moving the mouse slightly when starting a selection window no longer closes it at once, and such
+  a click on a line selects it.
+- `STRETCH` outside the plan view: the window preview came out as a triangle and objects off the XY plane were not
+  caught. A window marked with the mouse now covers what it shows on screen in any view; with typed coordinates it
+  goes in the XY plane of the current UCS.
+- `STRETCH` no longer drops a polyline's plane or a spline's data.
+- Fence and polygon selections marked with the mouse, and typed `Window` and `Crossing`, work outside the plan view.
+- `ZOOM Window` and `-VIEW Window` frame the window as it shows on screen in 3D views, and show its rectangle.
+  `TRIM`'s crossing window shows it too.
+- Object snaps no longer miss a part close to the camera in perspective.
+
 ## [2.12.0] — 2026-10-29
 
 ### Changed

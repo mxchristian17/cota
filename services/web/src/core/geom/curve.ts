@@ -1,3 +1,4 @@
+import { lineSpan } from './xline'
 import type { Vec3 } from '../math'
 import type { ArcProps, Entity, EntityProps, EntityType, EllipseProps } from '../document/types'
 import { normAngle, sweepOf, TAU } from './arc'
@@ -616,7 +617,7 @@ export function splineCurve(points: Vec3[], degree = 3): Curve | null {
 export function curveOf(e: Entity): Curve | null {
   switch (e.type) {
     case 'LINE':
-      return new Curve('LINE', [{ k: 'L', a: e.props.start, b: e.props.end }], false)
+      return new Curve('LINE', [{ k: 'L', a: lineSpan(e.props)[0], b: lineSpan(e.props)[1] }], false)
     case 'CIRCLE': {
       if (!flat(e.props.normal) || e.props.radius <= 0) return null
       const sw = (e.props.normal?.[2] ?? 1) < 0 ? -TAU : TAU

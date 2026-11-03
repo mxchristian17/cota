@@ -57,6 +57,8 @@ import { MM_TO_PT, modelPlotPage, pdfDocument, type PdfPage, type PlotArea } fro
 import { layoutPage, plotLayouts } from '../core/io/layoutPlot'
 import { DEFAULT_PLOT, plotPage, type PlotSettings } from '../core/io/plotSettings'
 import { paperPerModel, unitToMm } from '../core/layout/scale'
+import { PAPER_SIZES, defaultPageSetup } from '../core/layout/paper'
+import { newViewportProps } from '../core/layout/viewport'
 import { fieldContextFor, resolveFieldTexts } from '../core/fields/context'
 import { exportObj, importObj, type ObjMesh } from '../core/io/obj'
 import { exportDxf, importDxf, type DxfImportResult } from '../core/io/dxf'
@@ -499,6 +501,32 @@ export interface AppState {
   setDocPath: (path: string) => void
 }
 
+/** Al exportar a DXF/DWG, los sólidos de Cota salen como la malla de sus caras: la pieza se conserva tal como se ve. */
+const solidsAsMeshes = (list: Entity[]): Entity[] => list.map((e) => (e.type === 'SOLID3D' ? ({ ...e, type: 'MESH3D', props: solidMesh(e.props) } as Entity) : e))
+
+/** Qué se pierde de cada entidad que entra simplificada al abrir un DWG/DXF. */
+const SIMPLIFIED_NOTE: Record<string, string> = {
+  IMAGE: 'frame and file name: the picture is an external file',
+  PDFUNDERLAY: 'file name: the underlay is an external file',
+  DWFUNDERLAY: 'file name: the underlay is an external file',
+  DGNUNDERLAY: 'file name: the underlay is an external file',
+  OLE2FRAME: 'frame only',
+  WIPEOUT: 'the mask is not applied',
+  SHAPE: 'a point: its drawing is in an external shape file',
+}
+
+/** Página de una hoja de DWG/DXF: el papel estándar de ese tamaño o uno personalizado. */
+function dxfPageSetup(s: { width: number; height: number; margins: [number, number, number, number] }): PageSetup {
+  const [short, long] = [Math.min(s.width, s.height), Math.max(s.width, s.height)]
+  const known = Object.entries(PAPER_SIZES).find(([, p]) => Math.abs(p.size[0] - short) < 1 && Math.abs(p.size[1] - long) < 1)?.[0]
+  return {
+    ...defaultPageSetup(known ?? 'CUSTOM'),
+    ...(known ? {} : { customSize: [short, long] as [number, number] }),
+    orientation: s.width >= s.height ? 'landscape' : 'portrait',
+    marginsMm: s.margins,
+  }
+}
+
 /** Refleja el color/tamaño de crosshair del tema en variables CSS. */
 function setCrosshairVars(theme: Theme): void {
   if (typeof document === 'undefined') return
@@ -595,6 +623,30 @@ export const useStore = create<AppState>((set, get) => {
     }
     vp.zoomExtents()
   }
+  /** Hojas de un DWG/DXF: reemplazan a las que trae un dibujo nuevo. */
+  const applyDxfLayouts = (specs: NonNullable<DxfImportResult['layouts']>, layerId: (name: string) => string) => {
+    const empty = doc.layouts.filter((l) => !l.entities.length)
+    for (const l of empty) doc.renameLayout(l.id, `~${l.id}`) // sus nombres quedan libres para las hojas del archivo
+    const tabs = specs.map((s) => {
+      const layout = doc.addLayout(doc.findLayoutByName(s.name) ? undefined : s.name, dxfPageSetup(s))
+      layout.initialized = true
+      return { layout, s }
+    })
+    for (const l of empty) doc.removeLayout(l.id)
+    const back = doc.activeTab
+    for (const { layout, s } of tabs) {
+      doc.setActiveTab(layout.id)
+      for (const e of s.entities) {
+        doc.addEntity({ type: e.type, layer: layerId(e.layerName), props: e.props, lineType: e.lineType ?? 'BYLAYER', ltScale: e.ltScale ?? 1, color: e.color ?? 'BYLAYER', lineWeight: e.lineWeight ?? -1 })
+      }
+      for (const v of s.viewports) {
+        const props = newViewportProps(v.center, v.width, v.height)
+        Object.assign(props, { target: v.target, az: v.az, el: v.el, scale: v.mmPerUnit / unitToMm(doc.units), locked: v.locked, on: v.on })
+        doc.addEntity({ type: 'VIEWPORT', layer: layerId(v.layerName), props })
+      }
+    }
+    doc.setActiveTab(back)
+  }
   /** Carga en el dibujo un DXF ya interpretado (en el hilo aparte de lectura o acá). */
   const applyDxf = (r: DxfImportResult, asDrawing = false): number => {
     const { currentLayer, layers, entities, dimStyles, linetypes, vars, view, unsupported } = r
@@ -631,6 +683,8 @@ export const useStore = create<AppState>((set, get) => {
     }
     if (unsupported.length) print(`Unsupported entities skipped: ${unsupported.join(', ')}.`)
     if (r.wireSolids) print(`${r.wireSolids} 3D solid(s) shown by their edges (wireframe): their faces are not read yet.`)
+    if (r.simplified) print(`Simplified on open: ${Object.entries(r.simplified).map(([k, n]) => `${n} ${k} (${SIMPLIFIED_NOTE[k] ?? 'simplified'})`).join(', ')}.`)
+    if (asDrawing && r.layouts?.length) applyDxfLayouts(r.layouts, (n) => idByName.get(n.toLowerCase()) ?? doc.firstLayerId)
     const clayer = currentLayer && idByName.get(currentLayer.toLowerCase())
     if (asDrawing) set({ currentLayerId: clayer || doc.firstLayerId })
     return entities.length
@@ -645,7 +699,7 @@ export const useStore = create<AppState>((set, get) => {
   }
   /** Envuelve un importador con snapshot de undo + reencuadre + mensajes. */
   const runImport = (importer: () => number, label: (n: number) => string) => {
-    pushSnapshot()
+    pushSnapshot('import')
     const n = importer()
     if (n === 0) {
       undoStack.pop()
@@ -681,6 +735,9 @@ export const useStore = create<AppState>((set, get) => {
   const isView = (e: UndoEntry | undefined): e is ViewUndo => !!e && (e as ViewUndo).kind === 'view'
   const undoStack: UndoEntry[] = []
   const redoStack: UndoEntry[] = []
+  /** Qué hizo cada paso de deshacer (EXTRUDE, cambio de capa…), para decirlo al deshacerlo o rehacerlo. */
+  const undoLabels = new WeakMap<object, string>()
+  const stepMessage = (verb: string, label: string | undefined) => (label ? `${verb}: ${label}.` : `${verb}.`)
   let restoringView = false
   /** Id de la capa `name` (la crea si no existe), p. ej. MD_Visible / MD_Hidden de las vistas de dibujo. */
   const ensureLayerId = (name: string, lineType?: string, color?: string): string => {
@@ -749,7 +806,7 @@ export const useStore = create<AppState>((set, get) => {
   }
   /** Dibujo nuevo desde una plantilla; sus preferencias (colores, osnaps, estilo…) pasan a ser las del usuario. */
   const applyTemplate = (t: DrawingTemplate, full = true) => {
-    if (full) pushSnapshot()
+    if (full) pushSnapshot('template')
     doc.load(drawingFromTemplate(t, 'drawing1'))
     if (t.prefs) {
       set(prefsPatch(t.prefs))
@@ -830,14 +887,16 @@ export const useStore = create<AppState>((set, get) => {
 
   /** Lotes de multicomandos en curso: sus comandos no dejan pasos de deshacer propios (el lote deja uno). */
   let scriptDepth = 0
-  const pushSnapshot = () => {
-    undoStack.push(doc.toJSON())
+  const pushSnapshot = (label?: string) => {
+    const snap = doc.toJSON()
+    if (label) undoLabels.set(snap, label)
+    undoStack.push(snap)
     if (undoStack.length > MAX_UNDO) undoStack.shift()
     redoStack.length = 0
   }
   /** CRUD de layouts con paso de undo; si falla (nombre inválido…) imprime el motivo y no deja rastro. */
   const layoutOp = (fn: () => void): boolean => {
-    pushSnapshot()
+    pushSnapshot('layout')
     try {
       fn()
       bump()
@@ -1011,9 +1070,15 @@ export const useStore = create<AppState>((set, get) => {
     openDialog: () => void get().openDocumentsDialog(),
     save: (name) => {
       if (name && name.trim()) {
+        const before = `${get().docFolder}/${get().docName}`
         // "carpeta/sub/nombre" fija carpeta + nombre; un nombre simple conserva la carpeta actual.
         if (name.includes('/')) get().setDocPath(name.trim())
         else get().setDocName(name.trim())
+        // Guardar como: otro nombre es otro archivo (el que estaba abierto queda como estaba).
+        if (`${get().docFolder}/${get().docName}` !== before) {
+          currentFile = null
+          set({ docId: null, fsFilePath: null })
+        }
       }
       void get().saveDocument()
     },
@@ -1064,6 +1129,7 @@ export const useStore = create<AppState>((set, get) => {
     openDimStyle: () => get().openDimStyle(),
     setCurrentLayer: (id) => set({ currentLayerId: id }),
     facingNormal: () => get().activeViewport?.facingNormal() ?? [0, 0, 1],
+    viewPlane: () => get().activeViewport?.viewPlane() ?? null,
     setViewportLayout: (n) => get().setViewportLayout(n),
     exportPdf: () => get().exportPdf(),
     qselect: () => get().openQselect(),
@@ -1153,7 +1219,7 @@ export const useStore = create<AppState>((set, get) => {
     ensureLayer: (name, lineType, color) => ensureLayerId(name, lineType, color),
     updateDrawingViews: (ids, force) => updateDrawingViews(ids, force),
     downloadDxf: (entities, base) => {
-      const dxf = exportDxf(entities, doc.layers, get().currentLayerId, doc.dimStyles, { linetypes: doc.linetypes, vars: doc.toJSON().vars })
+      const dxf = exportDxf(solidsAsMeshes(entities), doc.layers, get().currentLayerId, doc.dimStyles, { linetypes: doc.linetypes, vars: doc.toJSON().vars })
       const blob = new Blob([dxf], { type: 'application/dxf' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -1245,7 +1311,7 @@ export const useStore = create<AppState>((set, get) => {
           return doc.firstLayerId
         }
       }
-      pushSnapshot()
+      pushSnapshot('projection')
       const visLayer = ensureProjLayer('PROJ', 'CONTINUOUS')
       const hidLayer = ensureProjLayer('PROJ-HIDDEN', 'DASHED')
       // Como el CAD clásico: líneas, arcos y círculos (no miles de tramos sueltos).
@@ -1269,6 +1335,7 @@ export const useStore = create<AppState>((set, get) => {
     doc,
     currentLayerId: () => get().currentLayerId,
     isOrtho: () => get().ortho,
+    viewPlane: () => get().activeViewport?.viewPlane() ?? null,
     isDynInput: () => get().dynInput,
     currentCursor: () => get().cursor,
     currentUcs: () => get().ucs,
@@ -1297,6 +1364,7 @@ export const useStore = create<AppState>((set, get) => {
       capturedVars = null
       if (name === 'UNDO' || name === 'REDO' || !capturedBefore) return
       if (doc.revision !== capturedRev) {
+        undoLabels.set(capturedBefore, name)
         undoStack.push(capturedBefore)
         if (undoStack.length > MAX_UNDO) undoStack.shift()
         redoStack.length = 0
@@ -1509,7 +1577,7 @@ export const useStore = create<AppState>((set, get) => {
     setObjectProps: (ids, p) => {
       const list = ids.map((id) => doc.getEntity(id)).filter((e): e is Entity => !!e)
       if (!list.length) return 0
-      pushSnapshot()
+      pushSnapshot('properties')
       const layerId = p.layer ? doc.layers.find((l) => l.name.toLowerCase() === p.layer!.toLowerCase())?.id : undefined
       for (const e of list) {
         if (layerId) e.layer = layerId
@@ -1656,12 +1724,7 @@ export const useStore = create<AppState>((set, get) => {
     },
     entityDoubleClick: (id) => {
       const e = doc.getEntity(id)
-      // DBLCLKEDIT: un sombreado abre HATCHEDIT y una polilínea PEDIT, como el CAD clásico.
-      if ((e?.type === 'HATCH' || e?.type === 'POLYLINE') && !get().engine.busy && !get().engine.hasPending) {
-        get().selectEntity(id)
-        get().submitCommand(e.type === 'HATCH' ? 'HATCHEDIT' : 'PEDIT')
-        return
-      }
+      // Cualquier objeto abre sus propiedades; un bloque con atributos, su editor de atributos.
       if (e?.type !== 'INSERT' || !e.props.attributes?.length) {
         get().selectEntity(id)
         get().openProperties()
@@ -1676,7 +1739,7 @@ export const useStore = create<AppState>((set, get) => {
         )
         .then((values) => {
           if (!values || values.every((v, i) => v === attrs[i].value)) return
-          pushSnapshot()
+          pushSnapshot('attributes')
           attrs.forEach((a, i) => (a.value = values[i] ?? a.value))
           doc.touch()
           bump()
@@ -1686,7 +1749,7 @@ export const useStore = create<AppState>((set, get) => {
     openDwgProps: () => set({ dwgPropsOpen: true }),
     closeDwgProps: () => set({ dwgPropsOpen: false }),
     setDrawingProps: (patch) => {
-      pushSnapshot()
+      pushSnapshot('drawing properties')
       doc.setMeta(patch)
       bump()
     },
@@ -1887,7 +1950,7 @@ export const useStore = create<AppState>((set, get) => {
             continue
           }
           if (!fn) return // eXit o Esc
-          pushSnapshot()
+          pushSnapshot('grip edit')
           const ids = name === 'STRETCH' ? [entityId] : targets()
           const res = copy ? addTransformed(doc, ids, fn) : applyTransform(doc, ids, fn)
           doc.touch()
@@ -1905,7 +1968,7 @@ export const useStore = create<AppState>((set, get) => {
       // No-op: fijar el grip en su mismo lugar no genera un paso de undo.
       const g = grip.point
       if (Math.hypot(to[0] - g[0], to[1] - g[1], to[2] - g[2]) < 1e-9) return
-      pushSnapshot()
+      pushSnapshot('grip edit')
       applyGrip(e, grip, to)
       // Punto de cota arrastrado: se reasocia al objeto donde cayó (o deja de ser asociativo).
       if (e.type === 'DIMENSION' && grip.role.t === 'dim-point') {
@@ -1974,14 +2037,14 @@ export const useStore = create<AppState>((set, get) => {
           return !l || !l.locked // una entidad en capa bloqueada no se edita
         })
       if (movable.length === 0) return
-      pushSnapshot()
+      pushSnapshot('layer change')
       for (const e of movable) e.layer = id
       doc.touch()
       print(`${movable.length} object(s) moved to layer "${target.name}".`)
       bump()
     },
     moveLayer: (id, to) => {
-      pushSnapshot()
+      pushSnapshot('layer order')
       if (!moveLayerTo(doc.layers, id, to)) {
         undoStack.pop()
         return
@@ -1991,7 +2054,7 @@ export const useStore = create<AppState>((set, get) => {
     },
     createLayer: (name) => {
       try {
-        pushSnapshot()
+        pushSnapshot('new layer')
         const layer = layerSvc.create(name)
         print(`Layer "${layer.name}" created.`)
         bump()
@@ -2061,7 +2124,7 @@ export const useStore = create<AppState>((set, get) => {
     closeLayers: () => set({ layersOpen: false }),
     renameLayer: (id, name) => {
       try {
-        pushSnapshot()
+        pushSnapshot('layer rename')
         layerSvc.rename(id, name)
         bump()
       } catch (err) {
@@ -2071,7 +2134,7 @@ export const useStore = create<AppState>((set, get) => {
     setLayerPrintable: (id, printable) => {
       const l = layerSvc.get(id)
       if (!l) return
-      pushSnapshot()
+      pushSnapshot('layer change')
       l.printable = printable
       doc.touch()
       bump()
@@ -2079,19 +2142,19 @@ export const useStore = create<AppState>((set, get) => {
     setLayerVpFrozen: (id, frozen) => {
       const vp = doc.msViewportId ? doc.getEntity(doc.msViewportId) : undefined
       if (vp?.type !== 'VIEWPORT') return
-      pushSnapshot()
+      pushSnapshot('layer change')
       const rest = vp.props.frozenLayers.filter((l) => l !== id)
       vp.props.frozenLayers = frozen ? [...rest, id] : rest
       doc.touch()
       bump()
     },
     setLayerNewVpFreeze: (id, frozen) => {
-      pushSnapshot()
+      pushSnapshot('layer change')
       layerSvc.setNewVpFreeze(id, frozen)
       bump()
     },
     setLayerColor: (id, color) => {
-      pushSnapshot()
+      pushSnapshot('layer color')
       layerSvc.setColor(id, color)
       bump()
     },
@@ -2109,18 +2172,18 @@ export const useStore = create<AppState>((set, get) => {
         return
       }
       const layer = layerSvc.get(id)
-      pushSnapshot()
+      pushSnapshot('layer delete')
       layerSvc.remove(id)
       bump()
       print(`Layer "${layer?.name ?? id}" deleted.`)
     },
     setLayerLineWeight: (id, w) => {
-      pushSnapshot()
+      pushSnapshot('layer lineweight')
       layerSvc.setLineWeight(id, w)
       bump()
     },
     setLayerLineType: (id, t) => {
-      pushSnapshot()
+      pushSnapshot('layer linetype')
       const l = layerSvc.get(id)
       const d = doc.loadLinetype(t)
       if (l && d) {
@@ -2133,26 +2196,26 @@ export const useStore = create<AppState>((set, get) => {
     closeLinetypeDialog: () => set({ linetypeDialog: null }),
     loadLinetypes: (names) => {
       if (!names.length) return
-      pushSnapshot()
+      pushSnapshot('load linetypes')
       for (const n of names) doc.loadLinetype(n)
       bump()
     },
     deleteLinetype: (name) => {
       if (doc.linetypeInUse(name)) return false
-      pushSnapshot()
+      pushSnapshot('linetype delete')
       const ok = doc.deleteLinetype(name)
       bump()
       return ok
     },
     setDrawingVar: (name, value) => {
-      pushSnapshot()
+      pushSnapshot('drawing variable')
       doc.setVar(name, value)
       bump()
     },
     setEntitiesCommon: (ids, key, value) => {
       const ents = ids.map((id) => doc.getEntity(id)).filter((e): e is Entity => !!e && !layerSvc.get(e.layer)?.locked)
       if (!ents.length) return
-      pushSnapshot()
+      pushSnapshot('properties')
       for (const e of ents) {
         if (key === 'color') {
           // 'BYLAYER' (o vacío) vuelve al color de la capa.
@@ -2328,13 +2391,13 @@ export const useStore = create<AppState>((set, get) => {
       if (doc.setCurrentDimStyle(name)) bump()
     },
     saveDimStyle: (def) => {
-      pushSnapshot()
+      pushSnapshot('dimension style')
       doc.saveDimStyle(def)
       bump()
     },
     renameDimStyle: (from, to) => {
       try {
-        pushSnapshot()
+        pushSnapshot('dimension style')
         doc.renameDimStyle(from, to)
         bump()
         return true
@@ -2346,7 +2409,7 @@ export const useStore = create<AppState>((set, get) => {
     },
     deleteDimStyle: (name) => {
       try {
-        pushSnapshot()
+        pushSnapshot('dimension style')
         doc.deleteDimStyle(name)
         bump()
         return true
@@ -2362,7 +2425,7 @@ export const useStore = create<AppState>((set, get) => {
       bump()
     },
     setDimensionsStyle: (ids, styleName) => {
-      pushSnapshot()
+      pushSnapshot('dimension style')
       for (const id of ids) {
         const e = doc.getEntity(id)
         if (e?.type === 'DIMENSION') doc.restyleDimension(e.props, styleName, e.props.overrides)
@@ -2370,7 +2433,7 @@ export const useStore = create<AppState>((set, get) => {
       bump()
     },
     setDimensionsVar: (ids, name, value) => {
-      pushSnapshot()
+      pushSnapshot('dimension variable')
       for (const id of ids) {
         const e = doc.getEntity(id)
         if (e?.type === 'DIMENSION') doc.setDimensionVar(e.props, name, value)
@@ -2379,14 +2442,14 @@ export const useStore = create<AppState>((set, get) => {
     },
     openDimMenu: (x, y, world) => set({ dimMenu: { x, y, world } }),
     setCannoscale: (v) => {
-      pushSnapshot()
+      pushSnapshot('annotation scale')
       doc.setCannoscale(v)
       doc.touch()
       bump()
     },
     closeDimMenu: () => set({ dimMenu: null }),
     editDimensions: (ids, fn) => {
-      pushSnapshot()
+      pushSnapshot('dimension edit')
       for (const id of ids) {
         const e = doc.getEntity(id)
         if (e?.type === 'DIMENSION') fn(e.props)
@@ -2430,7 +2493,7 @@ export const useStore = create<AppState>((set, get) => {
       // En MSPACE el estilo es propiedad del viewport del layout (se guarda con el dibujo).
       const vp = doc.msViewportId ? doc.getEntity(doc.msViewportId) : undefined
       if (vp?.type === 'VIEWPORT') {
-        if (!engine.busy) pushSnapshot() // desde VSCURRENT el undo lo registra el comando
+        if (!engine.busy) pushSnapshot('visual style') // desde VSCURRENT el undo lo registra el comando
         vp.props.visualStyle = mode
         doc.touch()
         bump()
@@ -2735,7 +2798,7 @@ export const useStore = create<AppState>((set, get) => {
       try {
         if (isDrawingFile(lower)) {
           const data = JSON.parse(await file.text()) as DocumentData
-          pushSnapshot()
+          pushSnapshot('open')
           doc.load(data)
           currentFile = null
           set({ ...detached, currentLayerId: doc.currentLayer, viewportLayout: doc.viewportLayout })
@@ -2745,7 +2808,7 @@ export const useStore = create<AppState>((set, get) => {
         } else if (MODEL_EXTS.some((x) => lower.endsWith(x))) {
           // Modelos 3D (STL, OBJ, STEP, IGES): un dibujo nuevo con cada cuerpo como malla.
           const meshes = await readModelFile(file, lower)
-          pushSnapshot()
+          pushSnapshot('open')
           doc.reset()
           for (const m of meshes) doc.addEntity({ type: 'MESH3D', layer: doc.currentLayer, props: { vertices: m.vertices, faces: m.faces } })
           currentFile = null
@@ -2766,7 +2829,7 @@ export const useStore = create<AppState>((set, get) => {
             print('Reading DXF…')
             r = await importCadInWorker('dxf', await file.arrayBuffer())
           }
-          pushSnapshot()
+          pushSnapshot('open')
           doc.reset()
           const n = applyDxf(r, true)
           currentFile = null
@@ -2813,7 +2876,7 @@ export const useStore = create<AppState>((set, get) => {
         download(exportObj(meshes), 'obj', 'text/plain')
         return
       }
-      const dxf = exportDxf(expandEntities(doc.entities, doc.blocks, { attdisp: doc.attdisp }), doc.layers, get().currentLayerId, doc.dimStyles, {
+      const dxf = exportDxf(solidsAsMeshes(expandEntities(doc.entities, doc.blocks, { attdisp: doc.attdisp })), doc.layers, get().currentLayerId, doc.dimStyles, {
         linetypes: doc.linetypes,
         vars: doc.toJSON().vars,
       })
@@ -2867,7 +2930,7 @@ export const useStore = create<AppState>((set, get) => {
         return layerEditable(l)
       })
       if (removable.length === 0) return
-      pushSnapshot()
+      pushSnapshot('erase')
       for (const id of removable) doc.removeEntity(id)
       set({ selection: [] })
       bump()
@@ -2883,10 +2946,13 @@ export const useStore = create<AppState>((set, get) => {
           print('Undo: view.')
           return
         }
-        redoStack.push(doc.toJSON())
+        const label = undoLabels.get(e)
+        const redoSnap = doc.toJSON()
+        if (label) undoLabels.set(redoSnap, label)
+        redoStack.push(redoSnap)
         doc.load(e)
         afterRestore()
-        print('Undo.')
+        print(stepMessage('Undo', label))
         return
       }
       print('Nothing to undo.')
@@ -2901,10 +2967,13 @@ export const useStore = create<AppState>((set, get) => {
           print('Redo: view.')
           return
         }
-        undoStack.push(doc.toJSON())
+        const label = undoLabels.get(e)
+        const undoSnap = doc.toJSON()
+        if (label) undoLabels.set(undoSnap, label)
+        undoStack.push(undoSnap)
         doc.load(e)
         afterRestore()
-        print('Redo.')
+        print(stepMessage('Redo', label))
         return
       }
       print('Nothing to redo.')
@@ -2912,7 +2981,7 @@ export const useStore = create<AppState>((set, get) => {
     updateEntityLayer: (id, layerId) => {
       const e = doc.getEntity(id)
       if (!e) return
-      pushSnapshot()
+      pushSnapshot('layer change')
       e.layer = layerId
       doc.touch()
       bump()
@@ -2920,7 +2989,7 @@ export const useStore = create<AppState>((set, get) => {
     updateEntityNumber: (id, path, value) => {
       const e = doc.getEntity(id)
       if (!e) return
-      pushSnapshot()
+      pushSnapshot('properties')
       applyNumber(e, path, value)
       doc.touch()
       bump()
@@ -2930,7 +2999,7 @@ export const useStore = create<AppState>((set, get) => {
       if (!e) return
       const l = layerSvc.get(e.layer)
       if (l && l.locked) return
-      pushSnapshot()
+      pushSnapshot('properties')
       applyField(e, key, value)
       doc.touch()
       bump()
@@ -2992,7 +3061,7 @@ export const useStore = create<AppState>((set, get) => {
 
     // --- documentos ---
     newDocument: () => {
-      pushSnapshot()
+      pushSnapshot('new drawing')
       const t = readDefaultTemplate()
       if (t) applyTemplate(t, false)
       else doc.reset()
@@ -3169,7 +3238,7 @@ export const useStore = create<AppState>((set, get) => {
           // En el hilo aparte, como al abrir del equipo (también el DXF binario).
           const f = await handle.getFile()
           const r = await importCadInWorker('dxf', f.arrayBuffer ? await f.arrayBuffer() : (new TextEncoder().encode(await f.text()).buffer as ArrayBuffer))
-          pushSnapshot()
+          pushSnapshot('open')
           doc.reset()
           const n = applyDxf(r, true)
           currentFile = null // un DXF importado se guarda como .cota nuevo
@@ -3179,7 +3248,7 @@ export const useStore = create<AppState>((set, get) => {
           frameOpenedDrawing()
         } else {
           const text = await readTextFile(handle)
-          pushSnapshot()
+          pushSnapshot('open')
           doc.load(JSON.parse(text) as DocumentData)
           restoreModelUcs()
           applyViews()

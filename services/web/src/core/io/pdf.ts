@@ -1,3 +1,4 @@
+import { lineSpan } from '../geom/xline'
 import { layerShown } from '../layers/visibility'
 import type { Entity, Layer, PlotStyle, ShadeProps } from '../document/types'
 import { entityBounds } from '../editing/bounds'
@@ -325,7 +326,7 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
     }
     switch (e.type) {
       case 'LINE':
-        out += polyStroke([[e.props.start[0], e.props.start[1]], [e.props.end[0], e.props.end[1]]], t)
+        out += polyStroke(lineSpan(e.props).map((p): [number, number] => [p[0], p[1]]), t)
         break
       case 'CIRCLE':
         // Un círculo fuera del plano XY se proyecta en planta como lo que es (elipse o recta).

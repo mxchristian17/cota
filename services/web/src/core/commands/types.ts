@@ -1,3 +1,4 @@
+import type { WindowPlane } from './selectionSets'
 import type { Entity, ShadeProps } from '../document/types'
 import type { FlatshotOptions } from '../projection/flatshot'
 import type { ViewGenChoice } from '../drawing/viewgen'
@@ -169,6 +170,8 @@ export interface AppHooks {
   setCurrentLayer?(id: string): void
   /** Normal del plano de construcción hacia el observador (plano de las cotas nuevas). */
   facingNormal?(): Vec3
+  /** Ejes de la pantalla en el mundo: el plano en que se ve una ventana indicada con el mouse. */
+  viewPlane?(): WindowPlane | null
   /** Cantidad de viewports del layout (1–4). */
   setViewportLayout(n: number): void
   /** Exporta el dibujo a PDF vectorial (descarga en el navegador). */

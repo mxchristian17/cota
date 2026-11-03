@@ -3,12 +3,12 @@ import type { DocumentModel } from '../document/DocumentModel'
 import type { Entity } from '../document/types'
 import { entityOutline } from '../editing/bounds'
 import { layerEditable, layerVisible } from '../layers/visibility'
-import type { Pt } from '../math'
+import type { Pt, Vec3 } from '../math'
 
 /**
  * Conjuntos de selección por teclado (el CAD clásico `Select objects:`): `ALL`, `Window`, `Crossing`,
- * `WPolygon`, `CPolygon` y `Fence`. Se evalúan en el plano XY del mundo sobre el contorno de cada
- * entidad, sólo con objetos de capas visibles y desbloqueadas.
+ * `WPolygon`, `CPolygon` y `Fence`. Se evalúan sobre el contorno de cada entidad en un plano (el XY del mundo,
+ * si no se indica otro), sólo con objetos de capas visibles y desbloqueadas.
  */
 
 type P2 = [number, number]
@@ -31,7 +31,17 @@ export function selectableEntities(doc: DocumentModel): Entity[] {
   })
 }
 
-const xy = (p: Pt): P2 => [p.x, p.y]
+/** Plano de una ventana o un borde: sus dos ejes (unitarios y perpendiculares) en el mundo. */
+export interface WindowPlane {
+  u: Vec3
+  v: Vec3
+}
+
+const WORLD_XY: WindowPlane = { u: [1, 0, 0], v: [0, 1, 0] }
+
+const onPlane =
+  ({ u, v }: WindowPlane) =>
+  (p: Pt): P2 => [p.x * u[0] + p.y * u[1] + p.z * u[2], p.x * v[0] + p.y * v[1] + p.z * v[2]]
 
 function inside(p: P2, poly: P2[]): boolean {
   let ins = false
@@ -56,7 +66,8 @@ const edges = (pts: P2[], closed: boolean): Array<[P2, P2]> => {
 }
 
 /** Entidades dentro (`window`) o que tocan (`crossing`) el polígono `poly` (≥ 3 vértices). */
-export function inPolygon(ents: Entity[], poly: Pt[], crossing: boolean): string[] {
+export function inPolygon(ents: Entity[], poly: Pt[], crossing: boolean, plane: WindowPlane = WORLD_XY): string[] {
+  const xy = onPlane(plane)
   const pg = poly.map(xy)
   const border = edges(pg, true)
   return ents
@@ -71,11 +82,18 @@ export function inPolygon(ents: Entity[], poly: Pt[], crossing: boolean): string
     .map((e) => e.id)
 }
 
-/** Rectángulo de dos esquinas como polígono. */
-export const rectPolygon = (a: Pt, b: Pt): Pt[] => [a, { x: b.x, y: a.y, z: a.z }, b, { x: a.x, y: b.y, z: a.z }]
+/** Rectángulo de dos esquinas como polígono, con los lados paralelos a los ejes del plano. */
+export function rectPolygon(a: Pt, b: Pt, plane: WindowPlane = WORLD_XY): Pt[] {
+  const { u, v } = plane
+  const [pa, pb] = [a, b].map(onPlane(plane))
+  const [du, dv] = [pb[0] - pa[0], pb[1] - pa[1]]
+  const at = (i: number, j: number): Pt => ({ x: a.x + u[0] * i + v[0] * j, y: a.y + u[1] * i + v[1] * j, z: a.z + u[2] * i + v[2] * j })
+  return [a, at(du, 0), at(du, dv), at(0, dv)]
+}
 
 /** Entidades que cruza la polilínea `fence`. */
-export function byFence(ents: Entity[], fence: Pt[]): string[] {
+export function byFence(ents: Entity[], fence: Pt[], plane: WindowPlane = WORLD_XY): string[] {
+  const xy = onPlane(plane)
   const f = edges(fence.map(xy), false)
   return ents
     .filter((e) => entityOutline(e).some((l) => edges(l.map(xy), false).some(([a, b]) => f.some(([c, d]) => segCross(a, b, c, d)))))

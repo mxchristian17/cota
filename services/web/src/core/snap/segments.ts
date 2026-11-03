@@ -1,3 +1,4 @@
+import { lineSpan } from '../geom/xline'
 import { fromVec3, pt, type Pt } from '../math'
 import type { Entity } from '../document/types'
 import { arcEndpoints, tessellateArc } from '../geom/arc'
@@ -57,7 +58,8 @@ export function endpointsOfEntity(e: Entity): Pt[] {
 export function segmentsOfEntity(e: Entity): [Pt, Pt][] {
   const segs: [Pt, Pt][] = []
   if (e.type === 'LINE') {
-    segs.push([fromVec3(e.props.start), fromVec3(e.props.end)])
+    const [a, b] = lineSpan(e.props)
+    segs.push([fromVec3(a), fromVec3(b)])
   } else if (e.type === 'RECTANGLE') {
     const c = endpointsOfEntity(e)
     for (let i = 0; i < 4; i++) segs.push([c[i], c[(i + 1) % 4]])

@@ -13,7 +13,7 @@ import { viewZ } from './primitives'
 export const rectangleCommand: Command = {
   name: 'RECTANGLE',
   planar: true,
-  aliases: ['REC', 'RECTANG'],
+  aliases: ['REC', 'RECT', 'RECTANG'],
   description: 'Draw a rectangle by two opposite corners [Dimensions]',
   async run(ctx) {
     const n = viewZ(ctx)

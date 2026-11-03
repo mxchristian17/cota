@@ -291,6 +291,11 @@ export default function App() {
           e.preventDefault()
           useStore.getState().redo()
         }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        // Ctrl+S guarda sin preguntar; Ctrl+Shift+S pide el nombre (guardar como). Nunca "guardar página" del navegador.
+        e.preventDefault()
+        if (e.shiftKey) useStore.getState().submitCommand('SAVE')
+        else void useStore.getState().saveDocument()
       } else if ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R') && !e.shiftKey) {
         // Ctrl+R = siguiente viewport (CAD clásico); se evita la recarga del navegador.
         e.preventDefault()

@@ -53,6 +53,8 @@ export type LineType = string
 export interface LineProps {
   start: Vec3
   end: Vec3
+  /** Línea infinita: `both` = línea constructiva (XLINE), `end` = rayo desde `start` (RAY). `end` marca la dirección. */
+  extend?: 'both' | 'end'
 }
 
 /** Punto (POINT): una marca en el dibujo con el estilo de PDMODE/PDSIZE; da snap NODE. */

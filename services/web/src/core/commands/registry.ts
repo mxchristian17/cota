@@ -1,6 +1,6 @@
 import type { CommandEngine } from './CommandEngine'
 import type { Command } from './types'
-import { lineCommand } from './impl/line'
+import { lineCommand, rayCommand, xlineCommand } from './impl/line'
 import { circleCommand } from './impl/circle'
 import { arcCommand } from './impl/arc'
 import { ellipseCommand } from './impl/ellipse'
@@ -115,6 +115,8 @@ function registerVariable(engine: CommandEngine, c: Command): void {
 export function registerDefaultCommands(engine: CommandEngine): void {
   // Dibujo 2D
   engine.register(lineCommand)
+  engine.register(xlineCommand)
+  engine.register(rayCommand)
   engine.register(circleCommand)
   engine.register(polygonCommand)
   engine.register(arcCommand)

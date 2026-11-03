@@ -1,5 +1,5 @@
 import { entityAtPoint, selectAtPoint } from '../editing/pointPick'
-import { byFence, inPolygon, rectPolygon, selectableEntities } from './selectionSets'
+import { byFence, inPolygon, rectPolygon, selectableEntities, type WindowPlane } from './selectionSets'
 import type { Entity } from '../document/types'
 import type { Deferred } from '../geom/tangency'
 import { angleDeg, type Pt } from '../math'
@@ -52,6 +52,8 @@ export interface CommandEngineDeps {
   doc: DocumentModel
   currentLayerId: () => string
   isOrtho: () => boolean
+  /** Ejes de la pantalla en el mundo (ventanas indicadas con el mouse). */
+  viewPlane?: () => WindowPlane | null
   /** Entrada dinámica (F12): coordenadas tecleadas relativas al punto anterior sin `@`. */
   isDynInput?: () => boolean
   currentCursor: () => Pt
@@ -133,7 +135,8 @@ type Pending =
       /** Pasos para `Undo` (lo agregado o quitado en cada uno). */
       steps: Array<{ ids: string[]; removed: boolean }>
       /** Ventana, cruce, polígonos o borde en curso: sus puntos. */
-      sub?: { kind: SelArea; pts: Pt[] }
+      /** `clicked`: algún punto vino del mouse (la ventana se ve en pantalla); si no, va en el plano de la UCS. */
+      sub?: { kind: SelArea; pts: Pt[]; clicked?: boolean }
     }
   | {
       type: 'string'
@@ -475,7 +478,7 @@ export class CommandEngine {
     if (pending?.type === 'selection' && pending.sub?.pts.length) {
       // Ventana / cruce / polígono / borde en curso.
       const { kind, pts } = pending.sub
-      if (kind === 'Window' || kind === 'Crossing') return [{ kind: 'polyline', points: [...rectPolygon(pts[0], cursor), pts[0]] }]
+      if (kind === 'Window' || kind === 'Crossing') return [{ kind: 'polyline', points: [...rectPolygon(pts[0], cursor, this.deps.viewPlane?.() ?? this.ucsPlane()), pts[0]] }]
       return [{ kind: 'polyline', points: kind === 'Fence' ? [...pts, cursor] : [...pts, cursor, pts[0]] }]
     }
     if (!pending || pending.type === 'selection' || pending.type === 'string' || !pending.preview) return []
@@ -503,7 +506,10 @@ export class CommandEngine {
     }
     if (this.pending.type === 'selection') {
       const sel = this.pending
-      if (sel.sub) return this.addSelPoint(sel, world)
+      if (sel.sub) {
+        sel.sub.clicked = true
+        return this.addSelPoint(sel, world)
+      }
       if (pickedId) this.applySel(sel, [pickedId], subtract || !!sel.remove, true, this.currentPrompt)
       return
     }
@@ -788,6 +794,16 @@ export class CommandEngine {
     if (n) this.deps.onPrint(`${n} ${n === 1 ? 'was' : 'were'} on a locked layer.`)
   }
 
+  private ucsPlane(): WindowPlane {
+    const u = this.deps.currentUcs()
+    return { u: u.x, v: u.y }
+  }
+
+  /** Plano de una ventana o un borde: el de la pantalla si se marcó con el mouse; con coordenadas, el XY de la UCS. */
+  private selPlane(sub: { clicked?: boolean }): WindowPlane {
+    return (sub.clicked ? this.deps.viewPlane?.() : null) ?? this.ucsPlane()
+  }
+
   /** Punto de una ventana/cruce/polígono/borde en curso; al completarse, selecciona. */
   private addSelPoint(sel: Extract<Pending, { type: 'selection' }>, p: Pt): void {
     const sub = sel.sub!
@@ -795,7 +811,8 @@ export class CommandEngine {
     const ents = selectableEntities(this.deps.doc)
     if ((sub.kind === 'Window' || sub.kind === 'Crossing') && sub.pts.length === 2) {
       sel.sub = undefined
-      const pick = (list: Entity[]) => inPolygon(list, rectPolygon(sub.pts[0], sub.pts[1]), sub.kind === 'Crossing')
+      const plane = this.selPlane(sub)
+      const pick = (list: Entity[]) => inPolygon(list, rectPolygon(sub.pts[0], sub.pts[1], plane), sub.kind === 'Crossing', plane)
       this.applySel(sel, pick(ents), !!sel.remove)
       this.reportLocked(pick)
       this.setPrompt(sel.prompt)
@@ -812,11 +829,12 @@ export class CommandEngine {
         // Fin del polígono / borde.
         sel.sub = undefined
         const ents = selectableEntities(this.deps.doc)
+        const plane = this.selPlane(sub)
         const pick =
           sub.kind === 'Fence' && sub.pts.length >= 2
-            ? (list: Entity[]) => byFence(list, sub.pts)
+            ? (list: Entity[]) => byFence(list, sub.pts, plane)
             : (sub.kind === 'WPolygon' || sub.kind === 'CPolygon') && sub.pts.length >= 3
-              ? (list: Entity[]) => inPolygon(list, sub.pts, sub.kind === 'CPolygon')
+              ? (list: Entity[]) => inPolygon(list, sub.pts, sub.kind === 'CPolygon', plane)
               : null
         if (pick) {
           this.applySel(sel, pick(ents), !!sel.remove)

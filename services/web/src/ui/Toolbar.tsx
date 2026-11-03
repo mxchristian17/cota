@@ -1,3 +1,4 @@
+import { LayerCombo } from './LayerCombo'
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/store'
 import { focusCommandLine } from './focus'
@@ -28,9 +29,6 @@ const centerRect = () => document.querySelector('.center')?.getBoundingClientRec
 function Combo({ combo, testId }: { combo: ToolbarCombo; testId: string }) {
   useStore((s) => s.version) // refresca capas, tipos de línea y estilos
   const doc = useStore((s) => s.doc)
-  const layerSvc = useStore((s) => s.layerSvc)
-  const currentLayerId = useStore((s) => s.currentLayerId)
-  const setCurrentLayer = useStore((s) => s.setCurrentLayer)
   const setCurrentDimStyle = useStore((s) => s.setCurrentDimStyle)
   const selection = useStore((s) => s.selection)
   const setCommon = useStore((s) => s.setEntitiesCommon)
@@ -40,13 +38,7 @@ function Combo({ combo, testId }: { combo: ToolbarCombo; testId: string }) {
 
   if (combo === 'layer') {
     return (
-      <select className="field tb-combo" title="Current layer (with objects selected, moves them to that layer)" value={currentLayerId} data-testid={testId} onChange={(e) => (setCurrentLayer(e.target.value), done())}>
-        {layerSvc.list().map((l) => (
-          <option key={l.id} value={l.id}>
-            {l.name}
-          </option>
-        ))}
-      </select>
+      <LayerCombo className="field tb-combo" testId={testId} onPicked={done} />
     )
   }
   if (combo === 'dimstyle') {

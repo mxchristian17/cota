@@ -1,3 +1,4 @@
+import { lineSpan } from '../geom/xline'
 import { layerShown } from '../layers/visibility'
 import type { Entity, Layer, LayoutDef, ViewportProps } from '../document/types'
 import type { Vec3 } from '../math'
@@ -102,7 +103,7 @@ function catmullRom3(cps: Vec3[], perSeg = 12): Vec3[] {
 export function entityStrokes(e: Entity, dim?: DimContext): Vec3[][] {
   switch (e.type) {
     case 'LINE':
-      return [[e.props.start, e.props.end]]
+      return [lineSpan(e.props)]
     case 'CIRCLE':
       return [tessellateArc({ ...e.props, startAngle: 0, endAngle: 0 }, CIRCLE_STEPS)] // en su plano
     case 'ARC':

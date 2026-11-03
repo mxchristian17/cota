@@ -223,7 +223,7 @@ export function transformEntity(e: Entity, ins: InsertProps): Entity {
     case 'POINT':
       return { ...e, props: { position: P(e.props.position) } }
     case 'LINE':
-      return { ...e, props: { start: P(e.props.start), end: P(e.props.end) } }
+      return { ...e, props: { ...e.props, start: P(e.props.start), end: P(e.props.end) } }
     case 'CIRCLE':
       return { ...e, props: { center: P(e.props.center), radius: e.props.radius * sr, normal: D(e.props.normal) } }
     case 'ARC': {

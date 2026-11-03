@@ -5,17 +5,8 @@ import type { Entity } from '../../document/types'
 import { entityPreviewShapes } from '../../editing/entityPreview'
 import { applyStretch, stretchBox, stretchEntity, type StretchBox } from '../../editing/stretch'
 import type { PreviewShape } from '../../preview'
+import { rectPolygon, type WindowPlane } from '../selectionSets'
 import type { Command, CommandContext } from '../types'
-
-/** Rectángulo de la ventana de cruce, como preview mientras se indica la segunda esquina. */
-function boxPreview(a: Pt, c: Pt): PreviewShape[] {
-  return [
-    {
-      kind: 'polyline',
-      points: [a, { x: c.x, y: a.y, z: a.z }, c, { x: a.x, y: c.y, z: a.z }, a],
-    },
-  ]
-}
 
 /** Fantasma del resultado estirado (misma lógica que el commit, sin mutar el documento). */
 function stretchPreview(ctx: CommandContext, ids: string[], box: StretchBox, base: Pt, cursor: Pt): PreviewShape[] {
@@ -40,17 +31,22 @@ export const stretchCommand: Command = {
   aliases: ['S'],
   description: 'Stretch objects crossed by a window (vertices inside the window move)',
   async run(ctx) {
-    // El CAD clásico exige una ventana de CRUCE: acá se indica con sus dos esquinas (click o coordenadas),
-    // así el comando es determinista en cualquier vista.
+    // El CAD clásico exige una ventana de CRUCE: acá se indica con sus dos esquinas. Con el mouse es la ventana que se
+    // ve en pantalla, en cualquier vista; con coordenadas va en el XY de la UCS (no depende de cómo se esté mirando).
+    const ucs = ctx.app.getUcs?.()
+    const ucsPlane: WindowPlane = ucs ? { u: ucs.x, v: ucs.y } : { u: [1, 0, 0], v: [0, 1, 0] }
     const c1 = await ctx.getPoint('Specify first corner of crossing window: ')
     if (c1.kind !== 'point') return
     const c2 = await ctx.getPoint('Specify opposite corner: ', {
       base: c1.point,
       corner: true,
-      preview: (c) => boxPreview(c1.point, c),
+      preview: (c) => {
+        const points = rectPolygon(c1.point, c, ctx.app.viewPlane?.() ?? ucsPlane)
+        return [{ kind: 'polyline', points: [...points, c1.point] }]
+      },
     })
     if (c2.kind !== 'point') return
-    const box = stretchBox(toVec3(c1.point), toVec3(c2.point))
+    const box = stretchBox(toVec3(c1.point), toVec3(c2.point), ((c1.pick || c2.pick) && ctx.app.viewPlane?.()) || ucsPlane)
 
     // Entidades tocadas por la ventana: `stretchEntity` devuelve 'none' cuando ningún punto de la
     // entidad cae dentro, así que sirve como test de cruce (el desplazamiento de prueba es irrelevante).

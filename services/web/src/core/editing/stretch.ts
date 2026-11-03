@@ -15,20 +15,28 @@ export interface StretchBox {
   minY: number
   maxX: number
   maxY: number
+  /** Ejes del plano de la ventana; sin ellos, el XY del mundo. X e Y son las coordenadas sobre estos ejes. */
+  plane?: { u: Vec3; v: Vec3 }
 }
 
-/** Caja (en XY) a partir de dos esquinas opuestas. */
-export function stretchBox(a: Vec3, b: Vec3): StretchBox {
+const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+/** Caja a partir de dos esquinas opuestas, en el plano indicado (por defecto, el XY del mundo). */
+export function stretchBox(a: Vec3, b: Vec3, plane?: { u: Vec3; v: Vec3 }): StretchBox {
+  const [ax, ay, bx, by] = plane ? [dot(a, plane.u), dot(a, plane.v), dot(b, plane.u), dot(b, plane.v)] : [a[0], a[1], b[0], b[1]]
   return {
-    minX: Math.min(a[0], b[0]),
-    maxX: Math.max(a[0], b[0]),
-    minY: Math.min(a[1], b[1]),
-    maxY: Math.max(a[1], b[1]),
+    minX: Math.min(ax, bx),
+    maxX: Math.max(ax, bx),
+    minY: Math.min(ay, by),
+    maxY: Math.max(ay, by),
+    ...(plane ? { plane } : {}),
   }
 }
 
 export function inBox(v: Vec3, box: StretchBox): boolean {
-  return v[0] >= box.minX && v[0] <= box.maxX && v[1] >= box.minY && v[1] <= box.maxY
+  const x = box.plane ? dot(v, box.plane.u) : v[0]
+  const y = box.plane ? dot(v, box.plane.v) : v[1]
+  return x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY
 }
 
 const moved = (v: Vec3, d: Vec3): Vec3 => [v[0] + d[0], v[1] + d[1], v[2] + d[2]]
@@ -95,7 +103,7 @@ export function stretchEntity(e: Entity, box: StretchBox, d: Vec3): StretchOutco
       const { out, hits } = stretchPoints([e.props.start, e.props.end], box, d)
       if (hits === 0) return { kind: 'none' }
       if (hits === 2) return { kind: 'move' }
-      return { kind: 'replace', input: { type: 'LINE', layer: e.layer, props: { start: out[0], end: out[1] } } }
+      return { kind: 'replace', input: { type: 'LINE', layer: e.layer, props: { ...e.props, start: out[0], end: out[1] } } }
     }
     case 'ARC': {
       // Como en el CAD clásico: el extremo que cae en la ventana se mueve y el arco se reconstruye pasando
@@ -119,7 +127,7 @@ export function stretchEntity(e: Entity, box: StretchBox, d: Vec3): StretchOutco
         input: {
           type: 'POLYLINE',
           layer: e.layer,
-          props: { vertices: out, bulges: e.props.bulges ? [...e.props.bulges] : undefined, closed: e.props.closed },
+          props: { ...e.props, vertices: out, bulges: e.props.bulges ? [...e.props.bulges] : undefined },
         },
       }
     }
@@ -127,7 +135,7 @@ export function stretchEntity(e: Entity, box: StretchBox, d: Vec3): StretchOutco
       const { out, hits } = stretchPoints(e.props.controlPoints, box, d)
       if (hits === 0) return { kind: 'none' }
       if (hits === e.props.controlPoints.length) return { kind: 'move' }
-      return { kind: 'replace', input: { type: 'SPLINE', layer: e.layer, props: { controlPoints: out, degree: e.props.degree } } }
+      return { kind: 'replace', input: { type: 'SPLINE', layer: e.layer, props: { ...e.props, controlPoints: out } } }
     }
     case 'RECTANGLE': {
       const [x, y, z] = e.props.corner

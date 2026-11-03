@@ -1,4 +1,6 @@
-import { DwgReader, DxfReader, DxfWriter, Line, ModelerGeometry, Polyline3D, XYZ, type CadDocument, type ModelerGeometryWire } from '@node-projects/acad-ts'
+import { DimensionArc, DwgReader, DxfReader, DxfWriter, Insert, Line, ModelerGeometry, MText, MultiLeader, Polyline3D, Solid, XYZ, type CadDocument, type Entity, type ModelerGeometryWire } from '@node-projects/acad-ts'
+
+import { acisEdges } from './acis'
 
 /**
  * DWG → DXF con acad-ts (MIT, port a TypeScript de ACadSharp). Import estático a propósito: lo usan el hilo aparte
@@ -10,6 +12,7 @@ import { DwgReader, DxfReader, DxfWriter, Line, ModelerGeometry, Polyline3D, XYZ
 export function convertDwgToDxfBytes(data: ArrayBuffer): { bytes: Uint8Array; wireSolids: number } {
   const doc = DwgReader.readFromStream(data, null)
   const wireSolids = solidsAsWires(doc)
+  simplifyForDxf(doc)
   return { bytes: writeDxfBytes(doc), wireSolids }
 }
 
@@ -18,7 +21,10 @@ export const isBinaryDxf = (b: Uint8Array): boolean => b.length > 18 && new Text
 
 /** DXF binario → DXF de texto (lo lee acad-ts y lo vuelve a escribir). */
 export function binaryDxfToDxfBytes(data: ArrayBuffer): Uint8Array {
-  return writeDxfBytes(DxfReader.readFromStream(new Uint8Array(data)))
+  const doc = DxfReader.readFromStream(new Uint8Array(data))
+  solidsAsWires(doc)
+  simplifyForDxf(doc)
+  return writeDxfBytes(doc)
 }
 
 function writeDxfBytes(doc: CadDocument): Uint8Array {
@@ -54,18 +60,24 @@ function wirePoint(w: ModelerGeometryWire, p: XYZ): XYZ {
 }
 
 /**
- * Sólidos, regiones y cuerpos ACIS (3DSOLID, REGION, BODY): Cota todavía no lee su geometría, pero el DWG guarda junto a
- * cada uno sus aristas e isolíneas como puntos (lo que el CAD clásico dibuja en alambre). Se reemplazan por esas líneas
- * y polilíneas 3D, en su capa, color y tipo de línea, también dentro de los bloques: la pieza se ve, sin caras. Los que
- * no las traen se omiten como antes. Devuelve cuántos se reemplazaron.
+ * Sólidos, regiones y cuerpos ACIS (3DSOLID, REGION, BODY): el DWG guarda junto a cada uno sus aristas e isolíneas como
+ * puntos (lo que el CAD clásico dibuja en alambre) y, siempre, el modelo ACIS del que también se pueden leer. Se
+ * reemplazan por esas líneas y polilíneas 3D, en su capa, color y tipo de línea, también dentro de los bloques: la pieza
+ * se ve, sin caras. Devuelve cuántos se reemplazaron.
  */
 export function solidsAsWires(doc: CadDocument): number {
   let n = 0
   for (const br of doc.blockRecords ?? []) {
     for (const e of [...br.entities]) {
-      if (!(e instanceof ModelerGeometry) || !e.wires?.length) continue
-      for (const w of e.wires) {
-        const pts = (w.points ?? []).map((p) => wirePoint(w, p))
+      if (!(e instanceof ModelerGeometry)) continue
+      // Sin aristas guardadas se leen del modelo ACIS.
+      const wires = e.wires?.length
+        ? e.wires.map((w) => (w.points ?? []).map((p) => wirePoint(w, p)))
+        : e.acisData?.length
+          ? acisEdges(e.acisData).map((poly) => poly.map(([x, y, z]) => new XYZ(x, y, z)))
+          : []
+      if (!wires.length) continue
+      for (const pts of wires) {
         if (pts.length < 2) continue
         let edge: Line | Polyline3D
         if (pts.length === 2) {
@@ -85,4 +97,65 @@ export function solidsAsWires(doc: CadDocument): number {
     }
   }
   return n
+}
+
+/**
+ * Entidades que el escritor de DXF no vuelca completas y que el DWG sí trae: se cambian acá por sus piezas. Una
+ * multidirectriz, por sus líneas, flechas y texto; una cota de arco, por el bloque con el que ya viene dibujada.
+ */
+export function simplifyForDxf(doc: CadDocument): void {
+  for (const br of doc.blockRecords ?? []) {
+    for (const e of [...br.entities]) {
+      let parts: Entity[] | null = null
+      if (e instanceof MultiLeader) parts = multiLeaderParts(e)
+      else if (e instanceof DimensionArc) parts = e.block ? [new Insert(e.block)] : []
+      if (!parts) continue
+      for (const part of parts) {
+        part.layer = e.layer
+        part.color = e.color
+        part.lineType = e.lineType
+        part.lineTypeScale = e.lineTypeScale
+        part.lineWeight = e.lineWeight
+        br.entities.add(part)
+      }
+      br.entities.remove(e)
+    }
+  }
+}
+
+function multiLeaderParts(m: MultiLeader): Entity[] {
+  const ctx = m.contextData
+  if (!ctx) return []
+  const out: Entity[] = []
+  const size = ctx.arrowheadSize || m.arrowheadSize || 0
+  for (const root of ctx.leaderRoots ?? []) {
+    for (const leader of root.lines ?? []) {
+      const pts = [...(leader.points ?? []), root.connectionPoint].filter(Boolean)
+      if (pts.length < 2) continue
+      out.push(new Polyline3D(pts))
+      const [tip, next] = pts
+      const [dx, dy] = [next.x - tip.x, next.y - tip.y]
+      const l = Math.hypot(dx, dy)
+      if (size > 0 && l > 1e-9) {
+        const [ux, uy] = [dx / l, dy / l]
+        const [bx, by] = [tip.x + ux * size, tip.y + uy * size]
+        const w = size / 6
+        const a = new XYZ(bx - uy * w, by + ux * w, tip.z)
+        const b = new XYZ(bx + uy * w, by - ux * w, tip.z)
+        out.push(new Solid(tip, a, b, b))
+      }
+    }
+  }
+  if (ctx.hasTextContents && ctx.textLabel?.trim()) {
+    const t = new MText(ctx.textLabel)
+    t.insertPoint = ctx.textLocation
+    t.height = ctx.textHeight || 2.5
+    out.push(t)
+  }
+  if (ctx.hasContentsBlock && ctx.blockContent) {
+    const ins = new Insert(ctx.blockContent)
+    ins.insertPoint = ctx.blockContentLocation
+    out.push(ins)
+  }
+  return out
 }

@@ -76,9 +76,9 @@ test.describe('Cota: interacción de CAD clásica', () => {
     await typeCmd(page, 'LINE', '0,0', '50,0', '')
     const input = page.getByTestId('command-input')
     await input.press('Control+z')
-    await expect(page.locator('.cmd-output')).toContainText('Undo.')
+    await expect(page.locator('.cmd-output')).toContainText('Undo: ')
     await input.press('Control+y')
-    await expect(page.locator('.cmd-output')).toContainText('Redo.')
+    await expect(page.locator('.cmd-output')).toContainText('Redo: ')
   })
 
   test('Enter fija el valor editado en el panel de propiedades', async ({ page }) => {

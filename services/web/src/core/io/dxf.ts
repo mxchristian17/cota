@@ -11,6 +11,8 @@ import { DxfDimWriter, dimGeometryDxf, parseDimension, parseDimStyle } from './d
 import { resolveDimVars, type DimStyleDef } from '../dimension/style'
 import { angleFromOcs, angleToOcs, fromOcs, isWorldExtrusion, toOcs } from './dxfOcs'
 import { normAngle } from '../geom/arc'
+import { acisEdges, sabFromHex, satFromDxf } from './acis'
+import { image, infiniteLine, mline, multileader, oleFrame, tolerance, underlay, viewBasis, type Piece } from './dxfExtra'
 
 /**
  * DXF ASCII (subconjunto R2000/AC1015) **sin dependencias**. Exporta/importa las
@@ -68,7 +70,17 @@ function entityDxf(e: Entity, layerName: string): string | null {
       return p(0, 'POINT') + h + p(10, x) + p(20, y) + p(30, z)
     }
     case 'LINE': {
-      const { start, end } = e.props
+      const { start, end, extend } = e.props
+      if (extend) {
+        const d = [end[0] - start[0], end[1] - start[1], end[2] - start[2]]
+        const l = Math.hypot(d[0], d[1], d[2]) || 1
+        return (
+          p(0, extend === 'both' ? 'XLINE' : 'RAY') +
+          h +
+          p(10, start[0]) + p(20, start[1]) + p(30, start[2]) +
+          p(11, d[0] / l) + p(21, d[1] / l) + p(31, d[2] / l)
+        )
+      }
       return (
         p(0, 'LINE') +
         h +
@@ -165,9 +177,22 @@ function entityDxf(e: Entity, layerName: string): string | null {
     case 'DIMENSION':
       // Sin equivalente nativo (ver `DxfDimWriter`): explotada a líneas, flechas rellenas (SOLID) y texto.
       return dimGeometryDxf(dimDisplay(e.props), layerName, false)
-    // 3D no se exporta a DXF (formato 2D en este alcance).
+    case 'MESH3D': {
+      // Cada cara como 3DFACE (hasta 4 esquinas; las de más, en abanico).
+      const { vertices, faces } = e.props
+      let out = ''
+      for (const f of faces) {
+        for (let k = 1; k + 1 < f.length; k += 2) {
+          const ids = f.length <= 4 ? f : k + 2 < f.length ? [f[0], f[k], f[k + 1], f[k + 2]] : [f[0], f[k], f[k + 1]]
+          const q = [0, 1, 2, 3].map((i) => vertices[ids[Math.min(i, ids.length - 1)]])
+          out += p(0, '3DFACE') + h + q.map((v, i) => p(10 + i, v[0]) + p(20 + i, v[1]) + p(30 + i, v[2])).join('')
+          if (f.length <= 4) break
+        }
+      }
+      return out || null
+    }
+    // Un sólido se exporta como la malla de sus caras (`exportableEntities`, que tiene con qué calcularla).
     case 'SOLID3D':
-    case 'MESH3D':
     case 'INSERT': // las inserciones se expanden a geometría de mundo antes de exportar
     case 'VIEWPORT': // los layouts no se exportan a DXF (D2)
       return null
@@ -328,6 +353,43 @@ export interface DxfImportResult {
   /** (DWG) Sólidos, regiones y cuerpos ACIS que se trajeron como sus aristas guardadas (sin caras). */
   wireSolids?: number
   unsupported: string[]
+  /** Entidades que entraron simplificadas o sin una parte (se avisa al abrir): tipo → cantidad. */
+  simplified?: Record<string, number>
+  /** Espacio papel: las hojas con contenido, en mm del papel. */
+  layouts?: DxfLayoutSpec[]
+}
+
+/** VIEWPORT de una hoja: su rectángulo en el papel (mm) y la vista del modelo que muestra. */
+export interface DxfViewportSpec {
+  layerName: string
+  center: Vec3
+  width: number
+  height: number
+  target: Vec3
+  az: number
+  el: number
+  /** Milímetros de papel por unidad del modelo. */
+  mmPerUnit: number
+  locked: boolean
+  on: boolean
+}
+
+export interface DxfLayoutSpec {
+  name: string
+  /** Tamaño de la hoja tal como se ve, en mm. */
+  width: number
+  height: number
+  /** Márgenes no imprimibles en mm: arriba, derecha, abajo, izquierda. */
+  margins: [number, number, number, number]
+  entities: DxfEntitySpec[]
+  viewports: DxfViewportSpec[]
+}
+
+/** Contenido de un bloque o de un espacio papel. */
+interface BlockItem {
+  spec?: DxfEntitySpec
+  insert?: Rec
+  viewport?: Rec
 }
 
 interface Rec {
@@ -413,22 +475,138 @@ export function importDxf(text: string): DxfImportResult {
   /** Handle → nombre de BLOCK_RECORD (flechas de DIMSTYLE en R2000+). */
   const blockNames = new Map<string, string>()
   /** Definiciones de la sección BLOCKS (punto base + contenido) e inserciones a expandir. */
-  const blocks = new Map<string, { base: Vec3; items: Array<{ spec?: DxfEntitySpec; insert?: Rec }> }>()
-  let block: { base: Vec3; items: Array<{ spec?: DxfEntitySpec; insert?: Rec }> } | null = null
+  const blocks = new Map<string, { base: Vec3; items: BlockItem[] }>()
+  let block: { base: Vec3; items: BlockItem[] } | null = null
+  /** Contenido de cada espacio papel, por el nombre de su bloque (`*Paper_Space…`). */
+  const paper = new Map<string, BlockItem[]>()
+  const paperItems = (name: string): BlockItem[] => {
+    const k = name.toUpperCase()
+    let list = paper.get(k)
+    if (!list) paper.set(k, (list = []))
+    return list
+  }
+  const layoutRecs: Rec[] = []
   const inserts: Rec[] = []
-  /** Entidad común (tipo de línea por objeto incluido) de un record; null si no se soporta. */
-  const specOf = (rec: Rec): DxfEntitySpec | null => {
-    const spec = rec.type === 'HATCH' ? hatchSpec(rec) : rec.type === 'ATTRIB' ? parseEntity({ type: 'TEXT', codes: rec.codes }) : parseEntity(rec)
-    if (!spec) return null
+  const simplified: Record<string, number> = {}
+  let wireSolids = 0
+  /** Modelos ACIS binarios de un DXF 2013+: por el handle de su entidad. */
+  const asmData = new Map<string, string[]>()
+  for (const r of records) {
+    if (r.type !== 'ACDSRECORD') continue
+    const id = r.codes.find(([k]) => k === 320)?.[1].trim().toUpperCase()
+    const hex = r.codes.filter(([k]) => k === 310).map(([, v]) => v.trim())
+    if (id && hex.length) asmData.set(id, hex)
+  }
+  /** Archivos de las imágenes y referencias externas (sección OBJECTS, que viene después): por el handle de su definición. */
+  const externalFiles = new Map<string, string>()
+  for (const r of records) {
+    if (!/^(IMAGEDEF|PDFDEFINITION|DWFDEFINITION|DGNDEFINITION)$/.test(r.type)) continue
+    const h = str(r.codes, 5)
+    const f = str(r.codes, 1)
+    if (h && f) externalFiles.set(h.toUpperCase(), f)
+  }
+  /** Alto del texto de un estilo de cota (DIMTXT × DIMSCALE), para las tolerancias. */
+  const dimTextHeight = (name: string | undefined): number => {
+    const r = dimStyleRecs.find((d) => (str(d.codes, 2) ?? '').toUpperCase() === (name ?? '').toUpperCase())
+    return r ? num(r.codes, 140, 2.5) * (num(r.codes, 40, 1) || 1) : 2.5
+  }
+  const noteSimplified = (type: string) => (simplified[type] = (simplified[type] ?? 0) + 1)
+  /** Entidades con varias piezas o que no son una sola entidad de Cota. */
+  const piecesOf = (rec: Rec): Piece[] | null => {
+    const c = rec.codes
+    switch (rec.type) {
+      case 'XLINE':
+        return [infiniteLine(c, 'both')]
+      case 'RAY':
+        return [infiniteLine(c, 'end')]
+      case 'MLINE':
+        return mline(c)
+      case 'MULTILEADER':
+      case 'MLEADER':
+        return multileader(c, plainMtext)
+      case 'TOLERANCE':
+        return tolerance(c, dimTextHeight(str(c, 3)))
+      case '3DLINE': {
+        const line = parseEntity({ type: 'LINE', codes: c })
+        return line ? [line] : null
+      }
+      case 'ATTDEF': {
+        // Fuera de un bloque se ve su etiqueta.
+        const tag = str(c, 2) ?? ''
+        const t = parseEntity({ type: 'TEXT', codes: [...c.filter(([k]) => k !== 1), [1, tag]] })
+        return t ? [t] : null
+      }
+      case 'HELIX': {
+        // Es una spline con datos extra: sus puntos de control vienen antes de los del eje.
+        const cut = c.findIndex(([k, v]) => k === 100 && v.trim() === 'AcDbHelix')
+        const s = parseEntity({ type: 'SPLINE', codes: cut > 0 ? c.slice(0, cut) : c })
+        return s && (s.props as { controlPoints: Vec3[] }).controlPoints.length >= 2 ? [s] : null
+      }
+      case 'IMAGE':
+        noteSimplified('IMAGE')
+        return image(c, externalFiles)
+      case 'PDFUNDERLAY':
+      case 'DWFUNDERLAY':
+      case 'DGNUNDERLAY':
+        noteSimplified(rec.type)
+        return underlay(c, externalFiles, rec.type.slice(0, 3))
+      case 'OLE2FRAME':
+        noteSimplified('OLE2FRAME')
+        return oleFrame(c)
+      case 'WIPEOUT':
+        // La máscara no se aplica: lo que tapa se sigue viendo.
+        noteSimplified('WIPEOUT')
+        return []
+      case 'SHAPE': {
+        // Su dibujo está en un archivo de formas externo: queda un punto donde va.
+        noteSimplified('SHAPE')
+        const p = parseEntity({ type: 'POINT', codes: c })
+        return p ? [p] : null
+      }
+      case 'LIGHT':
+      case 'SUN':
+        return [] // no son dibujo
+      case '3DSOLID':
+      case 'REGION':
+      case 'BODY':
+      case 'SURFACE':
+      case 'EXTRUDEDSURFACE':
+      case 'LOFTEDSURFACE':
+      case 'REVOLVEDSURFACE':
+      case 'SWEPTSURFACE':
+      case 'PLANESURFACE': {
+        // Modelo ACIS: en el propio registro (hasta 2010) o en la sección ACDSDATA (2013 en adelante), que viene después.
+        const handle = (str(c, 5) ?? '').toUpperCase()
+        const stored = asmData.get(handle)
+        const edges = acisEdges(stored ? sabFromHex(stored) : satFromDxf(c))
+        if (!edges.length) return null
+        wireSolids++
+        return edges.map((v): Piece => (v.length === 2 ? { type: 'LINE', props: { start: v[0], end: v[1] } } : { type: 'POLYLINE', props: { vertices: v, closed: false } }))
+      }
+      default:
+        return null
+    }
+  }
+  /** Entidades (tipo de línea por objeto incluido) de un record; null si no se soporta. */
+  const specsOf = (rec: Rec): DxfEntitySpec[] | null => {
+    const one = rec.type === 'HATCH' ? hatchSpec(rec) : rec.type === 'ATTRIB' ? parseEntity({ type: 'TEXT', codes: rec.codes }) : parseEntity(rec)
+    const pieces = one ? [one] : piecesOf(rec)
+    if (!pieces) return null
     const lt = str(rec.codes, 6)
     const lts = num(rec.codes, 48, 1)
-    return {
+    return pieces.map((spec) => ({
       ...spec,
       layerName: str(rec.codes, 8) ?? '0',
       ...(lt && lt.toUpperCase() !== BYLAYER ? { lineType: lt.toUpperCase() } : {}),
       ...(lts !== 1 && lts > 0 ? { ltScale: lts } : {}),
       ...ownColorWeight(rec.codes),
-    }
+    }))
+  }
+  /** Cota sin formato propio (de arco, de radio grande): se dibuja con su bloque anónimo. */
+  const blockDim = (rec: Rec): Rec | null => {
+    if (rec.type !== 'ARC_DIMENSION' && rec.type !== 'LARGE_RADIAL_DIMENSION') return null
+    const keep = rec.codes.filter(([k]) => k === 2 || k === 8)
+    return keep.some(([k]) => k === 2) ? { type: 'INSERT', codes: keep } : null
   }
 
   for (let r = 0; r < records.length; r++) {
@@ -524,33 +702,60 @@ export function importDxf(text: string): DxfImportResult {
       if (rec.type === 'BLOCK') {
         const name = str(rec.codes, 2) ?? ''
         block = { base: [num(rec.codes, 10), num(rec.codes, 20), num(rec.codes, 30)], items: [] }
-        // Los anónimos de cotas (*D), sombreados (*X) y espacios (*Model_Space, *Paper_Space) no se insertan a mano.
-        if (!name.startsWith('*') || /^\*[UT]/i.test(name)) blocks.set(name.toUpperCase(), block)
+        // Los anónimos de sombreados (*X) y el espacio modelo no se insertan a mano. Los de cotas (*D), sí: los usan las
+        // cotas de arco y de radio grande, que se dibujan con su bloque.
+        if (!name.startsWith('*') || /^\*[UTD]/i.test(name)) blocks.set(name.toUpperCase(), block)
+        // Cada espacio papel (salvo el activo, que suele venir en ENTITIES) guarda su contenido en su bloque.
+        if (/^\*PAPER_SPACE/i.test(name)) block.items = paperItems(name)
       } else if (rec.type === 'ENDBLK') block = null
       else if (block && rec.type === 'INSERT') block.items.push({ insert: rec })
+      else if (block && rec.type === 'VIEWPORT') block.items.push({ viewport: rec })
       else if (block && rec.type !== 'ATTDEF') {
-        const spec = specOf(rec)
-        if (spec) block.items.push({ spec })
+        const dim = blockDim(rec)
+        if (dim) block.items.push({ insert: dim })
+        else if (rec.type === 'DIMENSION') {
+          const d = parseDimension(rec.codes)
+          if (d) block.items.push({ spec: { type: 'DIMENSION', layerName: str(rec.codes, 8) ?? '0', props: { ...d.props, styleName: d.styleName } as unknown as EntityProps } })
+        } else for (const spec of specsOf(rec) ?? []) block.items.push({ spec })
       }
       continue
     }
+    if (section === 'OBJECTS' && rec.type === 'LAYOUT') layoutRecs.push(rec)
     if (section !== 'ENTITIES') continue
 
+    // Lo que está en el espacio papel no es parte del modelo: va a su hoja.
+    if (num(rec.codes, 67, 0) === 1) {
+      const items = paperItems('*Paper_Space')
+      if (rec.type === 'VIEWPORT') items.push({ viewport: rec })
+      else if (rec.type === 'INSERT') items.push({ insert: rec })
+      else if (rec.type === 'DIMENSION') {
+        const d = parseDimension(rec.codes)
+        if (d) items.push({ spec: { type: 'DIMENSION', layerName: str(rec.codes, 8) ?? '0', props: { ...d.props, styleName: d.styleName } as unknown as EntityProps } })
+      } else if (blockDim(rec)) items.push({ insert: blockDim(rec)! })
+      else if (rec.type === 'ACAD_TABLE') items.push({ insert: tableInsert(rec) })
+      else {
+        const specs = specsOf(rec)
+        if (specs) for (const spec of specs) items.push({ spec })
+        else if (!['SEQEND', 'VERTEX'].includes(rec.type)) unsupported.add(rec.type)
+      }
+      continue
+    }
     if (rec.type === 'INSERT') {
       inserts.push(rec)
       continue
     }
+    const dimInsert = blockDim(rec)
+    if (dimInsert) {
+      inserts.push(dimInsert)
+      continue
+    }
     if (rec.type === 'ACAD_TABLE') {
-      // Una tabla se dibuja con su bloque anónimo (*T…): se inserta en su punto, girada según su dirección (11/21).
-      const deg = (Math.atan2(num(rec.codes, 21, 0), num(rec.codes, 11, 1)) * 180) / Math.PI
-      const keep = rec.codes.filter(([k]) => k === 2 || k === 8 || k === 10 || k === 20 || k === 30 || k === 210 || k === 220 || k === 230)
-      inserts.push({ type: 'INSERT', codes: [...keep, [50, String(deg)]] })
+      inserts.push(tableInsert(rec))
       continue
     }
     if (rec.type === 'ATTRIB') {
       // Valores de los atributos de la inserción anterior: ya vienen en coordenadas del dibujo, como textos.
-      const spec = specOf(rec)
-      if (spec) entities.push(spec)
+      for (const spec of specsOf(rec) ?? []) entities.push(spec)
       continue
     }
     const layerName = str(rec.codes, 8) ?? '0'
@@ -560,19 +765,20 @@ export function importDxf(text: string): DxfImportResult {
       else unsupported.add('DIMENSION (type)')
       continue
     }
-    const spec = rec.type === 'HATCH' ? hatchSpec(rec) : parseEntity(rec)
-    const lt = str(rec.codes, 6)
-    const lts = num(rec.codes, 48, 1)
-    if (spec)
-      entities.push({
-        ...spec,
-        layerName,
-        ...(lt && lt.toUpperCase() !== BYLAYER ? { lineType: lt.toUpperCase() } : {}),
-        ...(lts !== 1 && lts > 0 ? { ltScale: lts } : {}),
-        ...ownColorWeight(rec.codes),
-      })
+    const specs = specsOf(rec)
+    if (specs) entities.push(...specs)
     else if (!['SEQEND', 'VERTEX'].includes(rec.type)) unsupported.add(rec.type)
   }
+
+  for (const r of dimStyleRecs) dimStyles.push(parseDimStyle(r.codes, blockNames))
+  // Cada cota con las variables de su estilo (el documento las vuelve a resolver al agregar los estilos).
+  const styled = (e: DxfEntitySpec) => {
+    if (e.type !== 'DIMENSION') return
+    const dp = e.props as { styleName?: string; style?: unknown }
+    dp.style = resolveDimVars(dimStyles.find((s) => s.name === dp.styleName)?.vars)
+  }
+  // Las de los bloques y hojas, antes de ubicarlas: transformar una cota necesita su estilo.
+  for (const b of [...blocks.values(), ...[...paper.values()].map((items) => ({ items }))]) for (const it of b.items) if (it.spec) styled(it.spec)
 
   // Bloques: cada inserción se expande a su geometría en el dibujo (anidadas incluidas). Lo que está en la capa 0
   // dentro del bloque toma la capa de la inserción, como en el CAD clásico.
@@ -590,7 +796,7 @@ export function importDxf(text: string): DxfImportResult {
   // Capas congeladas: en el CAD clásico una inserción en una capa congelada se oculta entera, aunque su contenido esté
   // en otras capas. Como acá el bloque se desarma, todo lo que hay debajo de esa inserción pasa a su capa congelada.
   const frozenNames = new Set(layers.filter((l) => l.frozen).map((l) => l.name.toUpperCase()))
-  const expand = (rec: Rec, after: InsertProps[], layer: string, depth: number, frozenAs: string | null = null): void => {
+  const expand = (rec: Rec, after: InsertProps[], layer: string, depth: number, frozenAs: string | null = null, out: DxfEntitySpec[] = entities): void => {
     const def = blocks.get((str(rec.codes, 2) ?? '').toUpperCase())
     if (!def || depth > 8) {
       if (!def) unsupported.add('INSERT')
@@ -601,26 +807,124 @@ export function importDxf(text: string): DxfImportResult {
     const chain = [shift(def.base), insertOf(rec), ...after]
     for (const it of def.items) {
       if (it.insert) {
-        expand(it.insert, chain, here, depth + 1, frozen)
+        expand(it.insert, chain, here, depth + 1, frozen, out)
         continue
       }
-      let e = { id: '', type: it.spec!.type, layer: '', props: it.spec!.props } as unknown as Entity
+      if (!it.spec) continue
+      let e = { id: '', type: it.spec.type, layer: '', props: it.spec.props } as unknown as Entity
       for (const t of chain) e = transformInsertEntity(e, t)
       // El tipo puede cambiar al transformar (un RECTANGLE girado o fuera de planta pasa a POLYLINE).
-      entities.push({ ...it.spec!, type: e.type, props: e.props as EntityProps, layerName: frozen ?? (it.spec!.layerName === '0' ? here : it.spec!.layerName) })
+      out.push({ ...it.spec, type: e.type, props: e.props as EntityProps, layerName: frozen ?? (it.spec.layerName === '0' ? here : it.spec.layerName) })
     }
   }
   for (const rec of inserts) expand(rec, [], str(rec.codes, 8) ?? '0', 0)
 
-  for (const r of dimStyleRecs) dimStyles.push(parseDimStyle(r.codes, blockNames))
-  // Cada cota con las variables de su estilo (el documento las vuelve a resolver al agregar los estilos).
-  for (const e of entities) {
-    if (e.type !== 'DIMENSION') continue
-    const dp = e.props as { styleName?: string; style?: unknown }
-    dp.style = resolveDimVars(dimStyles.find((s) => s.name === dp.styleName)?.vars)
-  }
+  const layouts = buildLayouts(paper, layoutRecs, blockNames, (it, toPaper, out) => {
+    if (it.insert) expand(it.insert, [toPaper], str(it.insert.codes, 8) ?? '0', 0, null, out)
+    else if (it.spec) {
+      const e = transformInsertEntity({ id: '', type: it.spec.type, layer: '', props: it.spec.props } as unknown as Entity, toPaper)
+      out.push({ ...it.spec, type: e.type, props: e.props as EntityProps })
+    }
+  })
 
-  return { currentLayer, layers, entities, dimStyles, linetypes, vars, ...(view ? { view } : {}), unsupported: [...unsupported] }
+  for (const e of entities) styled(e)
+
+  return {
+    currentLayer,
+    layers,
+    entities,
+    dimStyles,
+    linetypes,
+    vars,
+    ...(view ? { view } : {}),
+    unsupported: [...unsupported],
+    ...(wireSolids ? { wireSolids } : {}),
+    ...(Object.keys(simplified).length ? { simplified } : {}),
+    ...(layouts.length ? { layouts } : {}),
+  }
+}
+
+/** Una tabla se dibuja con su bloque anónimo (*T…): se inserta en su punto, girada según su dirección (11/21). */
+function tableInsert(rec: Rec): Rec {
+  const deg = (Math.atan2(num(rec.codes, 21, 0), num(rec.codes, 11, 1)) * 180) / Math.PI
+  const keep = rec.codes.filter(([k]) => k === 2 || k === 8 || k === 10 || k === 20 || k === 30 || k === 210 || k === 220 || k === 230)
+  return { type: 'INSERT', codes: [...keep, [50, String(deg)]] }
+}
+
+/**
+ * Hojas del dibujo: cada LAYOUT (OBJECTS) con su bloque de espacio papel. Sólo las que tienen contenido; el VIEWPORT con
+ * id 1 es la propia hoja y no se trae. Las coordenadas del papel van desde la esquina del área imprimible, en las
+ * unidades de papel del LAYOUT: se pasan a mm desde la esquina de la hoja.
+ */
+function buildLayouts(
+  paper: Map<string, BlockItem[]>,
+  layoutRecs: Rec[],
+  blockNames: Map<string, string>,
+  place: (it: BlockItem, toPaper: InsertProps, out: DxfEntitySpec[]) => void,
+): DxfLayoutSpec[] {
+  const out: DxfLayoutSpec[] = []
+  const used = new Set<string>()
+  const defs = layoutRecs
+    .map((rec) => {
+      const c = rec.codes
+      const i = c.findIndex(([k, v]) => k === 100 && v.trim() === 'AcDbLayout')
+      const own = i >= 0 ? c.slice(i) : c
+      return { c, name: str(own, 1) ?? 'Layout', order: num(own, 71, 0), space: blockNames.get((str(own, 330) ?? '').toUpperCase()) ?? '' }
+    })
+    .filter((d) => d.name.toUpperCase() !== 'MODEL')
+    .sort((a, b) => a.order - b.order)
+  const entries: Array<{ name: string; items: BlockItem[]; c: Rec['codes'] }> = defs.flatMap((d) => {
+    const key = d.space.toUpperCase()
+    if (!paper.has(key)) return []
+    used.add(key)
+    return [{ name: d.name, items: paper.get(key)!, c: d.c }]
+  })
+  // Sin LAYOUT que los nombre (DXF viejos): cada espacio papel es una hoja más.
+  for (const [key, items] of paper) if (!used.has(key)) entries.push({ name: `Layout${entries.length + 1}`, items, c: [] })
+  for (const { name, items, c } of entries) {
+    // La propia hoja es un VIEWPORT con id 1 (69); si el archivo no trae el id, es el primero.
+    const sheet = items.find((it) => it.viewport && num(it.viewport.codes, 69, 1) === 1)
+    if (!items.some((it) => it !== sheet)) continue
+    const rot = num(c, 73, 0)
+    const swap = rot === 1 || rot === 3
+    let [a, b] = [num(c, 44, 0), num(c, 45, 0)]
+    const k = c.length && num(c, 72, 1) === 0 ? 25.4 : 1 // 0 = pulgadas
+    if (!(a > 0 && b > 0)) [a, b] = [420, 297]
+    const [ml, mb, mr, mt] = [num(c, 40, 0), num(c, 41, 0), num(c, 42, 0), num(c, 43, 0)]
+    const margins: [number, number, number, number] = swap ? [mr, mt, ml, mb] : [mt, mr, mb, ml]
+    const left = margins[3]
+    const bottom = margins[2]
+    const toPaper: InsertProps = { name: '', position: [left, bottom, 0], scale: [k, k, k], rotation: 0 }
+    const spec: DxfLayoutSpec = { name, width: swap ? b : a, height: swap ? a : b, margins, entities: [], viewports: [] }
+    for (const it of items) {
+      if (!it.viewport) {
+        place(it, toPaper, spec.entities)
+        continue
+      }
+      if (it === sheet) continue
+      const v = it.viewport.codes
+      const [w, h, vh] = [num(v, 40, 0), num(v, 41, 0), num(v, 45, 0)]
+      if (!(w > 0 && h > 0 && vh > 0)) continue
+      const { az, el, right, up } = viewBasis([num(v, 16, 0), num(v, 26, 0), num(v, 36, 1)])
+      const [cx, cy] = [num(v, 12, 0), num(v, 22, 0)]
+      const t: Vec3 = [num(v, 17, 0), num(v, 27, 0), num(v, 37, 0)]
+      const status = num(v, 90, 0)
+      spec.viewports.push({
+        layerName: str(v, 8) ?? '0',
+        center: [num(v, 10) * k + left, num(v, 20) * k + bottom, 0],
+        width: w * k,
+        height: h * k,
+        target: [0, 1, 2].map((i) => t[i] + cx * right[i] + cy * up[i]) as Vec3,
+        az,
+        el,
+        mmPerUnit: (h * k) / vh,
+        locked: (status & 16384) !== 0,
+        on: (status & 131072) === 0,
+      })
+    }
+    if (spec.entities.length || spec.viewports.length) out.push(spec)
+  }
+  return out
 }
 
 function hatchSpec(rec: Rec): { type: EntityType; props: EntityProps } | null {

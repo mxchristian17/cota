@@ -8,7 +8,7 @@ import { EditLog } from '../../editing/editLog'
 import { pickCurve, ptVec } from '../../editing/pickCurve'
 import { askKeyword } from '../ask'
 import { sysvars } from '../sysvars'
-import { selectableEntities, visibleEntities } from '../selectionSets'
+import { rectPolygon, selectableEntities, visibleEntities } from '../selectionSets'
 
 type Mode = 'trim' | 'extend'
 
@@ -157,7 +157,11 @@ async function fence(ctx: CommandContext, s: TrimSession, op: Mode): Promise<voi
 async function crossing(ctx: CommandContext, s: TrimSession, op: Mode): Promise<void> {
   const a = await ctx.getPoint('Specify first corner: ')
   if (a.kind !== 'point') return
-  const b = await ctx.getPoint('Specify opposite corner: ', { base: a.point, corner: true })
+  const b = await ctx.getPoint('Specify opposite corner: ', {
+    base: a.point,
+    corner: true,
+    preview: (c) => [{ kind: 'polyline', points: [...rectPolygon(a.point, c), a.point] }],
+  })
   if (b.kind !== 'point') return
   const box = {
     minX: Math.min(a.point.x, b.point.x),

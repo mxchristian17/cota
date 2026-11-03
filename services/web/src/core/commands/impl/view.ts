@@ -1,6 +1,7 @@
 import type { NamedView, ViewName, ViewState } from '../../view'
 import type { Command, CommandContext } from '../types'
 import { askKeyword } from '../ask'
+import { rectPolygon } from '../selectionSets'
 import { matchKeyword } from '../keywords'
 import { sysvars } from '../sysvars'
 import { normalizeUcs, ucsToDef } from '../../ucs'
@@ -105,7 +106,14 @@ export const viewCommand: Command = {
         if (!name) return
         const a = await ctx.getPoint('Specify first corner: ', { base: null })
         if (a.kind !== 'point') return
-        const b = await ctx.getPoint('Specify opposite corner: ', { base: a.point, corner: true })
+        const b = await ctx.getPoint('Specify opposite corner: ', {
+          base: a.point,
+          corner: true,
+          preview: (c) => {
+            const plane = ctx.app.viewPlane?.()
+            return plane ? [{ kind: 'polyline', points: [...rectPolygon(a.point, c, plane), a.point] }] : []
+          },
+        })
         if (b.kind !== 'point') return
         // La vista de la ventana se guarda sin cambiar la actual (como el CAD clásico).
         const view = ctx.app.windowViewState?.(a.point, b.point)

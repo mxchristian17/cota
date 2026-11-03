@@ -520,3 +520,77 @@ describe('importDxf ▸ capas congeladas (como en el CAD clásico)', () => {
     expect(r.entities.map((e) => e.layerName).sort()).toEqual(['Ejes', 'Pieza'])
   })
 })
+
+describe('entidades de DWG/DXF que Cota dibuja con piezas simples', () => {
+  const dxf = (...recs: string[]) => `0\nSECTION\n2\nENTITIES\n${recs.join('')}0\nENDSEC\n0\nEOF\n`
+  const rec = (type: string, ...pairs: Array<[number, string | number]>) => `0\n${type}\n8\nA\n${pairs.map(([k, v]) => `${k}\n${v}\n`).join('')}`
+  const lineLayer: Layer = { id: 'A', name: 'A', color: '#ffffff', lineWeight: 0.25, lineType: 'CONTINUOUS', locked: false, visible: true, printable: true }
+
+  it('XLINE y RAY son líneas infinitas y salen como lo que son al exportar', () => {
+    const r = importDxf(dxf(rec('XLINE', [10, 1], [20, 2], [30, 0], [11, 0], [21, 1], [31, 0]), rec('RAY', [10, 0], [20, 0], [30, 0], [11, 1], [21, 0], [31, 0])))
+    expect(r.entities.map((e) => (e.props as { extend?: string }).extend)).toEqual(['both', 'end'])
+    expect(r.entities[0].props).toMatchObject({ start: [1, 2, 0], end: [1, 3, 0] })
+    const out = exportDxf(r.entities.map((e, i) => ({ id: `e${i}`, type: e.type, layer: 'A', props: e.props }) as Entity), [lineLayer])
+    const back = importDxf(out)
+    expect(back.entities.map((e) => (e.props as { extend?: string }).extend)).toEqual(['both', 'end'])
+    expect(back.entities[0].props).toMatchObject({ start: [1, 2, 0], end: [1, 3, 0] })
+  })
+
+  it('MLINE: una polilínea por elemento, con los ingletes', () => {
+    const v = (x: number, y: number, dx: number, dy: number, mx: number, my: number, a: number, b: number): Array<[number, number]> => [[11, x], [21, y], [31, 0], [12, dx], [22, dy], [32, 0], [13, mx], [23, my], [33, 0], [74, 2], [41, a], [41, 0], [75, 0], [74, 2], [41, b], [41, 0], [75, 0]]
+    const r = importDxf(dxf(rec('MLINE', [71, 1], [72, 2], [73, 2], [10, 0], [20, 0], [30, 0], ...v(0, 0, 1, 0, 0, 1, 1, -1), ...v(10, 0, 1, 0, 0, 1, 1, -1))))
+    expect(r.entities.map((e) => (e.props as { vertices: number[][] }).vertices)).toEqual([[[0, 1, 0], [10, 1, 0]], [[0, -1, 0], [10, -1, 0]]])
+  })
+
+  it('MULTILEADER: la directriz con su flecha y el texto', () => {
+    const r = importDxf(
+      dxf(rec('MULTILEADER', [300, 'CONTEXT_DATA{'], [41, 3], [140, 2], [304, 'Nota \\Puno'], [12, 20], [22, 10], [32, 0], [302, 'LEADER{'], [10, 15], [20, 10], [30, 0], [304, 'LEADER_LINE{'], [10, 0], [20, 0], [30, 0], [305, '}'], [303, '}'], [301, '}'])),
+    )
+    expect(r.entities.map((e) => e.type)).toEqual(['POLYLINE', 'HATCH', 'TEXT'])
+    expect((r.entities[0].props as { vertices: number[][] }).vertices).toEqual([[0, 0, 0], [15, 10, 0]])
+    expect(r.entities[2].props).toMatchObject({ text: 'Nota \nuno', height: 3, position: [20, 10, 0] })
+  })
+
+  it('TOLERANCE: marco con una casilla por valor y el símbolo dibujado', () => {
+    const r = importDxf(dxf(rec('TOLERANCE', [3, 'Standard'], [10, 0], [20, 0], [30, 0], [1, '{\\Fgdt;j}%%v0.2%%vA'], [11, 1], [21, 0], [31, 0])))
+    const types = r.entities.map((e) => e.type)
+    expect(types.filter((t) => t === 'POLYLINE')).toHaveLength(3) // tres casillas
+    expect(types).toContain('CIRCLE') // el círculo del símbolo de posición
+    expect(r.entities.filter((e) => e.type === 'TEXT').map((e) => (e.props as { text: string }).text)).toEqual(['0.2', 'A'])
+  })
+
+  it('IMAGE: su marco y el nombre del archivo, con el aviso', () => {
+    const r = importDxf(
+      `${dxf(rec('IMAGE', [10, 1], [20, 1], [30, 0], [11, 0.5], [21, 0], [31, 0], [12, 0], [22, 0.5], [32, 0], [13, 20], [23, 10], [340, 'AB']))}0\nSECTION\n2\nOBJECTS\n0\nIMAGEDEF\n5\nAB\n1\nC:\\fotos\\logo.png\n0\nENDSEC\n`,
+    )
+    expect((r.entities[0].props as { vertices: number[][] }).vertices).toEqual([[1, 1, 0], [11, 1, 0], [11, 6, 0], [1, 6, 0]])
+    expect((r.entities[1].props as { text: string }).text).toBe('logo.png')
+    expect(r.simplified).toEqual({ IMAGE: 1 })
+  })
+
+  it('una malla se exporta como caras 3D', () => {
+    const mesh = { id: 'm', type: 'MESH3D', layer: 'A', props: { vertices: [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 1]], faces: [[0, 1, 2, 3]] } } as unknown as Entity
+    const back = importDxf(exportDxf([mesh], [lineLayer]))
+    expect(back.entities[0].type).toBe('MESH3D')
+    expect((back.entities[0].props as { vertices: number[][] }).vertices).toEqual([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 1]])
+  })
+
+  it('el espacio papel no se mezcla con el modelo: va a su hoja, con sus viewports y en mm desde la esquina', () => {
+    const paper = [
+      rec('LINE', [67, 1], [10, 0], [20, 0], [30, 0], [11, 10], [21, 0], [31, 0]),
+      rec('VIEWPORT', [67, 1], [10, 100], [20, 50], [30, 0], [40, 400], [41, 200], [69, 1]),
+      rec('VIEWPORT', [67, 1], [10, 50], [20, 40], [30, 0], [40, 80], [41, 60], [12, 5], [22, 7], [16, 0], [26, 0], [36, 1], [17, 1000], [27, 2000], [37, 0], [45, 120], [69, 2]),
+    ]
+    const r = importDxf(
+      `0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nBLOCK_RECORD\n0\nBLOCK_RECORD\n5\nB1\n2\n*Paper_Space\n0\nENDTAB\n0\nENDSEC\n` +
+        dxf(rec('LINE', [10, 1], [20, 1], [30, 0], [11, 2], [21, 2], [31, 0]), ...paper) +
+        `0\nSECTION\n2\nOBJECTS\n0\nLAYOUT\n5\nC1\n100\nAcDbPlotSettings\n40\n5\n41\n6\n42\n7\n43\n8\n44\n420\n45\n297\n72\n1\n73\n0\n100\nAcDbLayout\n1\nPlano\n71\n1\n330\nB1\n0\nENDSEC\n`,
+    )
+    expect(r.entities).toHaveLength(1)
+    const [l] = r.layouts!
+    expect(l).toMatchObject({ name: 'Plano', width: 420, height: 297, margins: [8, 7, 6, 5] })
+    expect(l.entities[0].props).toMatchObject({ start: [5, 6, 0], end: [15, 6, 0] })
+    expect(l.viewports).toHaveLength(1)
+    expect(l.viewports[0]).toMatchObject({ center: [55, 46, 0], width: 80, height: 60, target: [1005, 2007, 0], mmPerUnit: 0.5 })
+  })
+})

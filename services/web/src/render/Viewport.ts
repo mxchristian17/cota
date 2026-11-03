@@ -1,3 +1,5 @@
+import type { WindowPlane } from '../core/commands/selectionSets'
+import { lineSpan } from '../core/geom/xline'
 import { solidThreads, threadHelixSegments } from '../core/thread/geometry'
 import { hiddenLayerIds, layerEditable, layerVisible } from '../core/layers/visibility'
 import type { Deferred } from '../core/geom/tangency'
@@ -38,6 +40,13 @@ import { hatchFrame, hatchRegions, hatchRings, hatchStrokesCached, isSolidHatch,
 import { isWide, polylineBand } from '../core/geom/plineWidth'
 import type { HatchEntity } from '../core/document/types'
 import { isDoubleTap, isTap, pinchStep, touchConfig, TOUCH_AIM_OFFSET, type TouchPt } from './touchGesture'
+
+/** Distancia máxima (px) del cursor a una línea para tomarla con un clic. */
+const PICK_LINE_PX = 10
+/** Una línea a esta distancia (px) está "justo debajo" del cursor y gana a las que sólo entran por la tolerancia. */
+const PICK_EXACT_PX = 3
+/** Arrastre (px) por debajo del cual soltar el botón sigue siendo un clic, y no una ventana de selección. */
+const CLICK_SLOP_PX = 12
 
 /** Distancia de `p` al segmento a→b. */
 function distToSegment(p: Pt, a: Pt, b: Pt): number {
@@ -662,7 +671,7 @@ export class Viewport {
   extentsBox(): { min: Vec3; max: Vec3 } | null {
     const d = (this.data = this.provider?.() ?? this.data)
     if (d) this.syncScene(d)
-    const box = new THREE.Box3().setFromObject(this.entityGroup)
+    const box = this.contentBox()
     if (box.isEmpty() || ![box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z].every(isFinite)) return null
     return { min: [box.min.x, box.min.y, box.min.z], max: [box.max.x, box.max.y, box.max.z] }
   }
@@ -711,9 +720,7 @@ export class Viewport {
   /** Vista que encuadra la ventana `a`–`b`, sin aplicarla ni registrarla (-VIEW Window). */
   windowState(a: Pt, b: Pt): CameraState {
     const saved = this.getCamera()
-    const min = new THREE.Vector3(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.min(a.z, b.z) - 1)
-    const max = new THREE.Vector3(Math.max(a.x, b.x), Math.max(a.y, b.y), Math.max(a.z, b.z) + 1)
-    this.controller.fitBounds(new THREE.Box3(min, max), 1.02)
+    this.fitWindow(a, b)
     const s = this.getCamera()
     this.setCamera(saved)
     return s
@@ -802,7 +809,7 @@ export class Viewport {
   private fitExtents(): void {
     const d = (this.data = this.provider?.() ?? this.data)
     if (d) this.syncScene(d)
-    const box = new THREE.Box3().setFromObject(this.entityGroup)
+    const box = this.contentBox()
     if (this.sheet) box.union(new THREE.Box3(new THREE.Vector3(0, 0, -1), new THREE.Vector3(this.sheet.w, this.sheet.h, 1)))
     // Bounds vacíos o NO finitos (una geometría degenerada puede dar NaN) → no romper la cámara.
     const finite =
@@ -817,12 +824,46 @@ export class Viewport {
     this.controller.fitBounds(box)
   }
 
+  /** Caja de lo dibujado. Una línea infinita cuenta por sus dos puntos, no por lo que se prolonga. */
+  private contentBox(): THREE.Box3 {
+    const list = this.expanded
+    if (!list?.some((e) => e.type === 'LINE' && e.props.extend)) return new THREE.Box3().setFromObject(this.entityGroup)
+    const box = new THREE.Box3()
+    for (const e of list) for (const poly of entityOutline(e)) for (const p of poly) box.expandByPoint(new THREE.Vector3(p.x, p.y, p.z))
+    return box
+  }
+
   /** Encuadra el rectángulo definido por dos puntos de mundo (ZOOM Window). */
   zoomWindow(a: Pt, b: Pt): void {
     this.recordView()
-    const min = new THREE.Vector3(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.min(a.z, b.z) - 1)
-    const max = new THREE.Vector3(Math.max(a.x, b.x), Math.max(a.y, b.y), Math.max(a.z, b.z) + 1)
-    this.controller.fitBounds(new THREE.Box3(min, max), 1.02) // la ventana, casi sin margen
+    this.fitWindow(a, b)
+  }
+
+  /** Ejes de la pantalla en el mundo: el plano en que el usuario ve una ventana indicada con el mouse. */
+  viewPlane(): WindowPlane {
+    const cam = this.controller.camera
+    cam.updateMatrixWorld(true)
+    const r = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0)
+    const up = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 1)
+    return { u: [r.x, r.y, r.z], v: [up.x, up.y, up.z] }
+  }
+
+  /** Encuadra la ventana de esquinas `a` y `b` tal como se ve en pantalla, en cualquier vista. */
+  private fitWindow(a: Pt, b: Pt): void {
+    if (this.controller.mode === 'persp') {
+      const min = new THREE.Vector3(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.min(a.z, b.z) - 1)
+      const max = new THREE.Vector3(Math.max(a.x, b.x), Math.max(a.y, b.y), Math.max(a.z, b.z) + 1)
+      this.controller.fitBounds(new THREE.Box3(min, max), 1.02)
+      return
+    }
+    const { u, v } = this.viewPlane()
+    const d = [b.x - a.x, b.y - a.y, b.z - a.z]
+    const w = Math.abs(d[0] * u[0] + d[1] * u[1] + d[2] * u[2])
+    const h = Math.abs(d[0] * v[0] + d[1] * v[1] + d[2] * v[2])
+    if (Math.max(w, h) < 1e-9) return
+    this.controller.target.set((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2)
+    this.controller.viewHeight = Math.max(h, (w * this.height) / Math.max(1, this.width)) * 1.02 // casi sin margen
+    this.invalidate()
   }
 
   private attachEvents(): void {
@@ -1172,6 +1213,8 @@ export class Viewport {
       const cur0 = this.pxOf(e.clientX, e.clientY)
       // Clic simple en vacío en modo selección: abre la ventana (la otra esquina va con el próximo clic).
       const forced = this.cb.selectionArea?.() ?? null
+      // Un clic sostenido o con un temblor del mouse sigue siendo un clic: ni cierra una ventana ni pierde el objeto.
+      if (!this.boxPending && this.boxActive && start && Math.hypot(cur0[0] - start[0], cur0[1] - start[1]) < CLICK_SLOP_PX) this.boxActive = false
       if (!this.boxPending && !this.boxActive && start && this.cb.isSelectMode?.() && (forced || !this.pickAt(e.clientX, e.clientY))) {
         this.boxPending = true
         this.boxActive = true
@@ -1363,8 +1406,8 @@ export class Viewport {
   }
 
   pickAt(clientX: number, clientY: number): string | null {
-    this.raycaster.params.Line = { threshold: 6 * this.controller.worldPerPx() }
-    this.raycaster.params.Points = { threshold: 5 * this.controller.worldPerPx() }
+    this.raycaster.params.Line = { threshold: PICK_LINE_PX * this.controller.worldPerPx() }
+    this.raycaster.params.Points = { threshold: PICK_LINE_PX * this.controller.worldPerPx() }
     // El pick ve las dos caras de cada triángulo (una booleana puede dejar caras invertidas) y usa esferas
     // envolventes al día (un sólido recalculado conserva la geometría con otra forma): si no, a veces un clic
     // sobre un sólido no lo tomaba y había que seleccionarlo con una ventana.
@@ -1410,13 +1453,15 @@ export class Viewport {
     // Orden de capas: entre lo que está a la misma profundidad (p. ej. todo el dibujo 2D) gana
     // la capa de más arriba; dentro de la capa, lo más cercano al cursor y después lo más nuevo.
     const tol = 3 * this.controller.worldPerPx() + 1e-9
-    const d0 = found[0].h.distance
     const [cx, cy] = this.pxOf(clientX, clientY)
     const px = (p: THREE.Vector3): number => {
       const pr = this.controller.project(p)
       return pr ? Math.hypot(pr[0] - cx, pr[1] - cy) : Infinity
     }
-    const near = found.filter((f) => f.h.distance <= d0 + tol)
+    // La tolerancia es generosa: una línea lejana del cursor sólo cuenta si no hay nada justo debajo de él.
+    const under = found.filter((f) => (f.h.face && !f.h.object.userData.lowPick) || px(f.h.point) <= PICK_EXACT_PX)
+    const pool = under.length ? under : found
+    const near = pool.filter((f) => f.h.distance <= pool[0].h.distance + tol)
     // El relleno de un sombreado sólo gana si no hay una línea cerca del cursor.
     const low = (f: { h: THREE.Intersection }): number => (f.h.object.userData.lowPick ? 1 : 0)
     near.sort((a, b) => {
@@ -1489,7 +1534,8 @@ export class Viewport {
           maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); maxZ = Math.max(maxZ, p.z)
         }
       }
-      if (!isFinite(minX)) return { c: new THREE.Vector3(), r: Infinity } // sin contorno → nunca se descarta
+      // Sin contorno, o infinita → nunca se descarta.
+      if (!isFinite(minX) || (e.type === 'LINE' && e.props.extend)) return { c: new THREE.Vector3(), r: Infinity }
       const c = new THREE.Vector3((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2)
       return { c, r: Math.hypot(maxX - minX, maxY - minY, maxZ - minZ) / 2 }
     })
@@ -1522,12 +1568,21 @@ export class Viewport {
     const wpp = this.controller.worldPerPx() || 1
     const [cx, cy] = this.lastPx
     const near: Entity[] = []
+    const persp = this.controller.mode === 'persp'
+    const cam = this.controller.camera.position
+    const camDist = cam.distanceTo(this.controller.target)
     for (let i = 0; i < all.length; i++) {
       const s = spheres[i]
       if (!isFinite(s.r)) { near.push(all[i]); continue }
       const pr = this.controller.project(s.c)
-      if (!pr) continue
-      if (Math.hypot(pr[0] - cx, pr[1] - cy) <= s.r / wpp + (this.touchAim ? 32 : 16)) near.push(all[i])
+      // En perspectiva lo cercano se ve más grande que a la distancia del objetivo (y su centro puede quedar detrás de
+      // la cámara con los vértices a la vista): el radio en pantalla se escala, o una pieza cercana se quedaba sin snaps.
+      const k = persp ? camDist / Math.max(cam.distanceTo(s.c) - s.r, camDist * 0.01) : 1
+      if (!pr) {
+        if (persp) near.push(all[i])
+        continue
+      }
+      if (Math.hypot(pr[0] - cx, pr[1] - cy) <= (s.r / wpp) * k + (this.touchAim ? 32 : 16)) near.push(all[i])
     }
     const result = computeSnap(raw, near, {
       gridSnap: d.gridSnap,
@@ -1754,8 +1809,10 @@ export class Viewport {
     switch (e.type) {
       case 'POINT':
         return null // se dibuja con su marca (pointsLayer), no como línea
-      case 'LINE':
-        return [new THREE.Vector3(...e.props.start), new THREE.Vector3(...e.props.end)]
+      case 'LINE': {
+        const [a, b] = lineSpan(e.props)
+        return [new THREE.Vector3(...a), new THREE.Vector3(...b)]
+      }
       case 'CIRCLE':
         // En el plano de su normal (círculos en cualquier UCS).
         return tessellateArc({ ...e.props, startAngle: 0, endAngle: 0 }, 96).map((p) => new THREE.Vector3(p[0], p[1], p[2]))

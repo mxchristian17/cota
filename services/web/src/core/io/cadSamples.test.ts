@@ -6,7 +6,7 @@ import type { DxfImportResult } from './dxf'
 /**
  * Muestras estándar de ACadSharp (MIT, ver `__fixtures__/acadsharp`): el mismo dibujo base con unos 40 tipos de
  * entidad, guardado en distintas versiones de DWG y DXF. Validan el camino real de apertura (lector de DWG, DXF
- * binario e importador). Lo que todavía no se importa queda listado: un avance o un retroceso cambia la lista.
+ * binario e importador). Cada tipo tiene su cantidad: un avance o un retroceso cambia estos números.
  */
 const read = (name: string, kind: 'dwg' | 'dxf') => {
   const b = readFileSync(new URL(`./__fixtures__/acadsharp/${name}`, import.meta.url))
@@ -19,15 +19,16 @@ const byType = (r: DxfImportResult) => {
   return out
 }
 
-/** Pendientes: XLINE/RAY (no hay entidad infinita), MLINE, MULTILEADER, TOLERANCE, imágenes, PDF, WIPEOUT, SHAPE, los
- *  sólidos ACIS sin aristas guardadas y el espacio papel (VIEWPORT). */
-const GAPS = ['3DSOLID', 'IMAGE', 'MLINE', 'MULTILEADER', 'PDFUNDERLAY', 'RAY', 'REGION', 'SHAPE', 'TOLERANCE', 'VIEWPORT', 'WIPEOUT', 'XLINE']
+const DWG_2018 = { POINT: 7, LINE: 98, POLYLINE: 39, CIRCLE: 17, ARC: 1, ELLIPSE: 1, MESH3D: 4, RECTANGLE: 16, HATCH: 25, TEXT: 81, SPLINE: 2, DIMENSION: 11 }
 
 describe('muestras estándar de DWG/DXF (ACadSharp)', () => {
   it('DWG 2018: todas las entidades que Cota entiende, con tablas, caras 3D, mallas y rellenos', async () => {
     const r = await read('sample_AC1032.dwg', 'dwg')
-    expect(byType(r)).toEqual({ POINT: 6, LINE: 59, POLYLINE: 9, CIRCLE: 15, ARC: 1, ELLIPSE: 1, MESH3D: 4, RECTANGLE: 16, HATCH: 10, TEXT: 58, SPLINE: 2, DIMENSION: 11 })
-    expect([...r.unsupported].sort()).toEqual(GAPS)
+    expect(byType(r)).toEqual(DWG_2018)
+    expect(r.unsupported).toEqual([])
+    expect(r.simplified).toEqual({ WIPEOUT: 1, SHAPE: 1, IMAGE: 1, PDFUNDERLAY: 1 })
+    expect(r.wireSolids).toBe(3)
+    expect(r.layouts?.map((l) => l.name)).toEqual(['Layout1', 'Layout2', 'MyLayout'])
   })
 
   it('DXF binario 2018: lo mismo que el DWG (antes entraba vacío)', async () => {
@@ -38,8 +39,8 @@ describe('muestras estándar de DWG/DXF (ACadSharp)', () => {
 
   it('DWG 2000: mismas entidades (sin las tablas, que no existían)', async () => {
     const r = await read('sample_AC1015.dwg', 'dwg')
-    expect(byType(r)).toEqual({ POINT: 6, LINE: 28, POLYLINE: 9, CIRCLE: 12, ARC: 1, ELLIPSE: 1, MESH3D: 4, RECTANGLE: 16, HATCH: 9, TEXT: 38, SPLINE: 2, DIMENSION: 11 })
-    expect([...r.unsupported].sort()).toEqual(GAPS)
+    expect(byType(r)).toEqual({ POINT: 7, LINE: 67, POLYLINE: 39, CIRCLE: 14, ARC: 1, ELLIPSE: 1, MESH3D: 4, RECTANGLE: 16, HATCH: 24, TEXT: 61, SPLINE: 2, DIMENSION: 11 })
+    expect(r.unsupported).toEqual([])
   })
 
   it('DXF R12: polilíneas viejas, caras 3D, cotas y bloques', async () => {
@@ -48,6 +49,6 @@ describe('muestras estándar de DWG/DXF (ACadSharp)', () => {
     expect(t.DIMENSION).toBe(11)
     expect(t.MESH3D).toBe(2)
     expect(t.POLYLINE).toBeGreaterThan(200)
-    expect([...r.unsupported].sort()).toEqual(['INSERT', 'SHAPE', 'VIEWPORT'])
+    expect(r.unsupported).toEqual(['INSERT'])
   })
 })

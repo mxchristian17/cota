@@ -84,7 +84,8 @@ export function applyPattern(path: Vec3[], pattern: number[], out: DashResult = 
 export function linetypePaths(e: Entity, plinegen = false): Vec3[][] | null {
   switch (e.type) {
     case 'LINE':
-      return [[e.props.start, e.props.end]]
+      // Una línea infinita no corre el patrón (serían millones de trazos): va continua.
+      return e.props.extend ? null : [[e.props.start, e.props.end]]
     case 'CIRCLE':
       return [tessellateArc({ ...e.props, startAngle: 0, endAngle: 0 }, 96)]
     case 'ARC':

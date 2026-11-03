@@ -142,9 +142,11 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | Command | Aliases | What it does |
 | --- | --- | --- |
 | `LINE` | `L` | Draw connected line segments (closing converts them to a closed polyline) |
+| `XLINE` | `XL` | Construction line, infinite in both directions |
+| `RAY` | — | Ray: a line infinite in one direction |
 | `PLINE` | `PL` | Draw a polyline with straight and arc segments (Arc/Close/Undo) |
 | `POLYGON` | `POL` | Draw a regular polygon (center + inscribed/circumscribed radius, or Edge) |
-| `RECTANGLE` | `REC`, `RECTANG` | Draw a rectangle by two opposite corners [Dimensions] |
+| `RECTANGLE` | `REC`, `RECT`, `RECTANG` | Draw a rectangle by two opposite corners [Dimensions] |
 | `ARC` | `A` | Draw an arc: 3 points, or Start/Center/End with Angle, chord Length, Direction or Radius |
 | `CIRCLE` | `C` | Draw a circle: center + radius/Diameter, 3P (points or tangents), 2P or Ttr (tan tan radius) |
 | `SPLINE` | `SPL` | Draw a spline through control points |

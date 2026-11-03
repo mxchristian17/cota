@@ -4,6 +4,7 @@ import type { Entity } from '../../document/types'
 import type { PreviewShape } from '../../preview'
 import type { Command, CommandContext } from '../types'
 import { askKeyword, askNumber, fmt } from '../ask'
+import { rectPolygon } from '../selectionSets'
 import { sysvars } from '../sysvars'
 import { entityOutline } from '../../editing/bounds'
 import { expandEntities } from '../../editing/block'
@@ -63,8 +64,14 @@ function applyFactor(ctx: CommandContext, text: string): boolean {
   return true
 }
 
+/** Recuadro de una ventana de la vista mientras se indica la segunda esquina. */
+const windowPreview = (ctx: CommandContext, first: Pt) => (c: Pt): PreviewShape[] => {
+  const plane = ctx.app.viewPlane?.()
+  return plane ? [{ kind: 'polyline', points: [...rectPolygon(first, c, plane), first] }] : []
+}
+
 async function zoomWindowFlow(ctx: CommandContext, first: Pt): Promise<void> {
-  const opp = await ctx.getPoint('Specify opposite corner: ', { base: first, corner: true })
+  const opp = await ctx.getPoint('Specify opposite corner: ', { base: first, corner: true, preview: windowPreview(ctx, first) })
   if (opp.kind === 'point') {
     ctx.app.zoomWindow(first, opp.point)
     ctx.print('Zoom window.')

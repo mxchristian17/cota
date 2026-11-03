@@ -91,9 +91,9 @@ test.describe('Cota editing', () => {
   test('UNDO and REDO report in the command line', async ({ page }) => {
     await typeCmd(page, 'LINE', '0,0', '50,0', '')
     await typeCmd(page, 'UNDO')
-    await expect(page.locator('.cmd-output')).toContainText('Undo.')
+    await expect(page.locator('.cmd-output')).toContainText('Undo: ')
     await typeCmd(page, 'REDO')
-    await expect(page.locator('.cmd-output')).toContainText('Redo.')
+    await expect(page.locator('.cmd-output')).toContainText('Redo: ')
   })
 
   test('EXTRUDE dos veces: el prompt ofrece la altura anterior y Enter la repite', async ({ page }) => {

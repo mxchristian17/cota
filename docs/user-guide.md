@@ -165,11 +165,11 @@ there. `MATCHPROP` copies properties from one object to others.
   values, `ATTSYNC` updates references after a block changes. `EXPLODE` breaks a block into its parts.
 - **Text:** `TEXT` writes single lines on their **baseline** (`Justify` for center or right; every <kbd>Enter</kbd>
   starts the next line, an empty line ends), `MTEXT` multiline text from its top-left corner. `%%c`, `%%d` and
-  `%%p` give Ø, ° and ±. Double-click a text to edit it.
+  `%%p` give Ø, ° and ±. Double-click any object to open its properties.
   `FIELD` inserts live fields (date, file name, drawing properties set with `DWGPROPS`, sheet number…).
 - **Hatches:** `HATCH`, then click inside a closed area. The *Hatch Creation* panel sets pattern, scale, angle,
   solid fill and island detection. Hatches are associative: they follow when their boundary moves.
-  `HATCHEDIT` (or a double-click) edits them.
+  `HATCHEDIT` edits them.
 
 ## 3D modeling
 
@@ -255,7 +255,7 @@ A **layout** is a drawing sheet. Click the **Layout1** tab (or **+** to add one;
 | Format | Open | Save / export | Notes |
 | --- | --- | --- | --- |
 | `.cota` | `OPEN` | `SAVE` | Native format (JSON). Keeps everything: model, layouts, layers, styles, views |
-| `.dxf` | `OPEN`, `IMPORT` | `EXPORT DXF` | 2D geometry, layers, linetypes, hatches, dimensions, blocks |
+| `.dxf` | `OPEN`, `IMPORT` | `EXPORT DXF` | Geometry, layers, linetypes, hatches, dimensions, blocks, layouts on open; see [DWG and DXF coverage](dwg-coverage.md) |
 | `.dwg` | `OPEN` | `EXPORT DWG` | Requires the optional server with LibreDWG installed |
 | `.obj` | `IMPORT` | `EXPORT OBJ` | 3D meshes |
 | `.pdf` | — | `PLOT`, `PUBLISH` | Vector output |
@@ -386,5 +386,6 @@ published. If you turned full screen on, it comes back with your first click aft
 | Right click | Enter (during a command) |
 | Middle drag | Pan |
 | Middle double-click | Zoom extents |
+| Ctrl+S / Ctrl+Shift+S | Save / save with another name |
 | Right drag / <kbd>Shift</kbd> + middle drag | Orbit (in the model) |
 | Wheel | Zoom at the cursor |

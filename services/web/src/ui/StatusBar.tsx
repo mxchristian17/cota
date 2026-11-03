@@ -1,3 +1,5 @@
+import { shownLayer } from '../core/layers/selectionLayer'
+import { LayerCombo } from './LayerCombo'
 import { useEffect, useState } from 'react'
 import { useStore } from '../store/store'
 import { sysvars } from '../core/commands/sysvars'
@@ -191,12 +193,13 @@ export function StatusBar() {
   const togglePolar = useStore((s) => s.togglePolar)
   const toggleDynInput = useStore((s) => s.toggleDynInput)
   const setUcs = useStore((s) => s.setUcs)
-  const setCurrentLayer = useStore((s) => s.setCurrentLayer)
+  const selection = useStore((s) => s.selection)
+  const doc = useStore((s) => s.doc)
   const openLayers = useStore((s) => s.openLayers)
   useStore((s) => s.version) // refresca la lista de capas al crear/renombrar
   const engine = useStore((s) => s.engine)
   useStore((s) => s.prompt) // re-render al entrar/salir de un prompt (cambia el modo relativo)
-  const layer = layerSvc.get(currentLayerId)
+  const layer = layerSvc.get(shownLayer(currentLayerId, engine.busy ? [] : selection.map((id) => doc.getEntity(id))).id)
 
   const isWorld = isWorldUcs(ucs)
   const local = worldToUcs(cursor, ucs)
@@ -227,22 +230,7 @@ export function StatusBar() {
         <span className="swatch" style={{ background: layer?.color ?? '#fff' }} />
         {/* Combo de capa actual (equivale al control de capas de la cinta del CAD clásico): con objetos
             seleccionados, elegir una capa los mueve a ella. */}
-        <select
-          className="field layer-select"
-          value={currentLayerId}
-          title="Current layer (with objects selected, moves them to that layer)"
-          data-testid="layer-select"
-          onChange={(e) => {
-            setCurrentLayer(e.target.value)
-            focusCommandLine()
-          }}
-        >
-          {layerSvc.list().map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
-            </option>
-          ))}
-        </select>
+        <LayerCombo className="field layer-select" testId="layer-select" onPicked={focusCommandLine} />
         <button
           className="status-toggle"
           title="Layer Properties Manager (LAYER / LA)"

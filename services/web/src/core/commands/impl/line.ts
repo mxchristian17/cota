@@ -1,5 +1,6 @@
 import { dist2d, fromVec3, toVec3, type Pt, type Vec3 } from '../../math'
 import { resolveDeferredLine, type Deferred } from '../../geom/tangency'
+import { lineSpan } from '../../geom/xline'
 import type { Command, CommandContext } from '../types'
 
 /**
@@ -92,3 +93,31 @@ export const lineCommand: Command = {
     }
   },
 }
+
+/** XLINE / RAY: un punto base y, en bucle, los puntos por los que pasa cada línea infinita. */
+const infiniteCommand = (name: string, aliases: string[], extend: 'both' | 'end', description: string, prompt: string): Command => ({
+  name,
+  aliases,
+  description,
+  async run(ctx) {
+    const first = await ctx.getPoint(prompt)
+    if (first.kind !== 'point') return
+    const start = toVec3(first.point)
+    for (;;) {
+      const r = await ctx.getPoint('Specify through point: ', {
+        base: first.point,
+        preview: (c) => {
+          const [a, b] = lineSpan({ start, end: toVec3(c), extend })
+          return [{ kind: 'line', a: fromVec3(a), b: fromVec3(b) }]
+        },
+      })
+      if (r.kind !== 'point') return
+      const end = toVec3(r.point)
+      if (Math.hypot(end[0] - start[0], end[1] - start[1], end[2] - start[2]) < 1e-12) continue
+      ctx.doc.addEntity({ type: 'LINE', layer: ctx.currentLayerId(), props: { start, end, extend } })
+    }
+  },
+})
+
+export const xlineCommand = infiniteCommand('XLINE', ['XL'], 'both', 'Construction line, infinite in both directions', 'Specify a point: ')
+export const rayCommand = infiniteCommand('RAY', [], 'end', 'Ray: a line infinite in one direction', 'Specify start point: ')

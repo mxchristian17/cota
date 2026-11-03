@@ -1,3 +1,4 @@
+import { lineSpan } from '../geom/xline'
 import { loopPoints } from '../hatch/geometry'
 import { shadeOutline } from '../projection/shade'
 import { pt, type Pt, type Vec3 } from '../math'
@@ -25,7 +26,7 @@ export function entityPreviewShapes(e: Entity, dx: number, dy: number, dz = 0): 
       return [{ kind: 'circle', center: c, radius: 0.0001 }, { kind: 'line', a: c, b: c }]
     }
     case 'LINE':
-      return [{ kind: 'line', a: shift(e.props.start), b: shift(e.props.end) }]
+      return [{ kind: 'line', a: shift(lineSpan(e.props)[0]), b: shift(lineSpan(e.props)[1]) }]
     case 'CIRCLE':
       return [{ kind: 'circle', center: shift(e.props.center), radius: e.props.radius }]
     case 'ARC':
