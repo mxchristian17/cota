@@ -13,11 +13,10 @@ const ctx = self as unknown as {
 ctx.onmessage = (e) => {
   try {
     const { kind, data } = e.data
-    const dwg = kind === 'dwg' ? convertDwgToDxfBytes(data) : null
     const raw = new Uint8Array(data)
-    const bytes = dwg ? dwg.bytes : isBinaryDxf(raw) ? binaryDxfToDxfBytes(data) : raw
-    const result = importDxf(new TextDecoder().decode(bytes))
-    ctx.postMessage({ ok: true, result: dwg?.wireSolids ? { ...result, wireSolids: dwg.wireSolids } : result })
+    const conv = kind === 'dwg' ? convertDwgToDxfBytes(data) : isBinaryDxf(raw) ? binaryDxfToDxfBytes(data) : null
+    const result = importDxf(new TextDecoder().decode(conv ? conv.bytes : raw), { solidMeshes: conv?.solidMeshes })
+    ctx.postMessage({ ok: true, result: conv?.wireSolids ? { ...result, wireSolids: (result.wireSolids ?? 0) + conv.wireSolids } : result })
   } catch (err) {
     ctx.postMessage({ ok: false, error: err instanceof Error ? err.message : String(err) })
   }

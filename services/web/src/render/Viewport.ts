@@ -2037,6 +2037,28 @@ export class Viewport {
     return geom
   }
 
+  private readonly meshCache = new WeakMap<object, { pos: Float32Array; nor: Float32Array; edges: Float32Array }>()
+  /** Triángulos (sin índices), normales y aristas de más de 30° de una malla, por su objeto de propiedades. */
+  private meshBuffers(props: MeshEntity['props']): { pos: Float32Array; nor: Float32Array; edges: Float32Array } {
+    let m = this.meshCache.get(props)
+    if (!m) {
+      const g = this.meshGeometry(props)
+      const ng = g.index ? g.toNonIndexed() : g
+      if (!ng.getAttribute('normal')) ng.computeVertexNormals()
+      const eg = new THREE.EdgesGeometry(g, 30)
+      m = {
+        pos: Float32Array.from(ng.getAttribute('position').array as ArrayLike<number>),
+        nor: Float32Array.from(ng.getAttribute('normal').array as ArrayLike<number>),
+        edges: Float32Array.from(eg.getAttribute('position').array as ArrayLike<number>),
+      }
+      eg.dispose()
+      if (ng !== g) ng.dispose()
+      g.dispose()
+      this.meshCache.set(props, m)
+    }
+    return m
+  }
+
   private buildMesh(e: MeshEntity, color: THREE.Color, selected: boolean): THREE.Object3D {
     return this.styledSolidGroup(this.meshGeometry(e.props), color, selected, e.id, false)
   }
@@ -2163,8 +2185,26 @@ export class Viewport {
           b.ids.push(e.id)
           continue
         }
-        if (e.type === 'SOLID3D' || e.type === 'MESH3D') {
-          const g = e.type === 'SOLID3D' ? solidGeometry(e.props) : this.meshGeometry(e.props)
+        if (e.type === 'MESH3D') {
+          // Triángulos, normales y aristas de la malla, calculados una vez por malla (cambiar de vista o de zoom no los
+          // rehace: un modelo grande tardaba segundos en cada cambio).
+          const m = this.meshBuffers(e.props)
+          if (showMesh) {
+            const b = getMesh(`${ro}|${style === 'hidden' ? `${bgHex}|flat` : this.faceHex(colorHex)}`)
+            b.ranges.push({ s: b.n, id: e.id })
+            for (let i = 0; i < m.pos.length; i++) { b.pos.push(m.pos[i]); b.nor.push(m.nor[i]) }
+            b.n += m.pos.length / 3
+          }
+          if (showEdges) {
+            const b = getLine(edgeB, `${ro}|${style === 'shadedEdges' ? '#111111' : colorHex}${lwKey(layer, e.lineWeight)}`)
+            b.ranges.push({ s: b.n, id: e.id })
+            for (let i = 0; i < m.edges.length; i++) b.pos.push(m.edges[i])
+            b.n += m.edges.length / 3
+          }
+          continue
+        }
+        if (e.type === 'SOLID3D') {
+          const g = solidGeometry(e.props)
           if (showMesh) {
             const ng = g.index ? g.toNonIndexed() : g
             if (!ng.getAttribute('normal')) ng.computeVertexNormals()
@@ -2179,19 +2219,13 @@ export class Viewport {
             if (ng !== g) ng.dispose()
           }
           if (showEdges) {
-            let pa: ArrayLike<number>
-            if (e.type === 'SOLID3D') pa = solidEdgePositions(e.props)
-            else {
-              const eg = new THREE.EdgesGeometry(g, 30)
-              pa = eg.getAttribute('position').array as ArrayLike<number>
-              eg.dispose()
-            }
+            const pa: ArrayLike<number> = solidEdgePositions(e.props)
             const b = getLine(edgeB, `${ro}|${style === 'shadedEdges' ? '#111111' : colorHex}${lwKey(layer, e.lineWeight)}`)
             b.ranges.push({ s: b.n, id: e.id })
             for (let i = 0; i < pa.length; i++) b.pos.push(pa[i])
             b.n += pa.length / 3
           }
-          if (e.type === 'SOLID3D' && solidThreads(e.props).length) {
+          if (solidThreads(e.props).length) {
             // Textura de rosca (THREAD): hélices de paso real sobre las caras roscadas, más oscuras que la pieza.
             const b = getLine(lineB, `${ro}|${threadHex(colorHex)}`)
             b.ranges.push({ s: b.n, id: e.id })
@@ -2201,7 +2235,6 @@ export class Viewport {
               b.n += seg.length / 3
             }
           }
-          if (e.type === 'MESH3D') g.dispose() // temporal (solidGeometry está cacheada → no se libera)
           continue
         }
         if (e.type === 'HATCH') {

@@ -23,7 +23,8 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 | TOLERANCE | Frame, symbols and text | The same pieces | |
 | HELIX | Spline | Spline | From DXF; the DWG reader does not deliver it yet |
 | VIEWPORT and paper space | Layouts with their sheet, content and viewports | Not exported | |
-| 3DSOLID, REGION, BODY, SURFACE | Edges | Edges | From stored wires or the ACIS model (SAT and SAB); faces are not read yet |
+| 3DSOLID, REGION, BODY | Meshes with their faces | 3DFACE | From the ACIS model (SAT and SAB): planes, cylinders, cones, spheres, tori; NURBS faces over their best-fit plane |
+| SURFACE (extruded, lofted, revolved, swept, planar) | Meshes or edges | 3DFACE | |
 | IMAGE | Frame and file name | Same pieces | The picture is an external file |
 | PDF, DWF and DGN UNDERLAY | File name at the insertion point | Text | The content is an external file |
 | OLE2FRAME | Frame | Polyline | |
@@ -36,7 +37,7 @@ Cota's 3D solids are exported as meshes of their faces (3DFACE), so a part looks
 
 ## Next, by impact
 
-1. Faces of ACIS solids, so 3D drawings can be shaded and not just shown as edges.
+1. NURBS faces of ACIS solids following their surface (today, over their best-fit plane).
 2. Blocks and layouts on export (today blocks are expanded and layouts stay out of the file).
 3. WIPEOUT masks, which need a draw order for the fills.
 4. Proxy entities, by their stored graphics.

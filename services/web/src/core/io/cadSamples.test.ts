@@ -19,7 +19,7 @@ const byType = (r: DxfImportResult) => {
   return out
 }
 
-const DWG_2018 = { POINT: 7, LINE: 98, POLYLINE: 39, CIRCLE: 17, ARC: 1, ELLIPSE: 1, MESH3D: 4, RECTANGLE: 16, HATCH: 25, TEXT: 81, SPLINE: 2, DIMENSION: 11 }
+const DWG_2018 = { POINT: 7, LINE: 64, POLYLINE: 39, CIRCLE: 17, ARC: 1, ELLIPSE: 1, MESH3D: 7, RECTANGLE: 16, HATCH: 25, TEXT: 81, SPLINE: 2, DIMENSION: 11 }
 
 describe('muestras estándar de DWG/DXF (ACadSharp)', () => {
   it('DWG 2018: todas las entidades que Cota entiende, con tablas, caras 3D, mallas y rellenos', async () => {
@@ -27,7 +27,8 @@ describe('muestras estándar de DWG/DXF (ACadSharp)', () => {
     expect(byType(r)).toEqual(DWG_2018)
     expect(r.unsupported).toEqual([])
     expect(r.simplified).toEqual({ WIPEOUT: 1, SHAPE: 1, IMAGE: 1, PDFUNDERLAY: 1 })
-    expect(r.wireSolids).toBe(3)
+    expect(r.meshedSolids).toBe(3) // los sólidos y regiones del ACIS, con sus caras
+    expect(r.wireSolids).toBeUndefined()
     expect(r.layouts?.map((l) => l.name)).toEqual(['Layout1', 'Layout2', 'MyLayout'])
   })
 
@@ -39,7 +40,7 @@ describe('muestras estándar de DWG/DXF (ACadSharp)', () => {
 
   it('DWG 2000: mismas entidades (sin las tablas, que no existían)', async () => {
     const r = await read('sample_AC1015.dwg', 'dwg')
-    expect(byType(r)).toEqual({ POINT: 7, LINE: 67, POLYLINE: 39, CIRCLE: 14, ARC: 1, ELLIPSE: 1, MESH3D: 4, RECTANGLE: 16, HATCH: 24, TEXT: 61, SPLINE: 2, DIMENSION: 11 })
+    expect(byType(r)).toEqual({ POINT: 7, LINE: 33, POLYLINE: 39, CIRCLE: 14, ARC: 1, ELLIPSE: 1, MESH3D: 7, RECTANGLE: 16, HATCH: 24, TEXT: 61, SPLINE: 2, DIMENSION: 11 })
     expect(r.unsupported).toEqual([])
   })
 

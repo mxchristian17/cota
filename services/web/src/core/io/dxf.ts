@@ -1,7 +1,7 @@
 import { BASELINE_DROP, LINE_SPACING, attdefText, textAxes, textSize } from '../geom/text'
 import { decodeTextCodes, encodeTextCodes } from '../text/codes'
 import type { Vec3 } from '../math'
-import type { DrawingVars, Entity, EntityProps, EntityType, InsertProps, Layer, LineType, LinetypeDefData, RectangleProps, TextProps } from '../document/types'
+import type { DrawingVars, Entity, EntityProps, EntityType, InsertProps, Layer, LineType, LinetypeDefData, MeshProps, RectangleProps, TextProps } from '../document/types'
 import { transformEntity as transformInsertEntity } from '../editing/block'
 import { BYBLOCK, BYLAYER, CONTINUOUS, linetypeLabel, patternLength } from '../linetype/linetypes'
 import { hatchDxf, parseHatch } from './dxfHatch'
@@ -12,6 +12,7 @@ import { resolveDimVars, type DimStyleDef } from '../dimension/style'
 import { angleFromOcs, angleToOcs, fromOcs, isWorldExtrusion, toOcs } from './dxfOcs'
 import { normAngle } from '../geom/arc'
 import { acisEdges, sabFromHex, satFromDxf } from './acis'
+import { acisMesh, SOLID_MESH_REF } from './acisMesh'
 import { image, infiniteLine, mline, multileader, oleFrame, tolerance, underlay, viewBasis, type Piece } from './dxfExtra'
 
 /**
@@ -352,6 +353,8 @@ export interface DxfImportResult {
   view?: { center: [number, number]; height: number; aspect: number; direction: Vec3; target: Vec3 }
   /** (DWG) Sólidos, regiones y cuerpos ACIS que se trajeron como sus aristas guardadas (sin caras). */
   wireSolids?: number
+  /** Sólidos, regiones y cuerpos ACIS que se trajeron con sus caras (como mallas). */
+  meshedSolids?: number
   unsupported: string[]
   /** Entidades que entraron simplificadas o sin una parte (se avisa al abrir): tipo → cantidad. */
   simplified?: Record<string, number>
@@ -424,7 +427,7 @@ function str(codes: Array<[number, string]>, code: number): string | undefined {
 }
 
 /** Parsea DXF ASCII a specs de layers/entidades. Robusto ante DXF malformado. */
-export function importDxf(text: string): DxfImportResult {
+export function importDxf(text: string, opts: { solidMeshes?: MeshProps[] } = {}): DxfImportResult {
   // Records por cada par (0, TYPE), recorriendo el texto de a dos líneas (código, valor) sin partirlo entero: con un
   // DXF de 20 MB, el arreglo de líneas y el de pares costaban más de 100 MB (en un teléfono, más de lo que hay).
   const records: Rec[] = []
@@ -578,7 +581,13 @@ export function importDxf(text: string): DxfImportResult {
         // Modelo ACIS: en el propio registro (hasta 2010) o en la sección ACDSDATA (2013 en adelante), que viene después.
         const handle = (str(c, 5) ?? '').toUpperCase()
         const stored = asmData.get(handle)
-        const edges = acisEdges(stored ? sabFromHex(stored) : satFromDxf(c))
+        const model = stored ? sabFromHex(stored) : satFromDxf(c)
+        const mesh = acisMesh(model)
+        if (mesh) {
+          meshedSolids++
+          return [{ type: 'MESH3D', props: { vertices: mesh.vertices, faces: mesh.faces } as EntityProps }]
+        }
+        const edges = acisEdges(model)
         if (!edges.length) return null
         wireSolids++
         return edges.map((v): Piece => (v.length === 2 ? { type: 'LINE', props: { start: v[0], end: v[1] } } : { type: 'POLYLINE', props: { vertices: v, closed: false } }))
@@ -587,9 +596,18 @@ export function importDxf(text: string): DxfImportResult {
         return null
     }
   }
+  let meshedSolids = 0
+  /** La MESH que nombra la malla de un sólido leído del DWG (ver `SOLID_MESH_REF`). */
+  const solidMesh = (rec: Rec): { type: EntityType; props: EntityProps } | null => {
+    if (rec.type !== 'MESH' || num(rec.codes, 20, 0) !== SOLID_MESH_REF || num(rec.codes, 30, 0) !== SOLID_MESH_REF) return null
+    const m = opts.solidMeshes?.[num(rec.codes, 10, -1)]
+    if (!m) return null
+    meshedSolids++
+    return { type: 'MESH3D', props: m as unknown as EntityProps }
+  }
   /** Entidades (tipo de línea por objeto incluido) de un record; null si no se soporta. */
   const specsOf = (rec: Rec): DxfEntitySpec[] | null => {
-    const one = rec.type === 'HATCH' ? hatchSpec(rec) : rec.type === 'ATTRIB' ? parseEntity({ type: 'TEXT', codes: rec.codes }) : parseEntity(rec)
+    const one = rec.type === 'HATCH' ? hatchSpec(rec) : rec.type === 'ATTRIB' ? parseEntity({ type: 'TEXT', codes: rec.codes }) : (solidMesh(rec) ?? parseEntity(rec))
     const pieces = one ? [one] : piecesOf(rec)
     if (!pieces) return null
     const lt = str(rec.codes, 6)
@@ -839,6 +857,7 @@ export function importDxf(text: string): DxfImportResult {
     ...(view ? { view } : {}),
     unsupported: [...unsupported],
     ...(wireSolids ? { wireSolids } : {}),
+    ...(meshedSolids ? { meshedSolids } : {}),
     ...(Object.keys(simplified).length ? { simplified } : {}),
     ...(layouts.length ? { layouts } : {}),
   }

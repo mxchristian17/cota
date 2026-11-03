@@ -1,6 +1,8 @@
-import { DimensionArc, DwgReader, DxfReader, DxfWriter, Insert, Line, ModelerGeometry, MText, MultiLeader, Polyline3D, Solid, XYZ, type CadDocument, type Entity, type ModelerGeometryWire } from '@node-projects/acad-ts'
+import { DimensionArc, DwgReader, DxfReader, DxfWriter, Insert, Line, Mesh, ModelerGeometry, MText, MultiLeader, Polyline3D, Solid, XYZ, type CadDocument, type Entity, type ModelerGeometryWire } from '@node-projects/acad-ts'
 
 import { acisEdges } from './acis'
+import { acisMesh, SOLID_MESH_REF } from './acisMesh'
+import type { MeshProps } from '../document/types'
 
 /**
  * DWG → DXF con acad-ts (MIT, port a TypeScript de ACadSharp). Import estático a propósito: lo usan el hilo aparte
@@ -9,22 +11,32 @@ import { acisEdges } from './acis'
  * El DXF se escribe directo a bytes UTF-8: juntar los ~1,5 millones de pedacitos que manda el escritor como textos
  * costaba más de 400 MB para un DWG de 3,5 MB (en un teléfono el hilo se quedaba sin memoria y moría sin avisar).
  */
-export function convertDwgToDxfBytes(data: ArrayBuffer): { bytes: Uint8Array; wireSolids: number } {
+export interface CadConversion {
+  bytes: Uint8Array
+  /** Sólidos que quedaron como sus aristas (sin caras legibles). */
+  wireSolids: number
+  /** Mallas de los sólidos leídos con sus caras: el DXF las nombra por su posición acá (ver `SOLID_MESH_REF`). */
+  solidMeshes: MeshProps[]
+}
+
+export function convertDwgToDxfBytes(data: ArrayBuffer): CadConversion {
   const doc = DwgReader.readFromStream(data, null)
-  const wireSolids = solidsAsWires(doc)
+  const solidMeshes: MeshProps[] = []
+  const wireSolids = solidsAsWires(doc, solidMeshes)
   simplifyForDxf(doc)
-  return { bytes: writeDxfBytes(doc), wireSolids }
+  return { bytes: writeDxfBytes(doc), wireSolids, solidMeshes }
 }
 
 /** ¿DXF binario? Empieza con "AutoCAD Binary DXF" (el importador lee el de texto). */
 export const isBinaryDxf = (b: Uint8Array): boolean => b.length > 18 && new TextDecoder('latin1').decode(b.subarray(0, 18)) === 'AutoCAD Binary DXF'
 
 /** DXF binario → DXF de texto (lo lee acad-ts y lo vuelve a escribir). */
-export function binaryDxfToDxfBytes(data: ArrayBuffer): Uint8Array {
+export function binaryDxfToDxfBytes(data: ArrayBuffer): CadConversion {
   const doc = DxfReader.readFromStream(new Uint8Array(data))
-  solidsAsWires(doc)
+  const solidMeshes: MeshProps[] = []
+  const wireSolids = solidsAsWires(doc, solidMeshes)
   simplifyForDxf(doc)
-  return writeDxfBytes(doc)
+  return { bytes: writeDxfBytes(doc), wireSolids, solidMeshes }
 }
 
 function writeDxfBytes(doc: CadDocument): Uint8Array {
@@ -60,16 +72,31 @@ function wirePoint(w: ModelerGeometryWire, p: XYZ): XYZ {
 }
 
 /**
- * Sólidos, regiones y cuerpos ACIS (3DSOLID, REGION, BODY): el DWG guarda junto a cada uno sus aristas e isolíneas como
- * puntos (lo que el CAD clásico dibuja en alambre) y, siempre, el modelo ACIS del que también se pueden leer. Se
- * reemplazan por esas líneas y polilíneas 3D, en su capa, color y tipo de línea, también dentro de los bloques: la pieza
- * se ve, sin caras. Devuelve cuántos se reemplazaron.
+ * Sólidos, regiones y cuerpos ACIS (3DSOLID, REGION, BODY): se leen sus caras del modelo ACIS y cada uno pasa a ser una
+ * malla (en `meshes`; en el dibujo queda una MESH que la nombra, así también se ubica dentro de los bloques). Los que no
+ * tienen caras legibles se reemplazan por sus aristas: las guardadas como puntos (lo que el CAD clásico dibuja en
+ * alambre) o las del modelo. Todo en su capa, color y tipo de línea. Devuelve cuántos quedaron como aristas.
  */
-export function solidsAsWires(doc: CadDocument): number {
+export function solidsAsWires(doc: CadDocument, meshes: MeshProps[] = []): number {
   let n = 0
   for (const br of doc.blockRecords ?? []) {
     for (const e of [...br.entities]) {
       if (!(e instanceof ModelerGeometry)) continue
+      const mesh = e.acisData?.length ? acisMesh(e.acisData) : null
+      if (mesh) {
+        const ref = new Mesh()
+        ref.vertices = [new XYZ(meshes.length, SOLID_MESH_REF, SOLID_MESH_REF)]
+        ref.faces = []
+        meshes.push({ vertices: mesh.vertices, faces: mesh.faces })
+        ref.layer = e.layer
+        ref.color = e.color
+        ref.lineType = e.lineType
+        ref.lineTypeScale = e.lineTypeScale
+        ref.lineWeight = e.lineWeight
+        br.entities.add(ref)
+        br.entities.remove(e)
+        continue
+      }
       // Sin aristas guardadas se leen del modelo ACIS.
       const wires = e.wires?.length
         ? e.wires.map((w) => (w.points ?? []).map((p) => wirePoint(w, p)))

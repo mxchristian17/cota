@@ -682,7 +682,8 @@ export const useStore = create<AppState>((set, get) => {
       if (added.type === 'DIMENSION' && doc.dimStyleDef(added.props.styleName ?? '')) doc.restyleDimension(added.props, added.props.styleName, undefined)
     }
     if (unsupported.length) print(`Unsupported entities skipped: ${unsupported.join(', ')}.`)
-    if (r.wireSolids) print(`${r.wireSolids} 3D solid(s) shown by their edges (wireframe): their faces are not read yet.`)
+    if (r.meshedSolids) print(`${r.meshedSolids} 3D solid(s) read with their faces (as meshes).`)
+    if (r.wireSolids) print(`${r.wireSolids} 3D solid(s) shown by their edges (wireframe): their faces could not be read.`)
     if (r.simplified) print(`Simplified on open: ${Object.entries(r.simplified).map(([k, n]) => `${n} ${k} (${SIMPLIFIED_NOTE[k] ?? 'simplified'})`).join(', ')}.`)
     if (asDrawing && r.layouts?.length) applyDxfLayouts(r.layouts, (n) => idByName.get(n.toLowerCase()) ?? doc.firstLayerId)
     const clayer = currentLayer && idByName.get(currentLayer.toLowerCase())

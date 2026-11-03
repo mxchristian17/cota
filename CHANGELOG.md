@@ -4,6 +4,18 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.15.0] — 2026-11-03
+
+### Added
+- **3D solids from DWG and DXF open with their faces**: 3DSOLID, BODY and REGION are read from their ACIS model (text
+  or binary) and come in as meshes that can be shaded: planes, cylinders and cones, spheres, tori and NURBS faces.
+  They used to come in as edges only, which looked like flat lines, and the ones without stored edges were missing.
+  A 3D assembly with 1260 solids opens in about 20 seconds.
+
+### Changed
+- Large meshes no longer slow down every view change: their triangles, normals and edges are computed once.
+- [DWG and DXF coverage](docs/dwg-coverage.md) updated: solids now open with their faces.
+
 ## [2.14.0] — 2026-11-03
 
 ### Added

@@ -403,7 +403,7 @@ test.describe('Abrir un DWG de referencia', () => {
     }, b64)
     await expect(page.locator('.cmd-output')).toContainText('Opened "muestra.dwg"')
     await expect(page.locator('.cmd-output')).toContainText('Simplified on open')
-    await expect(page.locator('.cmd-output')).toContainText('3D solid(s) shown by their edges')
+    await expect(page.locator('.cmd-output')).toContainText('3 3D solid(s) read with their faces')
     await expect(page.locator('.cmd-output')).not.toContainText('Unsupported entities')
     const tabs = await st<string[]>(page, 'return s.doc.layouts.map(l => l.name)')
     expect(tabs).toEqual(['Layout1', 'Layout2', 'MyLayout'])

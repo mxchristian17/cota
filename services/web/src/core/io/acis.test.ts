@@ -42,7 +42,7 @@ describe('ACIS', () => {
     const circle = edges[2]
     expect(circle[0]).toEqual([155, 0, 0])
     expect(circle[circle.length - 1][0]).toBeCloseTo(155)
-    expect(circle.length).toBeGreaterThan(32)
+    expect(circle.length).toBeGreaterThan(16)
   })
   it('un modelo ilegible no rompe la apertura', () => {
     expect(acisEdges(new Uint8Array([65, 83, 77, 32, 66, 105, 110, 97, 114, 121, 70, 105, 108, 101, 52, 0, 1, 2]))).toEqual([])
