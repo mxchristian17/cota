@@ -35,6 +35,23 @@ describe('ACIS', () => {
     expect((2 * Math.PI) / light.angleStep(1e6)).toBeCloseTo(18)
     expect((2 * Math.PI) / full.angleStep(1e6)).toBeCloseTo(36)
   })
+  it('SAB con la matriz del cuerpo escrita como texto (así la guardan algunos DWG): el cuerpo se gira y se ubica', () => {
+    const enc = new TextEncoder()
+    const bytes: number[] = [...enc.encode('ACIS BinaryFile'), ...new Array(16).fill(0)]
+    const i32 = (v: number) => { const d = new DataView(new ArrayBuffer(4)); d.setInt32(0, v, true); return [...new Uint8Array(d.buffer)] }
+    const f64 = (v: number) => { const d = new DataView(new ArrayBuffer(8)); d.setFloat64(0, v, true); return [...new Uint8Array(d.buffer)] }
+    const text = (tag: number, t: string) => [tag, t.length, ...enc.encode(t)]
+    // Encabezado: producto, programa y fecha; tres reales.
+    bytes.push(...text(0x07, 'Cota'), ...text(0x07, 'test'), ...text(0x07, 'hoy'), 0x06, ...f64(1), 0x06, ...f64(1e-6), 0x06, ...f64(1e-10))
+    // 0: body (con su transformación en el registro 1); 1: transform con la matriz como texto (giro de 90° en Y).
+    bytes.push(...text(0x0d, 'body'), 0x0c, ...i32(-1), 0x04, ...i32(-1), 0x0c, ...i32(-1), 0x0c, ...i32(-1), 0x0c, ...i32(1), 0x11)
+    const m = '0 0 1 0 1 0 -1 0 0 10 20 30 1 rotate no_reflect no_shear'
+    bytes.push(...text(0x0d, 'transform'), 0x0c, ...i32(-1), 0x04, ...i32(-1), 0x12, ...i32(m.length), ...enc.encode(m), 0x11)
+    const { place, mirrored } = modelOf(acisRecords(new Uint8Array(bytes)))
+    expect(place([1, 0, 0])).toEqual([10, 20, 31]) // el eje X del cuerpo pasa a Z
+    expect(place([0, 0, 1])).toEqual([9, 20, 30])
+    expect(mirrored).toBe(false)
+  })
   it('una recta queda con sus dos vértices, transformada', () => {
     expect(edges[0]).toEqual([[100, 0, 0], [110, 0, 0]])
   })

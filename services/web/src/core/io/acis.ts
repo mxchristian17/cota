@@ -108,6 +108,14 @@ function parseSab(b: Uint8Array): Rec[] {
         break
       case 0x12: {
         const n = view.getUint32(pos, true)
+        // Texto largo. Algunos escritores de DWG guardan así la matriz entera de un `transform` ("0 0 1 0 1 0 -1 0 0 0 0 0
+        // 1 no_rotate …"): se lee como sus números y banderas; sin esto, esos cuerpos quedaban sin girar ni ubicar.
+        if (cur?.type === 'transform') {
+          for (const t of latin.decode(b.subarray(pos + 4, pos + 4 + n)).trim().split(/\s+/)) {
+            const v = Number(t)
+            push(t !== '' && Number.isFinite(v) ? v : t)
+          }
+        }
         pos += 4 + n
         break
       }

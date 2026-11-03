@@ -4,6 +4,13 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.18.1] — 2026-11-03
+
+### Fixed
+- **3D solids whose placement is written as text in the binary ACIS data** (some DWG writers store the matrix of a
+  body that way) are turned and moved where they belong. That matrix was skipped, so those solids came in unrotated:
+  in a 3D assembly about half of the parts, bearings among them, appeared turned or out of place.
+
 ## [2.18.0] — 2026-11-03
 
 ### Added
