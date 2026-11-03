@@ -4,6 +4,20 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.21.0] — 2026-11-03
+
+### Added
+- **Files dropped on Cota** are opened (a drawing, together with the pictures dropped with it) or loaded into the open
+  drawing (its pictures). Before, the browser opened the file instead and the drawing was lost from the tab.
+
+### Changed
+- **Loading the pictures of a drawing** is easier: a DXF opened from the working folder brings the pictures that are
+  next to it (or at the folder's root) on its own; the Properties palette shows **Load…** next to a picture that is
+  not loaded; `IMAGE` goes straight to choosing the files (`-IMAGE` keeps the *Reload/?* options).
+
+### Fixed
+- A **selected picture covered the whole drawing**; it now stays under the lines and its frame is highlighted.
+
 ## [2.20.1] — 2026-11-03
 
 ### Fixed

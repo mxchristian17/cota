@@ -256,7 +256,7 @@ A **layout** is a drawing sheet. Click the **Layout1** tab (or **+** to add one;
 | --- | --- | --- | --- |
 | `.cota` | `OPEN` | `SAVE` | Native format (JSON). Keeps everything: model, layouts, layers, styles, views |
 | `.dxf` | `OPEN`, `IMPORT` | `EXPORT DXF` | Geometry, layers, linetypes, hatches, dimensions, blocks, layouts on open; see [DWG and DXF coverage](dwg-coverage.md) |
-| `.png`, `.jpg`… | with the drawing, or `IMAGE` | — | The pictures a DXF or DWG uses (it stores only their path): choose them together with the drawing in `OPEN`, or later with `IMAGE`. They are saved inside the `.cota` |
+| `.png`, `.jpg`… | with the drawing, `IMAGE`, or by dropping them | — | The pictures a DXF or DWG uses (it stores only their path): choose them together with the drawing in `OPEN`, drop them on Cota, or press **Load…** in the picture's properties (`IMAGE`). From the working folder, the ones next to the drawing load on their own. They are saved inside the `.cota` |
 | `.dwg` | `OPEN` | `EXPORT DWG` | Requires the optional server with LibreDWG installed |
 | `.obj` | `IMPORT` | `EXPORT OBJ` | 3D meshes |
 | `.pdf` | — | `PLOT`, `PUBLISH` | Vector output |

@@ -188,6 +188,33 @@ test.describe('Cota carpeta local del sistema', () => {
     expect(restored).toEqual(['RECTANGLE'])
   })
 
+  test('un DXF de la carpeta trae solas las imágenes que están junto a él', async ({ page }) => {
+    // Un plano en "relevamiento/" que usa una imagen (guarda la ruta de otra máquina) y la imagen al lado: 4 × 2 px.
+    const rec = (type: string, ...codes: Array<[number, string | number]>) => `0\n${type}\n${codes.map(([c, v]) => `${c}\n${v}\n`).join('')}`
+    const dxf =
+      '0\nSECTION\n2\nENTITIES\n' +
+      rec('IMAGE', [8, '0'], [10, 0], [20, 0], [30, 0], [11, 1], [21, 0], [31, 0], [12, 0], [22, 1], [32, 0], [13, 4], [23, 2], [340, 'AB']) +
+      '0\nENDSEC\n0\nSECTION\n2\nOBJECTS\n' +
+      rec('IMAGEDEF', [5, 'AB'], [1, 'D:\\otra\\maquina\\Mapa.png']) +
+      '0\nENDSEC\n0\nEOF\n'
+    await page.evaluate(async (text) => {
+      const root = (window as unknown as { __memfs: { getDirectoryHandle(n: string, o?: { create?: boolean }): Promise<{ getFileHandle(n: string, o?: { create?: boolean }): Promise<{ contents: string; getFile: unknown }> }> } }).__memfs
+      const dir = await root.getDirectoryHandle('relevamiento', { create: true })
+      ;(await dir.getFileHandle('plano.dxf', { create: true })).contents = text
+      const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAEklEQVR4nGO8IyfHAANMDEgAABtMARynZZQCAAAAAElFTkSuQmCC'), (c) => c.charCodeAt(0))
+      ;(await dir.getFileHandle('mapa.png', { create: true })).getFile = async () => new File([png], 'mapa.png', { type: 'image/png' })
+    }, dxf)
+    await typeCmd(page, 'OPENFOLDER')
+    await typeCmd(page, 'OPEN')
+    await page.getByTestId('local-plano').click()
+    await expect(page.locator('.cmd-output')).toContainText('Loaded 1 image')
+    const loaded = await page.evaluate(() => {
+      const w = window as unknown as { __cotaStore: { getState: () => { doc: { entities: Array<{ type: string; props: { data?: string } }> } } } }
+      return w.__cotaStore.getState().doc.entities.find((e) => e.type === 'IMAGE')?.props.data?.slice(0, 22)
+    })
+    expect(loaded).toBe('data:image/png;base64,')
+  })
+
   test('el indicador de "sin guardar" se apaga al guardar en la carpeta local', async ({ page }) => {
     await typeCmd(page, 'OPENFOLDER')
     await typeCmd(page, 'CIRCLE', '0,0', '10')

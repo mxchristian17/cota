@@ -29,6 +29,8 @@ export type PropField =
   | { key: string; label: string; kind: 'text'; value: string; readOnly?: boolean }
   | { key: string; label: string; kind: 'enum'; value: string; options: string[] }
   | { key: string; label: string; kind: 'bool'; value: boolean }
+  /** Un valor con un botón que corre un comando (p. ej. cargar el archivo de una imagen). */
+  | { key: string; label: string; kind: 'action'; value: string; button: string; command: string }
 
 const R2D = 180 / Math.PI
 const D2R = Math.PI / 180
@@ -256,7 +258,9 @@ export function entityFields(e: Entity): PropField[] {
       return [
         { key: '_file', label: 'File', kind: 'text', value: e.props.file, readOnly: true },
         { key: '_size', label: 'Size (px)', kind: 'text', value: `${e.props.size[0]} × ${e.props.size[1]}`, readOnly: true },
-        { key: '_attached', label: 'Image', kind: 'text', value: e.props.data ? 'Attached' : 'Not found', readOnly: true },
+        e.props.data
+          ? { key: '_attached', label: 'Image', kind: 'text', value: 'Loaded', readOnly: true }
+          : { key: '_attached', label: 'Image', kind: 'action', value: 'Not loaded', button: 'Load…', command: 'IMAGE' },
         { key: 'fade', label: 'Fade', kind: 'number', value: e.props.fade ?? 0 },
       ]
     case 'HATCH': {

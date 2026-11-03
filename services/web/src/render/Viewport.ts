@@ -1546,6 +1546,14 @@ export class Viewport {
     for (const e of this.expanded ?? []) if (want.has(e.id)) this.buildEntity(e, layerMap, want)
     // Lo recién armado pasa al grupo del resaltado: encima de todo y fuera del pick (el lote ya tiene la pieza).
     for (const c of this.entityGroup.children.slice(from)) {
+      if (c.userData.raster) {
+        // Los píxeles de una imagen ya están debajo del dibujo: encima taparían todo. Se resalta su marco.
+        this.entityGroup.remove(c)
+        const m = c as THREE.Mesh
+        m.geometry.dispose()
+        ;(m.material as THREE.Material).dispose()
+        continue
+      }
       c.traverse((o) => (o.renderOrder = 1))
       this.selOverlay.add(c)
     }
@@ -2291,7 +2299,8 @@ export class Viewport {
       const from = this.entityGroup.children.length
       this.buildEntity(e, layerMap, selection)
       const ro = selection.has(e.id) ? 1 : orderOf(e)
-      for (const c of this.entityGroup.children.slice(from)) c.traverse((o) => (o.renderOrder = ro))
+      // Los píxeles de una imagen van siempre debajo de todo el dibujo (seleccionada, se resalta su marco).
+      for (const c of this.entityGroup.children.slice(from)) c.traverse((o) => (o.renderOrder = o.userData.raster ? bottom - 1 : ro))
     }
     const style = this.visualStyle
     const showMesh = style === 'shaded' || style === 'shadedEdges' || style === 'hidden'
@@ -2347,11 +2356,7 @@ export class Viewport {
           continue
         }
         if (e.type === 'IMAGE') {
-          // El marco va con su capa; los píxeles, debajo de todo el dibujo (es un fondo).
-          const from = this.entityGroup.children.length
-          this.buildEntity(e, layerMap, selection)
-          const ro = selected ? 1 : orderOf(e)
-          for (const c of this.entityGroup.children.slice(from)) c.traverse((o) => (o.renderOrder = o.userData.raster ? bottom - 1 : ro))
+          individual(e) // el marco va con su capa; los píxeles, debajo de todo el dibujo (es un fondo)
           continue
         }
         if (e.type === 'SHADE') {
@@ -2901,7 +2906,7 @@ export class Viewport {
     // Opaca (una transparente se dibujaría después de todas las líneas y las taparía): el desvanecido mezcla con el
     // color del fondo y lo transparente de un PNG se recorta.
     const fade = Math.max(0, Math.min(100, p.fade ?? 0)) / 100
-    const mat = new THREE.MeshBasicMaterial({ map: tex, color: selected ? 0xb8c8ff : 0xffffff, alphaTest: 0.5, side: THREE.DoubleSide, depthWrite: false })
+    const mat = new THREE.MeshBasicMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide, depthWrite: false }) // seleccionada se resalta su marco
     if (fade > 0) {
       const bg = this.bgColor.clone()
       mat.onBeforeCompile = (sh) => {

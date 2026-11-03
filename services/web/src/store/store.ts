@@ -69,6 +69,7 @@ import {
   ensurePermission,
   fsaSupported,
   fileHandleAt,
+  filesNamed,
   listFilesIn,
   listDrawings,
   permissionState,
@@ -457,6 +458,8 @@ export interface AppState {
   openFromDevice: () => void
   /** Abre como dibujo un archivo elegido del dispositivo (sin ruta: SAVE lo guarda como nuevo). */
   openDeviceFile: (file: File) => Promise<void>
+  /** Archivos elegidos o soltados sobre Cota: el plano (si hay uno) se abre y las imágenes se le cargan. */
+  openDeviceFiles: (files: File[]) => Promise<void>
   /** Selector de los archivos de las imágenes del dibujo (un plano guarda sólo su ruta). */
   attachImages: () => void
   /** Carga los píxeles de las imágenes del dibujo desde esos archivos, asociados por el nombre; devuelve cuántas. */
@@ -710,6 +713,20 @@ export const useStore = create<AppState>((set, get) => {
     const clayer = currentLayer && idByName.get(currentLayer.toLowerCase())
     if (asDrawing) set({ currentLayerId: clayer || doc.firstLayerId })
     return entities.length
+  }
+  /** Las imágenes del plano que están en la carpeta de trabajo (junto al plano o en su raíz) se cargan solas. */
+  const loadFolderImages = async (folder: string): Promise<void> => {
+    const dir = workspaceDir
+    if (!dir) return
+    const names = [...new Set(drawingImages(doc).filter((e) => !e.props.data).map((e) => imageFileName(e.props)).filter(Boolean))]
+    if (!names.length) return
+    const handles = [...(await filesNamed(dir, folder, names)), ...(folder ? await filesNamed(dir, '', names) : [])]
+    const files: File[] = []
+    for (const h of handles) {
+      const f = await h.getFile().catch(() => null)
+      if (f instanceof Blob) files.push(f as File)
+    }
+    if (files.length) await get().attachImageFiles(files)
   }
   const importObjText = (text: string): number => {
     const layer = get().currentLayerId
@@ -2812,15 +2829,16 @@ export const useStore = create<AppState>((set, get) => {
       input.accept = fileAccept(`${DRAWING_EXTS.join(',')},.dxf,.dwg,${MODEL_EXTS.join(',')},${IMAGE_EXTS.join(',')}`)
       // Se puede elegir el plano junto con sus imágenes: se cargan al abrirlo.
       input.multiple = true
-      input.onchange = async () => {
-        const files = [...(input.files ?? [])]
-        const images = files.filter((f) => isImageFile(f.name))
-        const file = files.find((f) => !isImageFile(f.name))
-        if (file) await get().openDeviceFile(file)
-        else if (!drawingImages(doc).length) return void get().openDeviceFile(images[0]) // una foto sola no es un plano
-        if (images.length) await get().attachImageFiles(images)
-      }
+      input.onchange = () => void get().openDeviceFiles([...(input.files ?? [])])
       input.click()
+    },
+    openDeviceFiles: async (files) => {
+      const images = files.filter((f) => isImageFile(f.name))
+      const file = files.find((f) => !isImageFile(f.name))
+      if (!file && !images.length) return
+      if (file) await get().openDeviceFile(file)
+      else if (!drawingImages(doc).length) return void get().openDeviceFile(images[0]) // una foto sola no es un plano
+      if (images.length) await get().attachImageFiles(images)
     },
     attachImages: () => {
       const input = document.createElement('input')
@@ -3327,6 +3345,7 @@ export const useStore = create<AppState>((set, get) => {
           currentFile = null // un DXF importado se guarda como .cota nuevo
           set({ docId: null, docName: name, docFolder: folder, fsFilePath: null, openOpen: false, selection: [] })
           print(`Imported "${path}" (${n} entities).`)
+          await loadFolderImages(folder)
           markSaved()
           frameOpenedDrawing()
         } else {

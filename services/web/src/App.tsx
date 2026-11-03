@@ -93,6 +93,28 @@ export default function App() {
     void restoreSession()
   }, [restoreSession])
 
+  // Archivos soltados sobre Cota: un plano se abre (con las imágenes que vengan con él); imágenes solas se le cargan
+  // al dibujo abierto. Sin esto el navegador abriría el archivo en la pestaña y se perdería el dibujo.
+  useEffect(() => {
+    const hasFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files')
+    const over = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+    }
+    const drop = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      void useStore.getState().openDeviceFiles([...(e.dataTransfer?.files ?? [])])
+    }
+    window.addEventListener('dragover', over)
+    window.addEventListener('drop', drop)
+    return () => {
+      window.removeEventListener('dragover', over)
+      window.removeEventListener('drop', drop)
+    }
+  }, [])
+
   // Un enlace compartido (`#script=…`) abre el lote en el diálogo SCRIPT: se revisa y sólo corre si se confirma.
   useEffect(() => {
     const t = scriptFromHash(window.location.hash)

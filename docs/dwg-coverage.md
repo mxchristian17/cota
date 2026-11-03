@@ -25,7 +25,7 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 | VIEWPORT and paper space | Layouts with their sheet, content and viewports | Not exported | |
 | 3DSOLID, REGION, BODY | Meshes with their faces | 3DFACE | From the ACIS model (SAT and SAB): planes, cylinders, cones, spheres, tori; NURBS faces over their best-fit plane |
 | SURFACE (extruded, lofted, revolved, swept, planar) | Meshes or edges | 3DFACE | |
-| IMAGE | The picture in its place (clip and fade included) once its file is loaded; until then, its frame and file name | IMAGE (DXF; the file path, not the pixels) | The drawing stores only the file path: open the image together with the drawing, or load it with `IMAGE` |
+| IMAGE | The picture in its place (clip and fade included) once its file is loaded; until then, its frame and file name | IMAGE (DXF; the file path, not the pixels) | The drawing stores only the file path: open the image together with the drawing, drop it on Cota or load it with `IMAGE`; from the working folder it loads on its own |
 | PDF, DWF and DGN UNDERLAY | File name at the insertion point | Text | The content is an external file |
 | OLE2FRAME | Frame | Polyline | |
 | WIPEOUT | Skipped, with a notice | — | The mask is not applied |

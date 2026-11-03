@@ -557,4 +557,44 @@ test.describe('Imágenes de fondo', () => {
     await page.waitForTimeout(450)
     expect(await st<string[]>(page, `return s.selection.map((id) => s.doc.getEntity(id).type)`)).toEqual(['IMAGE'])
   })
+
+  test('abierto el plano solo: la imagen se carga con Load… en sus propiedades, o soltando el archivo sobre Cota', async ({ page }) => {
+    await page.goto('/')
+    const input = page.getByTestId('command-input')
+    await expect(input).toBeVisible()
+    let chooser = page.waitForEvent('filechooser')
+    await input.fill('OPEN')
+    await page.keyboard.press('Enter')
+    await (await chooser).setFiles({ name: 'plano.dxf', mimeType: 'application/dxf', buffer: Buffer.from(DXF) })
+    await expect(page.locator('.cmd-output')).toContainText('use external files (mapa.png)')
+    // Se elige por el marco y la paleta dice que falta, con el botón para cargarla.
+    await clickAt(page, [1008, 2003, 0])
+    await input.fill('PR')
+    await page.keyboard.press('Enter')
+    const load = page.getByTestId('prop-action-_attached')
+    await expect(load).toBeVisible()
+    chooser = page.waitForEvent('filechooser')
+    await load.click()
+    await (await chooser).setFiles({ name: 'mapa.png', mimeType: 'image/png', buffer: Buffer.from(PNG, 'base64') })
+    await expect(page.locator('.cmd-output')).toContainText('Loaded 1 image')
+    await expect(page.getByTestId('prop-action-_attached')).toHaveCount(0)
+    // Seleccionada, sigue debajo de las líneas (se resalta su marco).
+    await expect
+      .poll(() => st<boolean>(page, `let ro = null, line = -Infinity; s.activeViewport.entityGroup.traverse((o) => { if (o.userData.raster) ro = o.renderOrder; else if (o.isLine || o.isLineSegments) line = Math.max(line, o.renderOrder) }); return ro !== null && ro < line`))
+      .toBe(true)
+    expect(await st<number>(page, 'return s.selection.length')).toBe(1)
+    // Deshacer la deja sin cargar; soltar el archivo sobre la ventana la vuelve a cargar.
+    await page.keyboard.press('Escape')
+    await input.fill('U')
+    await page.keyboard.press('Enter')
+    expect(await st<boolean>(page, "return !s.doc.entities.find((e) => e.type === 'IMAGE').props.data")).toBe(true)
+    const dt = await page.evaluateHandle((b64) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+      const d = new DataTransfer()
+      d.items.add(new File([bytes], 'MAPA.PNG', { type: 'image/png' }))
+      return d
+    }, PNG)
+    await page.dispatchEvent('canvas', 'drop', { dataTransfer: dt })
+    await expect.poll(() => st<boolean>(page, "return !!s.doc.entities.find((e) => e.type === 'IMAGE').props.data")).toBe(true)
+  })
 })

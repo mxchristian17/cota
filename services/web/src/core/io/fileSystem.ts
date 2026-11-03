@@ -161,6 +161,20 @@ export async function listFilesIn(dir: FsDirHandle, folder: string, exts: string
   return out.sort((a, b) => a.localeCompare(b))
 }
 
+/** Archivos de una subcarpeta con alguno de esos nombres (sin distinguir mayúsculas), sin recorrer más abajo. */
+export async function filesNamed(dir: FsDirHandle, folder: string, names: string[]): Promise<FsFileHandle[]> {
+  let current = dir
+  try {
+    for (const segment of folderSegments(folder)) current = await current.getDirectoryHandle(segment)
+  } catch {
+    return []
+  }
+  const want = new Set(names.map((n) => n.toLowerCase()))
+  const out: FsFileHandle[] = []
+  for await (const entry of current.values()) if (entry.kind === 'file' && want.has(entry.name.toLowerCase())) out.push(entry)
+  return out
+}
+
 export async function readTextFile(handle: FsFileHandle): Promise<string> {
   const file = await handle.getFile()
   return file.text()

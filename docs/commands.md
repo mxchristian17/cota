@@ -81,7 +81,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | Command | Aliases | What it does |
 | --- | --- | --- |
 | `INSERT` | `I`, `DDINSERT` | Insert a block reference |
-| `IMAGE` | `IM`, `-IMAGE` | Images of the drawing: list them and load their files [Reload/?] |
+| `IMAGE` | `IM` | Load the files of the pictures the drawing uses (a DXF stores only their path) |
 | `LAYOUT` | `LO` | Manage layouts [Copy/Delete/New/Template/Rename/SAveas/Set/?] |
 | `VIEWBASE` | — | Create a base view of the model in a layout, then its projected views |
 | `VIEWGEN` | — | Generate the Monge views of a part at once (choose them on a diagram, ISO-E or ISO-A) |
@@ -263,6 +263,7 @@ Dash versions run without dialogs, for scripts and power users.
 | `-HATCH` | `-H`, `-BHATCH` | Hatch from the command line (Properties, Select objects, Advanced, Origin) |
 | `-HATCHEDIT` | `-HE` | Edit a hatch from the command line |
 | `-OPEN` | — | Open a drawing from the command line [Device/List] |
+| `-IMAGE` | — | Images of the drawing from the command line [Reload/?] |
 
 ## System variables
 

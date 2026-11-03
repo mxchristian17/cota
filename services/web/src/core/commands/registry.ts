@@ -73,7 +73,7 @@ import { agentCommand, compactCommand } from './impl/agent'
 import { colorCommand, lweightCommand } from './impl/objectprops'
 import { areaCommand, idCommand, listCommand, masspropCommand, polarAngCommand } from './impl/inquiry'
 import { exportCommand, importCommand } from './impl/io'
-import { imageCommand } from './impl/image'
+import { imageCmdlineCommand, imageCommand } from './impl/image'
 import { optionsCommand } from './impl/options'
 import { osnapCommand } from './impl/osnap'
 import { shademodeCommand, vscurrentCommand } from './impl/vstyle'
@@ -287,6 +287,7 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   engine.register(importCommand)
   engine.register(exportCommand)
   engine.register(imageCommand)
+  engine.register(imageCmdlineCommand)
   engine.register(optionsCommand)
   engine.register(osnapCommand)
   // Ayuda

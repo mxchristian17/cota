@@ -776,6 +776,7 @@ body {
   flex-direction: column;
   gap: 6px;
 }
+.prop-action { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .prop-row {
   display: flex;
   align-items: center;

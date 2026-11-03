@@ -189,7 +189,19 @@ function Field({ f, entityId }: { f: PropField; entityId: string }) {
     case 'number':
       return <NumberField label={f.label} value={f.value} readOnly={f.readOnly} onCommit={(v) => update(entityId, f.key, v)} />
     case 'text':
-      return <TextField label={f.label} value={f.value} onCommit={(v) => update(entityId, f.key, v)} />
+      return <TextField label={f.label} value={f.value} readOnly={f.readOnly} onCommit={(v) => update(entityId, f.key, v)} />
+    case 'action':
+      return (
+        <div className="prop-row">
+          <span className="prop-key">{f.label}</span>
+          <span className="prop-value prop-action">
+            <span className="muted">{f.value}</span>
+            <button className="btn btn-sm" onClick={() => useStore.getState().submitCommand(f.command)} data-testid={`prop-action-${f.key}`}>
+              {f.button}
+            </button>
+          </span>
+        </div>
+      )
     case 'enum':
       return <EnumField label={f.label} value={f.value} options={f.options} onCommit={(v) => update(entityId, f.key, v)} />
     case 'bool':
