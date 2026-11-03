@@ -77,6 +77,8 @@ function surfacesOf(r: Rec): Surface[] {
       const nu = cross(a, mu)
       const k = n[9] || 1
       const tan = cosine && Math.abs(cosine) > 1e-12 ? (sine ?? 0) / cosine : 0
+      // Con coseno negativo la superficie mira hacia el eje (un agujero, el interior de un tubo).
+      const out = cosine !== undefined && cosine < 0 ? -1 : 1
       return [1, -1].map((sg): Surface => {
         const scale = (h: number) => (r0 + sg * h * tan) / r0
         return {
@@ -89,7 +91,10 @@ function surfacesOf(r: Rec): Surface[] {
             return [Math.atan2(dot(d, nu) / k, dot(d, mu)), dot(d, a)]
           },
           at: (t, h) => add(add(c, a, h), add(add([0, 0, 0], mu, Math.cos(t) * r0), nu, k * r0 * Math.sin(t)), scale(h)),
-          normal: (t) => unit(add(add(add([0, 0, 0], mu, Math.cos(t)), nu, Math.sin(t)), a, -sg * tan)),
+          normal: (t) => {
+            const d = unit(add(add(add([0, 0, 0], mu, Math.cos(t)), nu, Math.sin(t)), a, -sg * tan))
+            return out < 0 ? [-d[0], -d[1], -d[2]] : d
+          },
         }
       })
     }
@@ -382,7 +387,9 @@ function analyticFace(s: Surface, rings3: Pt[][], flipped: boolean, angleStep: (
   // Hacia afuera (o hacia adentro, si la cara está invertida).
   tris = tris.map(([a, b, c]) => {
     const g = cross(sub(pts[b], pts[a]), sub(pts[c], pts[a]))
-    const uv: UV = [(uvs[a][0] + uvs[b][0] + uvs[c][0]) / 3, (uvs[a][1] + uvs[b][1] + uvs[c][1]) / 3]
+    // La normal en el centro del triángulo, tomado en 3D: promediar sus (u, v) fallaba si cruzaban la costura de un
+    // ángulo (±π), y la normal salía del otro lado del tubo de un toro.
+    const uv = s.toUv([(pts[a][0] + pts[b][0] + pts[c][0]) / 3, (pts[a][1] + pts[b][1] + pts[c][1]) / 3, (pts[a][2] + pts[b][2] + pts[c][2]) / 3])
     const n = s.normal(uv[0], uv[1])
     return (dot(g, n) < 0) !== flipped ? [a, c, b] : [a, b, c]
   })
@@ -573,7 +580,7 @@ export function acisMesh(data: Uint8Array | string, light = false): AcisMesh | n
   } catch {
     return null
   }
-  const { place, edgePoints, angleStep } = modelOf(recs, light)
+  const { place, mirrored, edgePoints, angleStep } = modelOf(recs, light)
   const vertices: Vec3[] = []
   const faces: number[][] = []
   const stats: AcisMesh['stats'] = { analytic: 0, planar: 0, failed: 0 }
@@ -617,5 +624,7 @@ export function acisMesh(data: Uint8Array | string, light = false): AcisMesh | n
       stats.failed++
     }
   }
+  // Un cuerpo reflejado por su transformación da vuelta el sentido de los triángulos: se corrige para que miren afuera.
+  if (mirrored) for (const f of faces) f.reverse()
   return faces.length ? { vertices, faces, stats } : null
 }

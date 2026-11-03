@@ -49,3 +49,22 @@ describe('ZOOM Window/Extents en paralela (revisión 2026-10-13)', () => {
   })
 })
 
+describe('órbita alrededor de lo seleccionado', () => {
+  it('el punto elegido queda quieto en la pantalla mientras la vista gira', () => {
+    const c = new CameraController()
+    c.setSize(800, 600)
+    c.setView('ISO')
+    const pivot = new THREE.Vector3(120, -40, 30)
+    c.camera.updateMatrixWorld() // como al dibujar un cuadro
+    const before = c.project(pivot)!
+    const dir0 = c.viewDirection()
+    c.orbitAbout(60, -25, pivot)
+    c.camera.updateMatrixWorld()
+    const after = c.project(pivot)!
+    expect(after[0]).toBeCloseTo(before[0], 6)
+    expect(after[1]).toBeCloseTo(before[1], 6)
+    // La vista sí giró (como una órbita común).
+    expect(c.viewDirection().angleTo(dir0)).toBeGreaterThan(0.3)
+  })
+})
+

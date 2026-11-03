@@ -13,7 +13,7 @@ import { angleFromOcs, angleToOcs, fromOcs, isWorldExtrusion, toOcs } from './dx
 import { normAngle } from '../geom/arc'
 import { acisEdges, sabFromHex, satFromDxf } from './acis'
 import { acisMesh, SOLID_MESH_REF } from './acisMesh'
-import { packedOf, type PackedMesh } from './meshTransfer'
+import { packedOf, reversePackedFaces, type PackedMesh } from './meshTransfer'
 import { image, infiniteLine, mline, multileader, oleFrame, tolerance, underlay, viewBasis, type Piece } from './dxfExtra'
 
 /**
@@ -823,15 +823,22 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
   // dentro del bloque toma la capa de la inserción, como en el CAD clásico.
   const insertOf = (rec: Rec): InsertProps => {
     const n: Vec3 = [num(rec.codes, 210, 0), num(rec.codes, 220, 0), num(rec.codes, 230, 1)]
+    const plan = Math.abs(n[2] - 1) <= 1e-9
+    const p: Vec3 = [num(rec.codes, 10), num(rec.codes, 20), num(rec.codes, 30)]
+    const rot = (num(rec.codes, 50, 0) * Math.PI) / 180
+    // Fuera de planta, el punto y el giro vienen en el OCS de la inserción (como los de un círculo): se pasan al mundo y
+    // a la base con que Cota mide los ángulos. Sin esto, un bloque insertado de costado quedaba corrido y girado.
     return {
       name: str(rec.codes, 2) ?? '',
-      position: [num(rec.codes, 10), num(rec.codes, 20), num(rec.codes, 30)],
+      position: plan ? p : fromOcs(p, n),
       scale: [num(rec.codes, 41, 1), num(rec.codes, 42, 1), num(rec.codes, 43, 1)],
-      rotation: (num(rec.codes, 50, 0) * Math.PI) / 180,
-      ...(Math.abs(n[2] - 1) > 1e-9 ? { normal: n } : {}),
+      rotation: plan ? rot : angleFromOcs(rot, n),
+      ...(plan ? {} : { normal: n }),
     }
   }
   const shift = (b: Vec3): InsertProps => ({ name: '', position: [-b[0], -b[1], -b[2]], scale: [1, 1, 1], rotation: 0 })
+  /** Caras invertidas de las mallas de bloques insertados espejados (una vez por malla). */
+  const flipped = new Map<Uint32Array, Uint32Array>()
   // Capas congeladas: en el CAD clásico una inserción en una capa congelada se oculta entera, aunque su contenido esté
   // en otras capas. Como acá el bloque se desarma, todo lo que hay debajo de esa inserción pasa a su capa congelada.
   const frozenNames = new Set(layers.filter((l) => l.frozen).map((l) => l.name.toUpperCase()))
@@ -863,7 +870,14 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
           pos[i + 1] = q[1]
           pos[i + 2] = q[2]
         }
-        out.push({ ...it.spec, props: { packed: { pos, faces: packed.faces } } as unknown as EntityProps, layerName })
+        // Una inserción espejada (escala negativa) da vuelta el sentido de las caras: se corrige.
+        const flip = chain.reduce((sg, t) => sg * Math.sign(t.scale[0] * t.scale[1] * t.scale[2] || 1), 1) < 0
+        let faces = packed.faces
+        if (flip) {
+          faces = flipped.get(packed.faces) ?? reversePackedFaces(packed.faces)
+          flipped.set(packed.faces, faces)
+        }
+        out.push({ ...it.spec, props: { packed: { pos, faces } } as unknown as EntityProps, layerName })
         continue
       }
       let e = { id: '', type: it.spec.type, layer: '', props: it.spec.props } as unknown as Entity

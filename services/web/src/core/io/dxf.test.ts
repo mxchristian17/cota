@@ -429,6 +429,38 @@ describe('importDxf ▸ bloques', () => {
       expect((e.props as unknown as { vertices: number[][] }).vertices).toHaveLength(4)
     }
   })
+  it('un bloque insertado de costado: el punto y el giro vienen en el OCS de la inserción', () => {
+    // Normal −X: el OCS tiene X = (0, −1, 0) e Y = (0, 0, 1); el punto (−188, 0, 126) del OCS es (−126, 188, 0).
+    const text = dxf([
+      [0, 'SECTION'], [2, 'BLOCKS'],
+      [0, 'BLOCK'], [2, 'Eje'], [10, 0], [20, 0], [30, 0], [0, 'LINE'], [8, '0'], [10, 0], [20, 0], [30, 0], [11, 10], [21, 0], [31, 0], [0, 'ENDBLK'],
+      [0, 'ENDSEC'],
+      [0, 'SECTION'], [2, 'ENTITIES'],
+      [0, 'INSERT'], [8, 'A'], [2, 'Eje'], [10, -188], [20, 0], [30, 126], [50, 180], [210, -1], [220, 0], [230, 0],
+      [0, 'ENDSEC'], [0, 'EOF'],
+    ])
+    const line = importDxf(text).entities[0].props as unknown as { start: number[]; end: number[] }
+    ;[-126, 188, 0].forEach((v, i) => expect(line.start[i]).toBeCloseTo(v))
+    ;[-126, 198, 0].forEach((v, i) => expect(line.end[i]).toBeCloseTo(v))
+  })
+  it('un bloque insertado espejado da vuelta las caras de sus mallas (siguen mirando afuera)', () => {
+    const face: Array<[number, string | number]> = [[0, '3DFACE'], [8, '0'], [10, 0], [20, 0], [30, 0], [11, 1], [21, 0], [31, 0], [12, 0], [22, 1], [32, 0], [13, 0], [23, 1], [33, 0]]
+    const text = dxf([
+      [0, 'SECTION'], [2, 'BLOCKS'],
+      [0, 'BLOCK'], [2, 'Cara'], [10, 0], [20, 0], [30, 0], ...face, [0, 'ENDBLK'],
+      [0, 'ENDSEC'],
+      [0, 'SECTION'], [2, 'ENTITIES'],
+      [0, 'INSERT'], [8, 'A'], [2, 'Cara'], [10, 0], [20, 0], [30, 0],
+      [0, 'INSERT'], [8, 'B'], [2, 'Cara'], [10, 0], [20, 0], [30, 0], [41, -1],
+      [0, 'ENDSEC'], [0, 'EOF'],
+    ])
+    for (const e of importDxf(text).entities) {
+      const m = e.props as unknown as { vertices: number[][]; faces: number[][] }
+      const [a, b, c] = m.faces[0].map((i) => m.vertices[i])
+      const nz = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+      expect(nz).toBeGreaterThan(0)
+    }
+  })
 })
 
 describe('importDxf ▸ POLYLINE con VERTEX (3D, mallas y 2D del formato viejo)', () => {

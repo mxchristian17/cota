@@ -28,6 +28,18 @@ const packFaces = (faces: ArrayLike<ArrayLike<number>>): Uint32Array => {
   return out
 }
 
+/** Caras empaquetadas con el sentido invertido (una malla espejada). */
+export function reversePackedFaces(faces: Uint32Array): Uint32Array {
+  const out = new Uint32Array(faces.length)
+  for (let w = 0; w < faces.length; ) {
+    const n = faces[w]
+    out[w] = n
+    for (let j = 0; j < n; j++) out[w + 1 + j] = faces[w + n - j]
+    w += n + 1
+  }
+  return out
+}
+
 /** Una malla empaquetada (la de cada sólido leído, apenas se arma: así ocupa la cuarta parte mientras se lee el resto). */
 export function packMesh(m: { vertices: ArrayLike<ArrayLike<number>>; faces: ArrayLike<ArrayLike<number>> }): PackedMesh {
   const pos = new Float64Array(m.vertices.length * 3)

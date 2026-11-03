@@ -84,6 +84,33 @@ test.describe('Mobile view for the job site', () => {
     await expect(page.getByTestId('mobile-app')).toBeVisible()
   })
 
+  test('a tap selects a part, one finger then orbits around it, a tap on empty space lets it go', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('mobile-app')).toBeVisible()
+    const cdp = await page.context().newCDPSession(page)
+    // Dos cajas separadas: la órbita gira alrededor de la elegida, no del centro de la vista.
+    await st(page, "return s.runScript('BOX 0,0,0 40,40 40\\nBOX 300,0,0 340,40 40', { finish: 'cancel', fresh: true })")
+    await st(page, "s.activeViewport.setView('ISO')")
+    await tapId(page, 'm-fit')
+    const far = { x: 320, y: 20, z: 20 }
+    const [x, y] = await screenOf(page, far)
+    await page.waitForTimeout(350)
+    await page.touchscreen.tap(x, y)
+    await expect(page.getByTestId('m-selection')).toContainText('1 piece selected')
+    const ids = await st<string[]>(page, 'return s.selection')
+    expect(ids).toHaveLength(1)
+    await drag(page, cdp, [120, 300], [200, 340])
+    const [x2, y2] = await screenOf(page, far)
+    expect(Math.abs(x2 - x)).toBeLessThan(2)
+    expect(Math.abs(y2 - y)).toBeLessThan(2)
+    expect(await st<string[]>(page, 'return s.selection')).toEqual(ids) // orbitar no cambia la selección
+    // Un toque donde no hay nada suelta la pieza.
+    await page.waitForTimeout(400)
+    await page.touchscreen.tap(30, 250)
+    await expect(page.getByTestId('m-selection')).toHaveCount(0)
+    expect(await st<number>(page, 'return s.selection.length')).toBe(0)
+  })
+
   test('one finger orbits a 3D part, two fingers pinch, a double tap fits; a 2D drawing pans', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByTestId('mobile-app')).toBeVisible()
@@ -109,7 +136,8 @@ test.describe('Mobile view for the job site', () => {
     await page.waitForTimeout(80)
     await page.touchscreen.tap(200, 450)
     await expect.poll(async () => (await camera(page)).radius).toBeGreaterThan(c2.radius * 1.5)
-    expect(await st<number>(page, 'return s.selection.length')).toBe(0) // los toques no seleccionan
+    await page.waitForTimeout(500)
+    expect(await st<number>(page, 'return s.selection.length')).toBe(0) // el doble toque sólo encuadra (no elige)
 
     // En un dibujo 2D un dedo desplaza (la vista en planta no se pierde).
     await st(page, "return s.runScript('ERASE ALL \"\"\\nRECTANGLE 0,0 100,60', { finish: 'cancel', fresh: true })")

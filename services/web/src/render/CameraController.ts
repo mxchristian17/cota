@@ -203,6 +203,23 @@ export class CameraController {
   }
 
   /**
+   * Órbita como `orbit`, pero alrededor de `pivot` (lo seleccionado): la vista gira con ese punto quieto en la pantalla,
+   * en vez de girar alrededor del centro de la vista.
+   */
+  orbitAbout(dxPx: number, dyPx: number, pivot: THREE.Vector3): void {
+    const az = this.az - dxPx * 0.01
+    const el = Math.max(-EL_LIMIT, Math.min(EL_LIMIT, this.el + dyPx * 0.01))
+    // El mismo giro que lleva la dirección de vista de (az, el) a la nueva: primero en planta, después en altura.
+    const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), az - this.az)
+    const pitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(-Math.sin(az), Math.cos(az), 0), -(el - this.el))
+    this.target.sub(pivot).applyQuaternion(pitch.multiply(yaw)).add(pivot)
+    this.upOverride = null
+    this.az = az
+    this.el = el
+    this.update()
+  }
+
+  /**
    * Órbita libre (3DFORBIT): gira la vista alrededor de los ejes de la pantalla sin el límite del polo; la vertical de
    * la cámara acompaña el giro (la vista puede quedar inclinada, como en el CAD clásico).
    */

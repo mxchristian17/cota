@@ -56,7 +56,14 @@ export function insertXDir(ins: Pick<InsertProps, 'rotation' | 'normal'>): Vec3 
   return [0, 1, 2].map((i) => o.u[i] * c + o.v[i] * s) as Vec3
 }
 
-/** Mapa punto→mundo del INSERT. */
+/** Caras con el sentido invertido, una vez por lista (las copias espejadas de un bloque la comparten). */
+const reversed = new WeakMap<number[][], number[][]>()
+function reversedFaces(faces: number[][]): number[][] {
+  let r = reversed.get(faces)
+  if (!r) reversed.set(faces, (r = faces.map((f) => [...f].reverse())))
+  return r
+}
+
 /** Punto del bloque → punto del dibujo según una inserción. */
 export function pointMap(ins: InsertProps): (p: Vec3) => Vec3 {
   const D = dirMap(ins)
@@ -278,7 +285,8 @@ export function transformEntity(e: Entity, ins: InsertProps): Entity {
     case 'SOLID3D':
       return { ...e, props: transformSolid(e.props, P, sr, sz, plan, flip) }
     case 'MESH3D':
-      return { ...e, props: { vertices: e.props.vertices.map(P), faces: e.props.faces } }
+      // Espejada (escala negativa): las caras se dan vuelta para seguir mirando hacia afuera.
+      return { ...e, props: { vertices: e.props.vertices.map(P), faces: flip ? reversedFaces(e.props.faces) : e.props.faces } }
     case 'INSERT':
       // Inserción anidada: compone la transform (posición y escala) — la recursión se hace en expandInsert.
       return { ...e, props: { ...e.props, position: P(e.props.position), scale: [e.props.scale[0] * ins.scale[0], e.props.scale[1] * ins.scale[1], e.props.scale[2] * ins.scale[2]], rotation: e.props.rotation + ins.rotation } }

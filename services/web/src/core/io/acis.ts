@@ -237,6 +237,8 @@ export function modelOf(recs: Rec[], light = false) {
       (p[0] * m[2] + p[1] * m[5] + p[2] * m[8]) * k + m[11],
     ]
   }
+  /** ¿La transformación refleja (determinante negativo)? Entonces las caras quedan del revés si no se dan vuelta. */
+  const mirrored = !!m && m.length >= 13 && (m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6])) * (m[12] || 1) < 0
   // Tolerancia de cuerda: 0,1 % del tamaño de la pieza (los puntos del modelo, antes de su transformación). Liviana (en
   // un teléfono): el triple, y una vuelta en 18 tramos en vez de 36; un ensamble grande queda con la mitad de triángulos.
   const lo: Pt = [Infinity, Infinity, Infinity]
@@ -365,7 +367,7 @@ export function modelOf(recs: Rec[], light = false) {
     cache.set(e, pts)
     return pts
   }
-  return { pointOf, place, edgePoints, tol, angleStep }
+  return { pointOf, place, mirrored, edgePoints, tol, angleStep }
 }
 
 /** Aristas de los registros ya leídos. */

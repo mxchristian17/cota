@@ -4,6 +4,23 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.18.0] — 2026-11-03
+
+### Added
+- **Mobile view: a tap selects a part** (another tap lets it go, a tap on empty space clears the selection) and one
+  finger then orbits around the selection, which stays still on screen. A double tap still fits the drawing.
+- Orbiting with objects selected turns around their center in the full editor too, as in the classic CAD.
+
+### Fixed
+- **Blocks inserted sideways in DWG and DXF files** (with an extrusion direction other than +Z) land where they belong:
+  their insertion point and rotation were taken as world values instead of values in the plane of the insertion, so
+  parts of a 3D assembly appeared displaced and turned.
+- Faces of 3D solids that looked inside out: holes, bores and other inner cylinders and cones, solids whose ACIS
+  transform mirrors them, and blocks inserted mirrored (negative scale). Meshes are also drawn on both sides, so a face
+  that still came in reversed is shaded correctly.
+- Selecting a part in a large drawing (tens of thousands of objects) no longer redraws everything: the selection is
+  highlighted on top.
+
 ## [2.17.0] — 2026-11-03
 
 ### Added

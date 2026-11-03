@@ -151,6 +151,8 @@ export interface ViewportCallbacks {
   /** Con la navegación bloqueada (viewport *display locked*), la rueda y el pan se derivan al papel. */
   onLockedWheel?: (e: WheelEvent) => void
   onLockedPan?: (dx: number, dy: number) => void
+  /** Toque corto en la vista mobile (sin comando que pida un punto): la entidad bajo el dedo, o null. */
+  onTapPick?: (id: string | null) => void
 }
 
 /**
@@ -179,6 +181,10 @@ const BG_COLOR = 0x1e1e1e
 const HIGHLIGHT = 0x00e5ff
 /** Textos más chicos que esto (en px de alto) no se dibujan; y no más que tantos a la vez (ver `updateTextLabels`). */
 const MIN_TEXT_PX = 3
+/** Desde cuántos objetos un cambio de selección se resalta encima en vez de rehacer los lotes. */
+const BIG_DRAWING = 5000
+/** Espera de un toque antes de elegir: el tiempo en que un segundo toque lo vuelve doble (ver `isDoubleTap`). */
+const TAP_SELECT_MS = 360
 const MAX_TEXT_LABELS = 3000
 /** Color de la hoja de papel de los layouts. */
 export const PAPER_COLOR = '#ffffff'
@@ -248,6 +254,15 @@ export class Viewport {
   private readonly scene = new THREE.Scene()
   private readonly controller = new CameraController()
   private readonly entityGroup = new THREE.Group()
+  /**
+   * Resaltado de la selección en los dibujos grandes: lo elegido se dibuja encima de los lotes en vez de rehacerlos (en
+   * un ensamble de 48 mil objetos, tocar una pieza tardaba segundos). Ver `syncScene`.
+   */
+  private readonly selOverlay = new THREE.Group()
+  /** Selección con la que se armaron los lotes la última vez. */
+  private batchedSelKey = ''
+  /** Centro de lo seleccionado: la órbita gira alrededor de él, como 3DORBIT con objetos elegidos. */
+  private orbitPivot: THREE.Vector3 | null = null
   /** Contornos de las superficies curvas de los sólidos, según la vista (no se seleccionan). */
   private readonly silhouetteGroup = new THREE.Group()
   private silhouetteKey = ''
@@ -332,6 +347,8 @@ export class Viewport {
   private touchGesture: 'none' | 'mouse' | 'nav' | 'aim' | 'pinch' | 'ended' = 'none'
   private touchStart: (TouchPt & { t: number }) | null = null
   private lastTap: (TouchPt & { t: number }) | null = null
+  /** Toque simple pendiente de confirmar (si llega un segundo, era un doble toque). */
+  private tapTimer: ReturnType<typeof setTimeout> | undefined
   /** Apuntando con el dedo: el object snap captura más lejos (el dedo no es tan preciso como el mouse). */
   private touchAim = false
   private aimEl: HTMLDivElement | null = null
@@ -415,7 +432,7 @@ export class Viewport {
     // las caras con distinta orientación nunca quedan del mismo tono, se mire desde donde se mire.
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.45))
     this.scene.add(this.keyLight, this.keyLight.target, this.fillLight, this.fillLight.target)
-    this.scene.add(this.entityGroup, this.silhouetteGroup, this.previewGroup, this.snapGroup, this.gripGroup, this.ducsGroup)
+    this.scene.add(this.entityGroup, this.selOverlay, this.silhouetteGroup, this.previewGroup, this.snapGroup, this.gripGroup, this.ducsGroup)
     this.ducsGroup.renderOrder = 11
     // Overlays por encima de la geometría: preview < glifos de snap < grips.
     this.previewGroup.renderOrder = 10
@@ -923,7 +940,7 @@ export class Viewport {
         // Zoom Realtime: subir medio alto de la ventana acerca al doble (bajar, aleja), desde el centro.
         this.controller.zoom(Math.pow(2, dy / Math.max(1, this.controller.pxHeight / 2)))
       } else if (this.dragging === 'forbit') this.controller.freeOrbit(dx, dy)
-      else this.controller.orbit(dx, dy)
+      else this.orbitView(dx, dy)
       this.lastDrag = { dx, dy }
     }
     const px = this.pxOf(e.clientX, e.clientY)
@@ -1106,7 +1123,7 @@ export class Viewport {
       this.lastPan.set(e.clientX, e.clientY)
       if (this.navLocked) this.cb.onLockedPan?.(dx, dy)
       else if (this.kind !== 'model' || touchConfig.oneFinger === 'pan') this.controller.pan(dx, dy)
-      else this.controller.orbit(dx, dy)
+      else this.orbitView(dx, dy)
       this.invalidate()
     }
     return true
@@ -1139,11 +1156,18 @@ export class Viewport {
       if (start && isTap(start, end)) {
         if (isDoubleTap(this.lastTap, end)) {
           this.lastTap = null
+          clearTimeout(this.tapTimer) // el doble toque sólo encuadra: no elige
           if (!this.navLocked) {
             this.zoomExtents()
             this.invalidate()
           }
-        } else this.lastTap = end
+        } else {
+          this.lastTap = end
+          // Un toque elige la pieza bajo el dedo (o vacía la selección si no hay nada), pasado el tiempo de un doble toque.
+          const { clientX, clientY } = e
+          clearTimeout(this.tapTimer)
+          if (this.cb.onTapPick && !this.navLocked) this.tapTimer = setTimeout(() => this.cb.onTapPick?.(this.pickAt(clientX, clientY)), TAP_SELECT_MS)
+        }
       }
     }
     return true
@@ -1427,6 +1451,43 @@ export class Viewport {
     c.height = Math.round(src.height * k)
     c.getContext('2d')?.drawImage(src, 0, 0, c.width, c.height)
     return c.toDataURL('image/png')
+  }
+
+  /** Órbita de la vista: alrededor de lo seleccionado si hay algo elegido, si no alrededor del centro de la vista. */
+  private orbitView(dx: number, dy: number): void {
+    if (this.orbitPivot) this.controller.orbitAbout(dx, dy, this.orbitPivot)
+    else this.controller.orbit(dx, dy)
+  }
+
+  /** Centro de la caja de lo seleccionado (null sin selección). */
+  private selectionCenter(ids: string[]): THREE.Vector3 | null {
+    if (!ids.length) return null
+    const want = new Set(ids)
+    const box = new THREE.Box3()
+    for (const e of this.expanded ?? []) {
+      if (!want.has(e.id)) continue
+      const sig = sizeSignature(e)
+      if (sig) {
+        box.expandByPoint(new THREE.Vector3(sig.c[0] - sig.r, sig.c[1] - sig.r, sig.c[2] - sig.r))
+        box.expandByPoint(new THREE.Vector3(sig.c[0] + sig.r, sig.c[1] + sig.r, sig.c[2] + sig.r))
+      } else for (const path of entityOutline(e)) for (const p of path) box.expandByPoint(new THREE.Vector3(p.x, p.y, p.z ?? 0))
+    }
+    return box.isEmpty() ? null : box.getCenter(new THREE.Vector3())
+  }
+
+  /** Resalta la selección encima de los lotes (armados sin selección), sin rehacerlos. */
+  private showSelectionOverlay(selection: string[], layers: Layer[]): void {
+    this.disposeGroup(this.selOverlay)
+    if (!selection.length) return
+    const want = new Set(selection)
+    const layerMap = new Map(layers.map((l) => [l.id, l]))
+    const from = this.entityGroup.children.length
+    for (const e of this.expanded ?? []) if (want.has(e.id)) this.buildEntity(e, layerMap, want)
+    // Lo recién armado pasa al grupo del resaltado: encima de todo y fuera del pick (el lote ya tiene la pieza).
+    for (const c of this.entityGroup.children.slice(from)) {
+      c.traverse((o) => (o.renderOrder = 1))
+      this.selOverlay.add(c)
+    }
   }
 
   pickAt(clientX: number, clientY: number): string | null {
@@ -2458,9 +2519,10 @@ export class Viewport {
     g.setIndex(new THREE.BufferAttribute(idx, 1))
     const mesh = new THREE.Mesh(
       g,
+      // De las dos caras: una cara de una malla leída que quedara al revés se ve igual, con la luz del lado que se mira.
       flat
-        ? new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex), ...FACE_OFFSET }) // estilo hidden: sin luz
-        : new THREE.MeshStandardMaterial({ color: new THREE.Color(colorHex), metalness: 0.1, roughness: 0.75, ...FACE_OFFSET }),
+        ? new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex), side: THREE.DoubleSide, ...FACE_OFFSET }) // estilo hidden: sin luz
+        : new THREE.MeshStandardMaterial({ color: new THREE.Color(colorHex), metalness: 0.1, roughness: 0.75, side: THREE.DoubleSide, ...FACE_OFFSET }),
     )
     mesh.userData.ranges = b.ranges
     mesh.userData.rangeKind = 'mesh'
@@ -3020,6 +3082,15 @@ export class Viewport {
   private syncScene(data: ViewportData): void {
     const selKey = data.selection.join(',')
     const fieldsKey = this.hasFieldTexts && data.fields ? JSON.stringify(data.fields) : this.lastFieldsKey
+    const sameData = data.revision === this.lastRevision && fieldsKey === this.lastFieldsKey && data.annoScale === this.lastAnnoScale
+    if (sameData && selKey !== this.lastSelectionKey && this.batchedSelKey === '' && (this.expanded?.length ?? 0) > BIG_DRAWING && this.overlayable(data.selection)) {
+      // Dibujo grande y sólo cambió la selección: se resalta encima, sin rehacer los lotes.
+      this.lastSelectionKey = selKey
+      this.showSelectionOverlay(data.selection, data.layers)
+      this.orbitPivot = this.selectionCenter(data.selection)
+      this.invalidate()
+      return
+    }
     if (data.revision !== this.lastRevision || selKey !== this.lastSelectionKey || fieldsKey !== this.lastFieldsKey || data.annoScale !== this.lastAnnoScale) {
       this.lastRevision = data.revision
       this.lastAnnoScale = data.annoScale
@@ -3031,9 +3102,18 @@ export class Viewport {
       )
       this.lastFieldsKey = this.hasFieldTexts && data.fields ? JSON.stringify(data.fields) : ''
       this.snapSpheres = null // el índice espacial de snap se reconstruye con los datos nuevos
+      this.disposeGroup(this.selOverlay)
       this.rebuild(this.expanded, data.layers, new Set(data.selection))
+      this.batchedSelKey = selKey
+      this.orbitPivot = this.selectionCenter(data.selection)
       this.invalidate()
     }
+  }
+
+  /** ¿Se puede resaltar sin rehacer los lotes? Los textos y las cotas llevan etiquetas propias: con ellos, no. */
+  private overlayable(ids: string[]): boolean {
+    const want = new Set(ids)
+    return !(this.expanded ?? []).some((e) => want.has(e.id) && (e.type === 'TEXT' || e.type === 'ATTDEF' || e.type === 'DIMENSION'))
   }
 
   private tick = (): void => {
@@ -3042,7 +3122,7 @@ export class Viewport {
     try {
       this.data = this.provider?.() ?? null
       if (this.spin && !this.dragging) {
-        this.controller.orbit(this.spin.dx, this.spin.dy)
+        this.orbitView(this.spin.dx, this.spin.dy)
         this.invalidate()
       }
       // Fuera del primer punto de un comando de dibujo, la UCS dinámica no aplica: se borra el resaltado.
@@ -3134,8 +3214,10 @@ export class Viewport {
 
   dispose(): void {
     cancelAnimationFrame(this.raf)
+    clearTimeout(this.tapTimer)
     this.ro.disconnect()
     this.disposeGroup(this.entityGroup)
+    this.disposeGroup(this.selOverlay)
     this.disposeGroup(this.previewGroup)
     this.disposeGroup(this.snapGroup)
     this.disposeGroup(this.gripGroup)

@@ -98,6 +98,7 @@ export function MobileApp() {
   const prompt = useStore((s) => s.prompt)
   const busy = useStore((s) => s.engine.busy)
   const measure = useStore((s) => s.lastMeasure)
+  const selected = useStore((s) => s.selection.length)
   const style = useStore((s) => s.visualStyle)
   const token = useStore((s) => s.token)
   const output = useStore((s) => s.output)
@@ -233,6 +234,14 @@ export function MobileApp() {
             <span>{second ? 'Point 2 of 2' : 'Point 1 of 2'} · drag the ring, lift to set</span>
             <button className="btn" onClick={stopMeasure} data-testid="m-measure-cancel">
               Cancel
+            </button>
+          </div>
+        )}
+        {!measuring && !measure && selected > 0 && (
+          <div className="m-pill" data-testid="m-selection">
+            <span>{selected === 1 ? '1 piece selected' : `${selected} pieces selected`} · orbit turns around it</span>
+            <button className="btn" onClick={() => useStore.setState({ selection: [] })} data-testid="m-selection-clear">
+              Clear
             </button>
           </div>
         )}

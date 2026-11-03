@@ -114,6 +114,14 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
         if (isActive()) setCameraState(az, el, mode)
       },
       onActivate: () => setActiveViewport(vp),
+      // Vista mobile: un toque elige la pieza (o la suelta, si ya estaba); sobre el vacío, vacía la selección. La órbita
+      // gira alrededor de lo elegido.
+      onTapPick: (id) => {
+        const s = useStore.getState()
+        if (s.engine.busy) return
+        setActiveViewport(vp)
+        useStore.setState({ selection: !id ? [] : s.selection.includes(id) ? s.selection.filter((x) => x !== id) : [...s.selection, id] })
+      },
       // VIEW/cubo de vistas con UCSORTHO cambia la UCS del viewport: el store espeja la del activo.
       onUcsChange: (u, name) => {
         if (isActive()) useStore.getState().setUcs(u, name)
