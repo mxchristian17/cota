@@ -594,3 +594,11 @@ describe('entidades de DWG/DXF que Cota dibuja con piezas simples', () => {
     expect(l.viewports[0]).toMatchObject({ center: [55, 46, 0], width: 80, height: 60, target: [1005, 2007, 0], mmPerUnit: 0.5 })
   })
 })
+
+describe('atributos invisibles', () => {
+  it('un ATTRIB con 70 bit 1 no se dibuja; uno visible sí', () => {
+    const rec = (flags: number, text: string) => `0\nATTRIB\n8\n0\n10\n0\n20\n0\n30\n0\n40\n2\n1\n${text}\n2\nTAG\n70\n${flags}\n`
+    const r = importDxf(`0\nSECTION\n2\nENTITIES\n${rec(1, 'oculto')}${rec(0, 'visible')}0\nENDSEC\n0\nEOF\n`)
+    expect(r.entities.map((e) => (e.props as { text: string }).text)).toEqual(['visible'])
+  })
+})

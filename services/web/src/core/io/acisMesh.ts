@@ -576,7 +576,7 @@ export function acisMesh(data: Uint8Array | string): AcisMesh | null {
   const { place, edgePoints, angleStep } = modelOf(recs)
   const vertices: Vec3[] = []
   const faces: number[][] = []
-  const stats = { analytic: 0, planar: 0, failed: 0 }
+  const stats: AcisMesh['stats'] = { analytic: 0, planar: 0, failed: 0 }
   for (const f of recs) {
     if (kindOf(f) !== 'face') continue
     try {

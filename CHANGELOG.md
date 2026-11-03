@@ -4,6 +4,12 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.15.1] — 2026-11-03
+
+### Fixed
+- Invisible block attributes from DWG and DXF files no longer show (a 3D assembly brought about a thousand of them).
+- Closed NURBS edges of 3D solids follow the right side of the curve, so more curved faces come in with their true shape.
+
 ## [2.15.0] — 2026-11-03
 
 ### Added

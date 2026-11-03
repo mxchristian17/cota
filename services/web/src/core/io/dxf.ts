@@ -607,6 +607,8 @@ export function importDxf(text: string, opts: { solidMeshes?: MeshProps[] } = {}
   }
   /** Entidades (tipo de línea por objeto incluido) de un record; null si no se soporta. */
   const specsOf = (rec: Rec): DxfEntitySpec[] | null => {
+    // Un atributo invisible (70 bit 1) no se dibuja, como en el CAD clásico.
+    if ((rec.type === 'ATTRIB' || rec.type === 'ATTDEF') && num(rec.codes, 70, 0) & 1) return []
     const one = rec.type === 'HATCH' ? hatchSpec(rec) : rec.type === 'ATTRIB' ? parseEntity({ type: 'TEXT', codes: rec.codes }) : (solidMesh(rec) ?? parseEntity(rec))
     const pieces = one ? [one] : piecesOf(rec)
     if (!pieces) return null

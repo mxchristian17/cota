@@ -252,6 +252,9 @@ export function modelOf(recs: Rec[]) {
     if (p.length <= 2) return p
     const keep = new Uint8Array(p.length)
     keep[0] = keep[p.length - 1] = 1
+    // Siempre unos puntos repartidos: en una curva de radio menor que la tolerancia, quedarse con sus extremos haría
+    // saltar el ángulo más de media vuelta entre dos puntos seguidos (y no se sabría hacia dónde gira).
+    for (let i = 0; i < p.length; i += 10) keep[i] = 1
     const stack: Array<[number, number]> = [[0, p.length - 1]]
     while (stack.length) {
       const [a, b] = stack.pop()!
@@ -313,8 +316,25 @@ export function modelOf(recs: Rec[]) {
         }
       } else if (curve && /intcurve/.test(curve.type)) {
         const f = splineOf(curve.items)
-        if (f) {
-          // Del rango de la curva, el tramo entre los puntos más cercanos a cada vértice (sirve con y sin los parámetros).
+        // Con los parámetros de la arista (ACIS 7 en adelante: el número que sigue a cada vértice), el tramo exacto; en
+        // una curva cerrada, dando la vuelta por su período si hace falta.
+        const t0 = verts[0] ? e.items[verts[0].i + 1] : undefined
+        const t1 = verts[1] ? e.items[verts[1].i + 1] : undefined
+        if (f && typeof t0 === 'number' && typeof t1 === 'number' && Math.abs(t1 - t0) > 1e-12) {
+          const [a, b] = reversed ? [-t0, -t1] : [t0, t1]
+          const period = f.hi - f.lo
+          const at = (t: number) => f(period > 0 && (t < f.lo || t > f.hi) ? f.lo + ((((t - f.lo) % period) + period) % period) : t)
+          const N = Math.max(8, Math.min(160, Math.ceil((Math.abs(b - a) / (period || 1)) * 160)))
+          const seg = Array.from({ length: N + 1 }, (_, i) => at(a + ((b - a) * i) / N))
+          const ok = (p: Pt, q: Pt) => Math.hypot(...sub(p, q)) <= tol * 10 + 1e-9 * (1 + Math.hypot(...q))
+          if (ok(seg[0], v0) && ok(seg[N], v1)) {
+            seg[0] = v0
+            seg[N] = v1
+            pts = simplify(seg)
+          }
+        }
+        if (f && !pts) {
+          // Del rango de la curva, el tramo entre los puntos más cercanos a cada vértice.
           const N = 160
           const samples = Array.from({ length: N + 1 }, (_, i) => f(f.lo + ((f.hi - f.lo) * i) / N))
           const nearest = (p: Pt) => samples.reduce((bi, q, i) => (Math.hypot(...sub(q, p)) < Math.hypot(...sub(samples[bi], p)) ? i : bi), 0)
