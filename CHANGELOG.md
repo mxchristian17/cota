@@ -4,6 +4,12 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.20.1] — 2026-11-03
+
+### Fixed
+- **External agent**: when the browser was told not to let Cota reach this computer (it asks once, as "local network
+  access"), the agent panel says so and how to allow it, instead of waiting for the bridge forever.
+
 ## [2.20.0] — 2026-11-03
 
 ### Added

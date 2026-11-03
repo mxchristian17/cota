@@ -13,7 +13,7 @@ export const EXTERNAL_PORT = 7468
 /** Archivo del puente, servido junto a la app. */
 export const BRIDGE_FILE = 'cota-mcp.mjs'
 
-export type ExternalStatus = 'off' | 'searching' | 'connected'
+export type ExternalStatus = 'off' | 'searching' | 'connected' | 'blocked'
 
 /** Lo que un agente externo lee primero (`read_doc` "intro" y las instrucciones del servidor MCP). */
 export const EXTERNAL_INSTRUCTIONS = `These tools work on the CAD drawing the user has open in Cota (a CAD application in their browser). The user
@@ -31,6 +31,22 @@ export function externalTools(): ToolDef[] {
 export interface ExternalHandlers {
   onStatus(s: ExternalStatus): void
   run(name: string, args: Record<string, unknown>): Promise<ToolResult>
+}
+
+/**
+ * El navegador pregunta una vez si la página puede llegar a esta computadora (acceso a la red local); si el usuario
+ * dijo que no, todo pedido al puente falla igual que si no estuviera corriendo: se distingue para avisarle.
+ */
+async function localAccessDenied(): Promise<boolean> {
+  for (const name of ['loopback-network', 'local-network-access', 'local-network']) {
+    try {
+      const s = await navigator.permissions.query({ name } as unknown as PermissionDescriptor)
+      return s.state === 'denied'
+    } catch {
+      /* el navegador no conoce ese permiso: el siguiente */
+    }
+  }
+  return false
 }
 
 const sleep = (ms: number, signal: AbortSignal) =>
@@ -73,7 +89,7 @@ export function connectExternal(port: number, h: ExternalHandlers): () => void {
         if (ctrl.signal.aborted) break
         // Sin puente (el agente no está abierto) o se cerró: se reintenta cada vez más espaciado, hasta 10 s.
         greeted = false
-        h.onStatus('searching')
+        h.onStatus((await localAccessDenied().catch(() => false)) ? 'blocked' : 'searching')
         await sleep(Math.min(10_000, 1000 * 2 ** fails++), ctrl.signal)
       }
     }

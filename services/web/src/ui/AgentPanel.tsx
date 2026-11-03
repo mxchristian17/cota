@@ -87,7 +87,13 @@ function AgentBody() {
       {showSettings && <Settings onDone={() => setShowSettings(false)} />}
       {s.external.on && (
         <div className={`agent-ext-bar agent-ext-${s.external.status}`} data-testid="agent-external-bar">
-          <span>{s.external.status === 'connected' ? '⇄ External agent connected: its steps appear below.' : `⇄ Waiting for the external agent (bridge on port ${s.external.port})…`}</span>
+          <span>
+            {s.external.status === 'connected'
+              ? '⇄ External agent connected: its steps appear below.'
+              : s.external.status === 'blocked'
+                ? '⇄ The browser blocks Cota from reaching this computer: allow local network access in the site settings (the icon left of the address) and reload.'
+                : `⇄ Waiting for the external agent (bridge on port ${s.external.port})…`}
+          </span>
           <button className="btn btn-sm" onClick={() => s.setExternal({ on: false })} data-testid="agent-external-off">
             Disconnect
           </button>

@@ -230,4 +230,15 @@ test.describe('External agent (OpenCode, Claude Code…) through the Cota MCP br
       bridge.kill()
     }
   })
+
+  test('if the browser was told not to let the page reach this computer, the panel says how to allow it', async ({ page }) => {
+    await page.addInitScript(() => {
+      const q = navigator.permissions.query.bind(navigator.permissions)
+      navigator.permissions.query = ((d: { name: string }) => (d.name === 'loopback-network' ? Promise.resolve({ state: 'denied' }) : q(d as PermissionDescriptor))) as typeof navigator.permissions.query
+    })
+    await page.goto('/')
+    await page.getByTestId('agent-external-port').fill('19999') // sin puente: el pedido falla
+    await page.getByTestId('agent-external-on').click()
+    await expect(page.getByTestId('agent-external-bar')).toContainText('allow local network access', { timeout: 10_000 })
+  })
 })
