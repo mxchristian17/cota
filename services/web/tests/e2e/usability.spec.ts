@@ -473,3 +473,38 @@ test.describe('Dibujos con muchos textos', () => {
     expect(await st<string[]>(page, 'return s.selection.map((id) => s.doc.getEntity(id).props.text)')).toEqual(['T61'])
   })
 })
+
+test.describe('Planos georreferenciados (coordenadas de millones)', () => {
+  test('las líneas se dibujan al milímetro y se seleccionan con un clic', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    // Un perfil de terreno a 6,4 millones: tramos de 10 cm que la placa de video, sin un origen propio, escalonaba de a 50 cm.
+    await st(
+      page,
+      `for (let i = 0; i < 40; i++) s.doc.addEntity({ type: 'LINE', layer: '0', props: { start: [6452671.43 + i * 0.1, 5797403.12 + Math.sin(i / 5) * 0.3, 0], end: [6452671.43 + (i + 1) * 0.1, 5797403.12 + Math.sin((i + 1) / 5) * 0.3, 0] } }); s.doc.touch()`,
+    )
+    await cmd(page, 'ZOOM', 'E')
+    await page.waitForTimeout(300)
+    const worst = await page.evaluate(() => {
+      const s = (window as any).__cotaStore.getState()
+      const vp = s.activeViewport
+      const lines = s.doc.entities.filter((e: any) => e.type === 'LINE')
+      let err = 0
+      vp.entityGroup.traverse((o: any) => {
+        if (!o.isLineSegments || !o.userData.ranges) return
+        const a = o.geometry.getAttribute('position').array
+        const w = o.getWorldPosition(new (o.position.constructor)())
+        for (let i = 0; i < lines.length; i++) {
+          err = Math.max(err, Math.abs(a[i * 6] + w.x - lines[i].props.start[0]), Math.abs(a[i * 6 + 1] + w.y - lines[i].props.start[1]))
+        }
+      })
+      return err
+    })
+    expect(worst).toBeLessThan(0.002)
+    const mid = await st<number[]>(page, 'const e = s.doc.entities[20]; return [(e.props.start[0] + e.props.end[0]) / 2, (e.props.start[1] + e.props.end[1]) / 2, 0]')
+    await clickAt(page, mid)
+    await page.waitForTimeout(200)
+    expect(await st<string[]>(page, 'return s.selection')).toEqual([await st<string>(page, 'return s.doc.entities[20].id')])
+  })
+})
+

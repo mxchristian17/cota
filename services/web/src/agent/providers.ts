@@ -3,10 +3,10 @@ import { api } from '../core/io/apiClient'
 
 /**
  * Proveedores de LLM llamados DESDE EL NAVEGADOR con la key del usuario (modo demo, sin backend). Formato neutro de
- * mensajes y un adaptador por API: Anthropic, Gemini y OpenAI-compatible (OpenAI, OpenRouter —que da acceso a
+ * mensajes y un adaptador por API: Anthropic, Gemini y OpenAI-compatible (OpenAI, DeepSeek, OpenRouter —que da acceso a
  * DeepSeek, Kimi, GLM y otros sin problemas de CORS— o cualquier `baseUrl`).
  */
-export type ProviderId = 'anthropic' | 'openai' | 'gemini' | 'openrouter' | 'compatible' | 'server'
+export type ProviderId = 'anthropic' | 'openai' | 'gemini' | 'deepseek' | 'openrouter' | 'compatible' | 'server'
 
 export interface ProviderConfig {
   provider: ProviderId
@@ -20,6 +20,7 @@ export const PROVIDERS: Record<ProviderId, { label: string; model: string; keyUr
   anthropic: { label: 'Anthropic', model: 'claude-sonnet-5-5', keyUrl: 'https://console.anthropic.com/settings/keys' },
   openai: { label: 'OpenAI', model: 'gpt-5', keyUrl: 'https://platform.openai.com/api-keys' },
   gemini: { label: 'Google Gemini (free tier: Flash models)', model: 'gemini-3.5-flash', keyUrl: 'https://aistudio.google.com/apikey' },
+  deepseek: { label: 'DeepSeek', model: 'deepseek-chat', keyUrl: 'https://platform.deepseek.com/api_keys' },
   openrouter: { label: 'OpenRouter (DeepSeek, Kimi, GLM…)', model: 'deepseek/deepseek-chat', keyUrl: 'https://openrouter.ai/keys' },
   compatible: { label: 'OpenAI-compatible (base URL)', model: '' },
   server: { label: 'Server (your account)', model: '' },
@@ -159,7 +160,10 @@ async function anthropic(cfg: ProviderConfig, system: string, messages: ChatMess
   }
 }
 
-export const OPENAI_BASE: Partial<Record<ProviderId, string>> = { openai: 'https://api.openai.com/v1', openrouter: 'https://openrouter.ai/api/v1' }
+export const OPENAI_BASE: Partial<Record<ProviderId, string>> = { openai: 'https://api.openai.com/v1', deepseek: 'https://api.deepseek.com/v1', openrouter: 'https://openrouter.ai/api/v1' }
+
+/** Modelos que sólo leen texto (DeepSeek, directo o por OpenRouter): las capturas del dibujo no se les mandan. */
+const textOnly = (cfg: ProviderConfig): boolean => cfg.provider === 'deepseek' || /deepseek/i.test(cfg.model)
 
 /** Modo servidor (Docker): el backend llama al modelo con pydantic-ai y la key guardada del usuario. */
 async function server(system: string, messages: ChatMessage[], tools: ToolDef[]): Promise<ModelReply> {
@@ -184,9 +188,13 @@ async function openaiCompatible(cfg: ProviderConfig, system: string, messages: C
         ...(m.toolCalls.length ? { tool_calls: m.toolCalls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.args) } })) } : {}),
       })
     else {
-      for (const r of m.results) msgs.push({ role: 'tool', tool_call_id: r.id, content: r.isError ? `ERROR: ${r.text}` : r.text })
-      // Las imágenes no van en mensajes de herramienta: siguen como un mensaje del usuario.
-      const imgs = m.results.filter((r) => r.image)
+      const blind = textOnly(cfg)
+      for (const r of m.results) {
+        const note = blind && r.image ? '\n(The tool also returned a picture of the drawing; this model reads text only, so check the result with the data above.)' : ''
+        msgs.push({ role: 'tool', tool_call_id: r.id, content: (r.isError ? `ERROR: ${r.text}` : r.text) + note })
+      }
+      // Las imágenes no van en mensajes de herramienta: siguen como un mensaje del usuario (si el modelo ve imágenes).
+      const imgs = blind ? [] : m.results.filter((r) => r.image)
       if (imgs.length) msgs.push({ role: 'user', content: imgs.map((r) => ({ type: 'image_url', image_url: { url: r.image } })) })
     }
   }

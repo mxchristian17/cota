@@ -64,7 +64,7 @@ export const serverMode = (): boolean => CLOUD_ENABLED && !!useStore.getState().
 
 /** Proveedor del panel → configuración del backend (OpenRouter y los compatibles van por la API de OpenAI). */
 const serverProvider = (p: ProviderId, baseUrl: string): { provider: string; api_base: string | null } =>
-  p === 'anthropic' ? { provider: 'anthropic', api_base: null } : p === 'gemini' ? { provider: 'google', api_base: null } : { provider: 'openai', api_base: p === 'openrouter' ? OPENAI_BASE.openrouter! : p === 'compatible' ? baseUrl.trim() || null : null }
+  p === 'anthropic' ? { provider: 'anthropic', api_base: null } : p === 'gemini' ? { provider: 'google', api_base: null } : { provider: 'openai', api_base: p === 'openrouter' || p === 'deepseek' ? OPENAI_BASE[p]! : p === 'compatible' ? baseUrl.trim() || null : null }
 
 /** Keys sólo en memoria (si el usuario eligió no guardarlas). */
 const sessionKeys = new Map<ProviderId, string>()

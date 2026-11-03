@@ -4,6 +4,18 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.19.0] — 2026-11-03
+
+### Added
+- **DeepSeek in the agent**: a provider of its own, with your DeepSeek key and the `deepseek-chat` model. DeepSeek
+  models read text only, so the pictures of the drawing that the agent takes to check its work are replaced by a note
+  (also when DeepSeek is used through OpenRouter).
+
+### Fixed
+- **Georeferenced drawings** (coordinates in the millions, as in survey and civil plans) are drawn to the millimetre.
+  The graphics card keeps 7 digits, so far from the origin lines came out in steps of half a metre: a terrain profile
+  looked like a staircase. The drawing is now sent relative to an origin of its own; snaps, previews and grips too.
+
 ## [2.18.1] — 2026-11-03
 
 ### Fixed

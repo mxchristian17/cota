@@ -183,6 +183,8 @@ const HIGHLIGHT = 0x00e5ff
 const MIN_TEXT_PX = 3
 /** Desde cuántos objetos un cambio de selección se resalta encima en vez de rehacer los lotes. */
 const BIG_DRAWING = 5000
+/** Desde qué distancia al origen del dibujo se dibuja relativo a un origen propio (ver `Viewport.origin`). */
+const ORIGIN_FAR = 20_000
 /** Espera de un toque antes de elegir: el tiempo en que un segundo toque lo vuelve doble (ver `isDoubleTap`). */
 const TAP_SELECT_MS = 360
 const MAX_TEXT_LABELS = 3000
@@ -263,6 +265,12 @@ export class Viewport {
   private batchedSelKey = ''
   /** Centro de lo seleccionado: la órbita gira alrededor de él, como 3DORBIT con objetos elegidos. */
   private orbitPivot: THREE.Vector3 | null = null
+  /**
+   * Origen de lo dibujado: las posiciones de las entidades van a la placa de video relativas a él (y su grupo se ubica
+   * ahí). La placa guarda 7 cifras: un plano georreferenciado (millones de metros) perdía los centímetros y sus líneas
+   * salían escalonadas. Cerca del origen del dibujo queda en (0, 0, 0). Ver `pickOrigin`.
+   */
+  private readonly origin = new THREE.Vector3()
   /** Contornos de las superficies curvas de los sólidos, según la vista (no se seleccionan). */
   private readonly silhouetteGroup = new THREE.Group()
   private silhouetteKey = ''
@@ -1415,7 +1423,7 @@ export class Viewport {
       const pos: number[] = []
       for (const l of this.ducsFace.outline) for (let i = 0; i + 1 < l.length; i++) pos.push(...l[i], ...l[i + 1])
       const g = new THREE.BufferGeometry()
-      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+      g.setAttribute('position', this.local(pos))
       const seg = new THREE.LineSegments(g, new THREE.LineDashedMaterial({ color: 0x55c8ff, dashSize: 4 * (this.controller.worldPerPx() || 1), gapSize: 3 * (this.controller.worldPerPx() || 1), depthTest: false }))
       seg.computeLineDistances()
       this.ducsGroup.add(seg)
@@ -1451,6 +1459,55 @@ export class Viewport {
     c.height = Math.round(src.height * k)
     c.getContext('2d')?.drawImage(src, 0, 0, c.width, c.height)
     return c.toDataURL('image/png')
+  }
+
+  /** Posiciones de mundo (x, y, z seguidas) relativas al origen de lo dibujado. */
+  private shifted(arr: ArrayLike<number>): Float32Array {
+    const { x, y, z } = this.origin
+    const out = new Float32Array(arr.length)
+    for (let i = 0; i + 2 < arr.length; i += 3) {
+      out[i] = arr[i] - x
+      out[i + 1] = arr[i + 1] - y
+      out[i + 2] = arr[i + 2] - z
+    }
+    return out
+  }
+
+  /** Atributo de posiciones para la placa de video (relativas al origen). */
+  private local(arr: ArrayLike<number>): THREE.BufferAttribute {
+    return new THREE.BufferAttribute(this.shifted(arr), 3)
+  }
+
+  /** Geometría de una lista de puntos de mundo, relativa al origen (vistas previas, snaps, grips). */
+  private localGeometry(pts: THREE.Vector3[]): THREE.BufferGeometry {
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', this.local(pts.flatMap((p) => [p.x, p.y, p.z])))
+    return g
+  }
+
+  /**
+   * Elige el origen de lo dibujado: el centro (redondeado) de una muestra de las entidades, si el dibujo está lejos de
+   * (0, 0, 0); si no, el propio origen. Sólo cambia si el dibujo se fue lejos del actual (un comando no rehace todo).
+   */
+  private pickOrigin(entities: Entity[]): void {
+    const box = new THREE.Box3()
+    const step = Math.max(1, Math.floor(entities.length / 256))
+    for (let i = 0; i < entities.length; i += step) {
+      const e = entities[i]
+      const sig = sizeSignature(e)
+      if (sig) box.expandByPoint(new THREE.Vector3(sig.c[0], sig.c[1], sig.c[2]))
+      else for (const path of entityOutline(e)) for (const p of path.slice(0, 2)) if (Number.isFinite(p.x) && Number.isFinite(p.y)) box.expandByPoint(new THREE.Vector3(p.x, p.y, p.z ?? 0))
+    }
+    if (box.isEmpty()) return
+    const c = box.getCenter(new THREE.Vector3())
+    const far = Math.max(Math.abs(c.x), Math.abs(c.y), Math.abs(c.z)) > ORIGIN_FAR
+    const want = far ? new THREE.Vector3(Math.round(c.x / 1000) * 1000, Math.round(c.y / 1000) * 1000, Math.round(c.z / 1000) * 1000) : new THREE.Vector3()
+    if (want.distanceTo(this.origin) <= ORIGIN_FAR) return
+    this.origin.copy(want)
+    for (const g of [this.entityGroup, this.selOverlay, this.silhouetteGroup, this.previewGroup, this.snapGroup, this.gripGroup, this.ducsGroup]) {
+      g.position.copy(this.origin)
+      g.updateMatrixWorld(true)
+    }
   }
 
   /** Órbita de la vista: alrededor de lo seleccionado si hay algo elegido, si no alrededor del centro de la vista. */
@@ -1959,7 +2016,7 @@ export class Viewport {
     for (const st of d.textStrokes) for (let i = 0; i + 1 < st.length; i++) pts.push(...st[i], ...st[i + 1])
     if (pts.length > 0) {
       const g = new THREE.BufferGeometry()
-      g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
+      g.setAttribute('position', this.local(pts))
       const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color }))
       lines.userData.entityId = e.id
       group.add(lines)
@@ -1968,7 +2025,7 @@ export class Viewport {
     for (const poly of d.fills) for (let i = 1; i + 1 < poly.length; i++) tri.push(...poly[0], ...poly[i], ...poly[i + 1])
     if (tri.length > 0) {
       const g = new THREE.BufferGeometry()
-      g.setAttribute('position', new THREE.Float32BufferAttribute(tri, 3))
+      g.setAttribute('position', this.local(tri))
       const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }))
       mesh.userData.entityId = e.id
       group.add(mesh)
@@ -2021,7 +2078,7 @@ export class Viewport {
       return
     }
     const geom = new THREE.BufferGeometry()
-    geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    geom.setAttribute('position', this.local(pos))
     const mesh = new THREE.Mesh(
       geom,
       new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }),
@@ -2128,7 +2185,9 @@ export class Viewport {
   }
 
   private buildSolid(e: SolidEntity, color: THREE.Color, selected: boolean): THREE.Object3D {
-    return this.styledSolidGroup(solidGeometry(e.props), color, selected, e.id, true, solidEdgePositions(e.props))
+    const g = this.styledSolidGroup(solidGeometry(e.props), color, selected, e.id, true, solidEdgePositions(e.props))
+    g.position.copy(this.origin).negate() // su geometría (compartida con el CSG) está en coordenadas del dibujo
+    return g
   }
 
   /** Geometría indexada (con normales) de una malla poligonal (MESH3D). */
@@ -2138,23 +2197,24 @@ export class Viewport {
     for (const v of props.vertices) pos.push(v[0], v[1], v[2])
     const idx: number[] = []
     for (const f of props.faces) for (let i = 1; i + 1 < f.length; i++) idx.push(f[0], f[i], f[i + 1])
-    geom.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    geom.setAttribute('position', this.local(pos))
     geom.setIndex(idx)
     geom.computeVertexNormals()
     return geom
   }
 
-  private readonly meshCache = new WeakMap<object, MeshRender & { edges: Float32Array; faces: unknown }>()
+  private readonly meshCache = new WeakMap<object, MeshRender & { edges: Float32Array; faces: unknown; at: string }>()
   /**
    * Triángulos indexados, normales y aristas de más de 30° de una malla, por su lista de vértices: deshacer o rehacer
    * copia el dibujo pero comparte esas listas, así que no se vuelven a calcular.
    */
   private meshBuffers(props: MeshEntity['props']): MeshRender & { edges: Float32Array } {
     let m = this.meshCache.get(props.vertices)
-    if (!m || m.faces !== props.faces) {
-      const g = this.meshGeometry(props)
+    const at = `${this.origin.x},${this.origin.y},${this.origin.z}`
+    if (!m || m.faces !== props.faces || m.at !== at) {
+      const g = this.meshGeometry(props) // relativa al origen, como las aristas que salen de ella
       const eg = new THREE.EdgesGeometry(g, 30)
-      m = { ...meshRender(props.vertices, props.faces), edges: Float32Array.from(eg.getAttribute('position').array as ArrayLike<number>), faces: props.faces }
+      m = { ...meshRender(props.vertices, props.faces, 30, [this.origin.x, this.origin.y, this.origin.z]), edges: Float32Array.from(eg.getAttribute('position').array as ArrayLike<number>), faces: props.faces, at }
       eg.dispose()
       g.dispose()
       this.meshCache.set(props.vertices, m)
@@ -2328,7 +2388,7 @@ export class Viewport {
             const nr = ng.getAttribute('normal')
             const b = getMesh(`${ro}|${style === 'hidden' ? `${bgHex}|flat` : this.faceHex(colorHex)}`)
             b.ranges.push({ s: b.n, id: e.id })
-            b.parts.push({ pos: p.array as ArrayLike<number>, nor: nr.array as ArrayLike<number> })
+            b.parts.push({ pos: this.origin.lengthSq() ? this.shifted(p.array as ArrayLike<number>) : (p.array as ArrayLike<number>), nor: nr.array as ArrayLike<number> })
             b.n += p.count
             b.verts += p.count
             if (ng !== g) ng.dispose()
@@ -2337,7 +2397,7 @@ export class Viewport {
             const pa: ArrayLike<number> = solidEdgePositions(e.props)
             const b = getEdges(`${ro}|${style === 'shadedEdges' ? '#111111' : colorHex}${lwKey(layer, e.lineWeight)}`)
             b.ranges.push({ s: b.n, id: e.id })
-            b.parts.push(pa)
+            b.parts.push(this.origin.lengthSq() ? this.shifted(pa) : pa)
             b.n += pa.length / 3
           }
           if (solidThreads(e.props).length) {
@@ -2427,7 +2487,7 @@ export class Viewport {
   private addPointMarks(b: { pos: number[]; ids: string[] }, key: string): void {
     const [ro, colorHex] = key.split('|')
     const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3))
+    g.setAttribute('position', this.local(b.pos))
     const mat = new THREE.PointsMaterial({ color: new THREE.Color(colorHex), size: this.pointMarkPx(), sizeAttenuation: false, map: pointMarkTexture(sysvars.PDMODE), transparent: true, alphaTest: 0.35 })
     const pts = new THREE.Points(g, mat)
     pts.renderOrder = Number(ro)
@@ -2448,7 +2508,7 @@ export class Viewport {
   private addLodPoints(b: { pos: number[]; ids: string[] }, key: string): void {
     const [ro, colorHex] = key.split('|')
     const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3))
+    g.setAttribute('position', this.local(b.pos))
     const pts = new THREE.Points(g, new THREE.PointsMaterial({ color: new THREE.Color(colorHex), size: 3, sizeAttenuation: false }))
     pts.renderOrder = Number(ro)
     pts.userData.pointIds = b.ids
@@ -2470,7 +2530,7 @@ export class Viewport {
     if (!b.pos.length) return
     const [ro, colorHex] = key.split('|')
     const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3))
+    g.setAttribute('position', this.local(b.pos))
     const pts = new THREE.Points(g, new THREE.PointsMaterial({ color: new THREE.Color(colorHex), size: 2, sizeAttenuation: false }))
     pts.renderOrder = Number(ro)
     pts.raycast = () => {} // el pick lo resuelve el recorrido invisible
@@ -2485,7 +2545,7 @@ export class Viewport {
     if (!b.pos.length) return
     const [ro, colorHex, kind] = key.split('|')
     const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3))
+    g.setAttribute('position', this.local(b.pos))
     const visible = kind === 'solid'
     const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex), side: THREE.DoubleSide, visible, ...FACE_OFFSET }))
     mesh.userData.ranges = b.ranges
@@ -2535,8 +2595,10 @@ export class Viewport {
   private addLineBatch(b: LineBatch | { pos: Float32Array; ranges: LineBatch['ranges']; n: number }, key: string, pickOnly = false): void {
     if (b.pos.length === 0) return
     const [ro, colorHex, lw] = key.split('|')
+    // Los tramos ya juntados (Float32Array) vienen relativos al origen; las listas, en coordenadas del dibujo.
+    const pos = b.pos instanceof Float32Array ? b.pos : this.shifted(b.pos)
     const g = new THREE.BufferGeometry()
-    g.setAttribute('position', b.pos instanceof Float32Array ? new THREE.BufferAttribute(b.pos, 3) : new THREE.Float32BufferAttribute(b.pos, 3))
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
     const seg = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: new THREE.Color(colorHex), visible: !pickOnly }))
     seg.userData.ranges = b.ranges
     seg.userData.rangeKind = 'line'
@@ -2544,7 +2606,7 @@ export class Viewport {
     this.entityGroup.add(seg)
     if (lw && !pickOnly && this.data?.lwUnitsPerMm) {
       // Línea con grosor (en píxeles según el zoom): se ve en lugar de la fina, que queda para el pick.
-      const wg = new LineSegmentsGeometry().setPositions(b.pos)
+      const wg = new LineSegmentsGeometry().setPositions(pos)
       const mat = new LineMaterial({ color: new THREE.Color(colorHex).getHex(), linewidth: 1 })
       mat.resolution.set(this.width, this.height)
       const wide = new LineSegments2(wg, mat)
@@ -2678,7 +2740,7 @@ export class Viewport {
     for (const [hex, pos] of byColor) {
       if (!pos.length) continue
       const g = new THREE.BufferGeometry()
-      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+      g.setAttribute('position', this.local(pos))
       const seg = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: new THREE.Color(hex) }))
       seg.raycast = () => {}
       this.silhouetteGroup.add(seg)
@@ -2736,7 +2798,8 @@ export class Viewport {
         this.entityGroup.add(this.buildDashes(e, dashes, color, linetypePaths(e, ltCtx?.plinegen) ?? []))
         return
       }
-      const geom = new THREE.BufferGeometry().setFromPoints(vertices)
+      const geom = new THREE.BufferGeometry()
+      geom.setAttribute('position', this.local(vertices.flatMap((v) => [v.x, v.y, v.z])))
       const line = new THREE.Line(geom, new THREE.LineBasicMaterial({ color }))
       line.userData.entityId = e.id
       this.entityGroup.add(line)
@@ -2751,7 +2814,7 @@ export class Viewport {
       const pos: number[] = []
       for (const p of polys) for (let i = 0; i + 1 < p.length; i++) pos.push(...p[i], ...p[i + 1])
       const g = new THREE.BufferGeometry()
-      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+      g.setAttribute('position', this.local(pos))
       const l = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color, visible }))
       l.userData.entityId = e.id
       return l
@@ -2759,7 +2822,7 @@ export class Viewport {
     group.add(seg(d.dashes, true), seg(paths, false))
     if (d.dots.length) {
       const g = new THREE.BufferGeometry()
-      g.setAttribute('position', new THREE.Float32BufferAttribute(d.dots.flat(), 3))
+      g.setAttribute('position', this.local(d.dots.flat()))
       const pts = new THREE.Points(g, new THREE.PointsMaterial({ color, size: 2, sizeAttenuation: false }))
       pts.raycast = () => {}
       group.add(pts)
@@ -2772,7 +2835,7 @@ export class Viewport {
     const pos: number[] = []
     for (const q of quads) pos.push(...q[0], ...q[1], ...q[2], ...q[0], ...q[2], ...q[3])
     const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    g.setAttribute('position', this.local(pos))
     const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, ...FACE_OFFSET }))
     mesh.userData.entityId = id
     return mesh
@@ -2785,7 +2848,7 @@ export class Viewport {
    */
   private buildShade(e: Extract<Entity, { type: 'SHADE' }>, selected: boolean): THREE.Object3D {
     const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(e.props.tris, 3))
+    g.setAttribute('position', this.local(e.props.tris))
     const col: number[] = []
     const n = e.props.tris.length / 9
     for (let i = 0; i < n; i++) {
@@ -2809,14 +2872,14 @@ export class Viewport {
       const pos: number[] = []
       for (const [a, b] of s.segs) pos.push(...a, ...b)
       const g = new THREE.BufferGeometry()
-      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+      g.setAttribute('position', this.local(pos))
       const l = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color }))
       l.userData.entityId = e.id
       group.add(l)
     }
     if (s.dots.length) {
       const g = new THREE.BufferGeometry()
-      g.setAttribute('position', new THREE.Float32BufferAttribute(s.dots.flat(), 3))
+      g.setAttribute('position', this.local(s.dots.flat()))
       const pts = new THREE.Points(g, new THREE.PointsMaterial({ color, size: 2, sizeAttenuation: false }))
       pts.raycast = () => {}
       group.add(pts)
@@ -2824,7 +2887,7 @@ export class Viewport {
     const tris = hatchTriangles(e)
     if (tris.length) {
       const g = new THREE.BufferGeometry()
-      g.setAttribute('position', new THREE.Float32BufferAttribute(tris, 3))
+      g.setAttribute('position', this.local(tris))
       // Seleccionado: el relleno sólido se ve con el color de resaltado pero semitransparente.
       const solid = isSolidHatch(e.props)
       const mesh = new THREE.Mesh(
@@ -2930,12 +2993,12 @@ export class Viewport {
     if ((this.data?.otrack || this.data?.polarAng) && this.data.pointPrompt) {
       for (const tp of this.data.otrack ? this.tracked : []) {
         for (const seg of this.glyphPoints('tracking', tp, 5 * this.controller.worldPerPxAt(tp))) {
-          const geom = new THREE.BufferGeometry().setFromPoints(seg.map((p) => new THREE.Vector3(p.x, p.y, p.z)))
+          const geom = this.localGeometry(seg.map((p) => new THREE.Vector3(p.x, p.y, p.z)))
           this.snapGroup.add(new THREE.Line(geom, this.snapMaterial))
         }
       }
       for (const [a, b] of this.trackLines) {
-        const geom = new THREE.BufferGeometry().setFromPoints([
+        const geom = this.localGeometry([
           new THREE.Vector3(a.x, a.y, a.z),
           new THREE.Vector3(b.x, b.y, b.z),
         ])
@@ -2955,7 +3018,7 @@ export class Viewport {
       }
     }
     for (const seg of segs) {
-      const geom = new THREE.BufferGeometry().setFromPoints(seg.map((p) => new THREE.Vector3(p.x, p.y, p.z)))
+      const geom = this.localGeometry(seg.map((p) => new THREE.Vector3(p.x, p.y, p.z)))
       this.snapGroup.add(new THREE.Line(geom, this.snapMaterial))
     }
   }
@@ -2970,7 +3033,7 @@ export class Viewport {
     const shapes = this.previewProvider?.(this.lastWorld) ?? []
     for (const s of shapes) {
       if (s.kind === 'line') {
-        const geom = new THREE.BufferGeometry().setFromPoints([
+        const geom = this.localGeometry([
           new THREE.Vector3(s.a.x, s.a.y, s.a.z),
           new THREE.Vector3(s.b.x, s.b.y, s.b.z),
         ])
@@ -2983,10 +3046,10 @@ export class Viewport {
           const [c, sn] = [Math.cos(a) * s.radius, Math.sin(a) * s.radius]
           return new THREE.Vector3(s.center.x + u[0] * c + v[0] * sn, s.center.y + u[1] * c + v[1] * sn, s.center.z + u[2] * c + v[2] * sn)
         })
-        this.previewGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), this.previewMaterial))
+        this.previewGroup.add(new THREE.Line(this.localGeometry(pts), this.previewMaterial))
       } else if (s.kind === 'polyline' && s.points.length >= 2) {
         const pts = s.points.map((p) => new THREE.Vector3(p.x, p.y, p.z))
-        this.previewGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), this.previewMaterial))
+        this.previewGroup.add(new THREE.Line(this.localGeometry(pts), this.previewMaterial))
       } else if (s.kind === 'solid') {
         const g = previewSolidGeometry(s.props)
         if (!g) continue
@@ -2996,7 +3059,10 @@ export class Viewport {
           new THREE.MeshLambertMaterial({ color: this.previewMaterial.color, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }),
         )
         const edges = new THREE.EdgesGeometry(g, 30)
-        this.previewGroup.add(fill, new THREE.LineSegments(edges, this.previewMaterial))
+        const outline = new THREE.LineSegments(edges, this.previewMaterial)
+        // La geometría del sólido (del CSG) está en coordenadas del dibujo: se corre al revés del origen.
+        for (const o of [fill, outline]) o.position.copy(this.origin).negate()
+        this.previewGroup.add(fill, outline)
       }
     }
   }
@@ -3010,7 +3076,7 @@ export class Viewport {
     const b = p.clone().addScaledVector(right, s).addScaledVector(up, -s)
     const c = p.clone().addScaledVector(right, s).addScaledVector(up, s)
     const dd = p.clone().addScaledVector(right, -s).addScaledVector(up, s)
-    const geom = new THREE.BufferGeometry().setFromPoints([a, b, c, a, c, dd])
+    const geom = this.localGeometry([a, b, c, a, c, dd])
     const mesh = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true }))
     mesh.renderOrder = 999
     this.gripGroup.add(mesh)
@@ -3102,6 +3168,7 @@ export class Viewport {
       )
       this.lastFieldsKey = this.hasFieldTexts && data.fields ? JSON.stringify(data.fields) : ''
       this.snapSpheres = null // el índice espacial de snap se reconstruye con los datos nuevos
+      this.pickOrigin(this.expanded)
       this.disposeGroup(this.selOverlay)
       this.rebuild(this.expanded, data.layers, new Set(data.selection))
       this.batchedSelKey = selKey

@@ -136,7 +136,7 @@ All settings are read from environment variables (names are case-insensitive).
 | `ALLOW_REGISTRATION` | `true` | `false` closes sign-up: only existing accounts can log in (a private server for your team) |
 | `MAX_DOCUMENT_BYTES` | `5242880` | Largest drawing that can be stored (bytes) |
 | `MAX_UPLOAD_BYTES` | `10485760` | Largest file accepted for conversion (bytes) |
-| `AI_ALLOWED_BASE_URLS` | empty | Comma-separated HTTPS base URLs that users may set for OpenAI-compatible LLM providers. Empty: only the official OpenAI and Google endpoints |
+| `AI_ALLOWED_BASE_URLS` | empty | Comma-separated HTTPS base URLs that users may set for OpenAI-compatible LLM providers. Empty: only the official OpenAI and Google endpoints. Add `https://api.deepseek.com/v1` for DeepSeek or `https://openrouter.ai/api/v1` for OpenRouter |
 | `DWG2DXF_CMD` / `DXF2DWG_CMD` | `dwg2dxf` / `dxf2dwg` | LibreDWG programs used for DWG |
 
 Run the migrations with `alembic upgrade head` before starting a `prod` server (the Docker stack does it for

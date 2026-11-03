@@ -22,6 +22,15 @@ const plate = {
 }
 
 test.describe('Cota agent panel (browser mode, own API key)', () => {
+  test('DeepSeek is a provider of its own: its model and where to get the key', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('agent-settings')).toBeVisible()
+    await page.getByTestId('agent-provider').selectOption('deepseek')
+    await expect(page.getByTestId('agent-model')).toHaveValue('deepseek-chat')
+    await expect(page.getByTestId('agent-key-note')).toContainText('DeepSeek')
+    await expect(page.getByTestId('agent-key-note').getByRole('link', { name: 'Get a key' })).toHaveAttribute('href', 'https://platform.deepseek.com/api_keys')
+  })
+
   test('first key asks once whether to remember it; asks before running; the conversation survives a reload', async ({ page }) => {
     const bodies = await fakeProvider(page, [
       plate,

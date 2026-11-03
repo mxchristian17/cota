@@ -11,9 +11,9 @@ export interface MeshRender {
  * Triángulos indexados con normales por vértice: dentro de una superficie suave (las caras se tocan a menos de
  * `creaseDeg`) la normal se promedia y la pieza se ve redonda; donde hay un quiebre el vértice se duplica y la arista
  * queda viva. Ocupa la mitad que repetir los tres vértices de cada triángulo, que es lo que pesa en los modelos 3D
- * grandes (un ensamble de mil piezas no entraba en la memoria de un teléfono).
+ * grandes (un ensamble de mil piezas no entraba en la memoria de un teléfono). Las posiciones salen relativas a `origin`.
  */
-export function meshRender(vertices: ArrayLike<Vec3>, faces: ArrayLike<ArrayLike<number>>, creaseDeg = 30): MeshRender {
+export function meshRender(vertices: ArrayLike<Vec3>, faces: ArrayLike<ArrayLike<number>>, creaseDeg = 30, origin: Vec3 = [0, 0, 0]): MeshRender {
   const nv = vertices.length
   let nt = 0
   for (let f = 0; f < faces.length; f++) if (faces[f].length >= 3) nt += faces[f].length - 2
@@ -92,7 +92,7 @@ export function meshRender(vertices: ArrayLike<Vec3>, faces: ArrayLike<ArrayLike
     const p = vertices[v]
     for (let i = 0; i < sum.length; i += 3) {
       const l = Math.hypot(sum[i], sum[i + 1], sum[i + 2]) || 1
-      pos.push(p[0], p[1], p[2])
+      pos.push(p[0] - origin[0], p[1] - origin[1], p[2] - origin[2])
       nor.push(sum[i] / l, sum[i + 1] / l, sum[i + 2] / l)
     }
     n += sum.length / 3
