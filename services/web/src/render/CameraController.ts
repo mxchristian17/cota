@@ -280,6 +280,10 @@ export class CameraController {
   rayFromNdc(nx: number, ny: number): THREE.Ray {
     const rc = new THREE.Raycaster()
     rc.setFromCamera(new THREE.Vector2(nx, ny), this.camera)
+    // En paralela, three.js arranca el rayo en el plano de la cámara, pero esta vista también muestra lo que queda
+    // detrás de ella (near negativo): al acercarse con la rueda, la cámara puede quedar delante de la geometría y el
+    // rayo no la alcanzaba (no se podía elegir ni marcar puntos sobre ella). Sale del plano near.
+    if (this.mode === 'ortho') rc.ray.origin.set(nx, ny, -1).unproject(this.camera)
     return rc.ray
   }
 }

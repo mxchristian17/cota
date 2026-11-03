@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import type { Entity } from '../document/types'
-import { stretchBox, stretchEntity } from './stretch'
+import type { Entity, SolidProps } from '../document/types'
+import type { Vec3 } from '../math'
+import { stretchBox, stretchEntity, stretchSolid } from './stretch'
 
 // Ventana de cruce que cubre x ∈ [8,12], y ∈ [-2,2]
 const box = stretchBox([8, -2, 0], [12, 2, 0])
@@ -68,5 +69,30 @@ describe('stretchEntity', () => {
     if (out.kind !== 'replace') return
     const p = out.input.props as { vertices: number[][] }
     expect(p.vertices).toEqual([[0, 0, 0], [10, 5, 0], [20, 0, 0]])
+  })
+})
+
+describe('STRETCH de sólidos (vista Front, ventana en el plano XZ)', () => {
+  const front = { u: [1, 0, 0] as Vec3, v: [0, 0, 1] as Vec3 }
+  const board = (x0: number, x1: number): SolidProps => ({ op: 'EXTRUDE', profile: [[x0, 0, 0], [x1, 0, 0], [x1, 0, 18], [x0, 0, 18]], height: 80, axis: [0, -1, 0] })
+  it('un tablero que cruza la ventana se alarga; uno adentro se mueve; uno afuera queda', () => {
+    const box = stretchBox([90, 0, -10], [130, 0, 30], front)
+    const long = stretchSolid(board(0, 100), box, [20, 0, 0])
+    expect(long.hits).toBe(4)
+    expect((long.props as { profile: Vec3[] }).profile.map((v) => v[0])).toEqual([0, 120, 120, 0])
+    expect(stretchSolid(board(100, 120), box, [20, 0, 0])).toMatchObject({ hits: 8, total: 8 })
+    expect(stretchSolid(board(0, 50), box, [20, 0, 0]).hits).toBe(0)
+  })
+  it('una unión estira cada pieza y la entidad responde como reemplazo', () => {
+    const e = { id: 's', type: 'SOLID3D', layer: '0', props: { op: 'UNION', operands: [board(0, 100), board(100, 120)] } } as unknown as Entity
+    const out = stretchEntity(e, stretchBox([90, 0, -10], [130, 0, 30], front), [20, 0, 0])
+    expect(out.kind).toBe('replace')
+    const ops = ((out as { input: { props: { operands: Array<{ profile: Vec3[] }> } } }).input.props.operands).map((o) => o.profile.map((v) => v[0]))
+    expect(ops).toEqual([[0, 120, 120, 0], [120, 140, 140, 120]])
+  })
+  it('vista de costado: la tapa adentro cambia la altura de la extrusión', () => {
+    const top = { u: [1, 0, 0] as Vec3, v: [0, 1, 0] as Vec3 }
+    const r = stretchSolid(board(0, 100), stretchBox([-10, -100, -5], [110, -60, 30], top), [0, -20, 0])
+    expect((r.props as { height: number }).height).toBe(100)
   })
 })

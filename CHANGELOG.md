@@ -4,6 +4,21 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.14.0] — 2026-11-03
+
+### Added
+- **`STRETCH` stretches 3D solids**: extrusions and boxes, also inside unions, subtractions and fillets. The vertices
+  inside the window move, so a piece of furniture drawn as boards gets longer or shorter in any view. Solids used to be
+  left out of the selection.
+- Cota's version, small at the bottom right.
+
+### Fixed
+- **Deep zoom inside a 3D drawing**: when the camera ended up in front of part of the drawing, that part could not be
+  clicked, double-clicked or snapped to, and the cursor stopped following the drawing plane.
+- Changing the drawing's name in the name box and saving in a working folder overwrote the old file; it now creates the
+  new one, as `SAVE` with another name does.
+- `UNDO` after a script or an AI change says so (`Undo: SCRIPT.`, `Undo: AI.`).
+
 ## [2.13.0] — 2026-11-02
 
 ### Added

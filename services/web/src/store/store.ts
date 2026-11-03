@@ -80,7 +80,7 @@ import {
 } from '../core/io/fileSystem'
 import { CLOUD_ENABLED } from '../core/io/backend'
 import { idbDelete, idbGet, idbSet } from '../core/io/idb'
-import { DRAWING_EXT, DRAWING_EXTS, isDrawingFile, splitDrawingPath } from '../core/io/paths'
+import { DRAWING_EXT, DRAWING_EXTS, isDrawingFile, splitDrawingPath, drawingFileName, joinPath } from '../core/io/paths'
 import { selectableEntities } from '../core/commands/selectionSets'
 import { DEFAULT_FLATSHOT, flatshotItems, type FlatshotOptions } from '../core/projection/flatshot'
 import { alignDrawingViews, isDrawingView, isShaded, showsHidden, viewBlockEntities } from '../core/drawing/views'
@@ -1568,6 +1568,7 @@ export const useStore = create<AppState>((set, get) => {
         scriptDepth--
         // Todo el lote es un solo paso de deshacer.
         if (!scriptDepth && doc.revision !== rev) {
+          undoLabels.set(before, 'SCRIPT')
           undoStack.push(before)
           if (undoStack.length > MAX_UNDO) undoStack.shift()
           redoStack.length = 0
@@ -2659,6 +2660,7 @@ export const useStore = create<AppState>((set, get) => {
     },
     acceptAiProposal: () => {
       if (!aiBackup) return
+      undoLabels.set(aiBackup, 'AI')
       undoStack.push(aiBackup) // el cambio de IA queda como un único paso de undo
       if (undoStack.length > MAX_UNDO) undoStack.shift()
       redoStack.length = 0
@@ -3123,6 +3125,10 @@ export const useStore = create<AppState>((set, get) => {
           return false
         }
         const text = JSON.stringify(doc.toJSON())
+        // Con otro nombre o carpeta (SAVE con un nombre nuevo, o el nombre cambiado arriba) es otro archivo: el que estaba
+        // abierto queda como estaba.
+        const path = get().fsFilePath
+        if (currentFile && path && path.toLowerCase() !== joinPath(docFolder, drawingFileName(docName, DRAWING_EXT)).toLowerCase()) currentFile = null
         try {
           if (currentFile) {
             await writeTextFile(currentFile, text)

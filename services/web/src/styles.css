@@ -870,6 +870,13 @@ select.prop-value {
   padding: 4px 10px;
   border-top: 1px solid var(--border);
 }
+/* Versión de Cota, chiquita en la esquina inferior derecha. */
+.app-version {
+  flex: none;
+  font-size: 10px;
+  color: var(--muted);
+  user-select: text;
+}
 
 /* --- Autocompletado de comandos --- */
 .cmd-suggest {

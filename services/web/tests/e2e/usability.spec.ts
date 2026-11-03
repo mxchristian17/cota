@@ -115,6 +115,36 @@ test.describe('Uso real', () => {
     expect(await page.evaluate(([a, b]) => (window as any).__cotaStore.getState().activeViewport.pickAt(a, b), [x, y])).toBe(ids[0])
   })
 
+  for (const view of ['front', 'right', 'swiso']) {
+    test(`un rectángulo dibujado en ${view} se selecciona con clic y con ventana desde otras vistas`, async ({ page }) => {
+      await cmd(page, '-VIEW', view)
+      await page.waitForTimeout(150)
+      await cmd(page, 'RECTANGLE', '0,0', '60,40')
+      const id = await st<string>(page, 'return s.doc.entities[0].id')
+      const pts = await st<number[][]>(page, 'const p = s.doc.entities[0].props; return p.vertices ?? [p.corner, [p.corner[0] + p.width, p.corner[1], p.corner[2]]]')
+      const mid = [0, 1, 2].map((i) => (pts[0][i] + pts[1][i]) / 2)
+      for (const other of ['top', 'front', 'right', 'swiso', 'neiso', 'left']) {
+        await cmd(page, '-VIEW', other, 'ZOOM', 'E', 'ZOOM', '0.6')
+        await page.waitForTimeout(150)
+        await page.evaluate(() => (window as any).__cotaStore.setState({ selection: [] }))
+        await clickAt(page, mid, 2, 1)
+        expect(await st(page, 'return s.selection.join()'), `clic en ${other}`).toBe(id)
+        await page.keyboard.press('Escape')
+        // Ventana de cruce de derecha a izquierda alrededor del punto medio.
+        const [x, y] = await screen(page, mid)
+        await page.mouse.move(x + 15, y + 15)
+        await page.mouse.down()
+        await page.mouse.up()
+        await page.mouse.move(x - 15, y - 15, { steps: 3 })
+        await page.mouse.down()
+        await page.mouse.up()
+        await page.waitForTimeout(60)
+        expect(await st(page, 'return s.selection.join()'), `cruce en ${other}`).toBe(id)
+        await page.keyboard.press('Escape')
+      }
+    })
+  }
+
   test('STRETCH en Front con UCS View: recuadro rectangular y la ventana toma lo que se ve', async ({ page }) => {
     await cmd(page, '-VIEW', 'front')
     await page.waitForTimeout(150)
@@ -152,6 +182,51 @@ test.describe('Uso real', () => {
     await cmd(page, '0,0,0', '@10,0,0')
     expect(await st(page, 'return s.doc.entities[0].props.end')).toEqual([70, 0, 30])
     expect(await st(page, 'return s.doc.entities[0].props.start')).toEqual([0, 0, 30])
+  })
+
+  test('STRETCH en Front estira un mueble de sólidos extruidos', async ({ page }) => {
+    await cmd(page, '-VIEW', 'front')
+    await page.waitForTimeout(150)
+    // Dos tableros vistos de frente (perfil en el plano XZ, extruidos hacia atrás).
+    await cmd(page, 'RECTANGLE', '0,0', '100,18', 'EXTRUDE', 'L', '', '80', 'RECTANGLE', '100,0', '118,60', 'EXTRUDE', 'L', '', '80', 'ZOOM', 'E', 'ZOOM', '0.6')
+    await page.waitForTimeout(150)
+    await cmd(page, 'STRETCH')
+    await clickAt(page, [130, 0, -10])
+    await clickAt(page, [90, 0, 70])
+    await expect(page.locator('.cmd-output')).toContainText('2 object(s) found.')
+    await cmd(page, '0,0', '@20,0')
+    await expect(page.locator('.cmd-output')).toContainText('Stretched 1 object(s), moved 1.')
+    const xs = await st<number[][]>(page, 'return s.doc.entities.map(e => e.props.profile.map(v => Math.round(v[0])))')
+    expect(xs).toEqual([[0, 120, 120, 0], [120, 138, 138, 120]])
+  })
+
+  test('con mucho zoom dentro de un modelo 3D se sigue eligiendo y el cursor sigue el plano de trabajo', async ({ page }) => {
+    // Lo de abajo (z = -3000) deja el punto mirado más hondo que la línea: al acercarse, la cámara queda debajo de ella.
+    await cmd(page, 'LINE', '0,0,2000', '100,0,2000', '', 'LINE', '-300,-300,-3000', '-250,-300,-3000', '', 'ZOOM', 'E')
+    await page.waitForTimeout(150)
+    for (let step = 0; step < 4; step++) {
+      const [x, y] = await screen(page, [50, 0, 2000])
+      await page.mouse.move(x, y)
+      for (let k = 0; k < 6; k++) await page.mouse.wheel(0, -240)
+      await page.waitForTimeout(120)
+    }
+    const camZ = await page.evaluate(() => (window as any).__cotaStore.getState().activeViewport.controller.camera.position.z)
+    expect(camZ).toBeLessThan(2000)
+    const [x, y] = await screen(page, [50, 0, 2000])
+    await page.mouse.move(x + 1, y + 1)
+    await page.mouse.down()
+    await page.mouse.up()
+    await page.waitForTimeout(80)
+    expect(await st(page, 'return s.selection.length')).toBe(1)
+    expect(await st<number>(page, 'return Math.round(s.cursor.x)')).toBe(50)
+  })
+
+  test('la versión de Cota se ve abajo a la derecha', async ({ page }) => {
+    await expect(page.getByTestId('app-version')).toHaveText(/^v\d+\.\d+\.\d+$/)
+    const box = await page.getByTestId('app-version').boundingBox()
+    const vp = page.viewportSize()!
+    expect(box!.x + box!.width).toBeGreaterThan(vp.width - 40)
+    expect(box!.y + box!.height).toBeGreaterThan(vp.height - 40)
   })
 
   test('STRETCH con coordenadas no depende de la vista', async ({ page }) => {

@@ -128,6 +128,27 @@ test.describe('Cota carpeta local del sistema', () => {
     expect(data.entities[0].type).toBe('LINE')
   })
 
+  test('guardar con otro nombre crea otro archivo, dice el nuevo y deja el anterior como estaba', async ({ page }) => {
+    await typeCmd(page, 'OPENFOLDER')
+    await typeCmd(page, 'LINE', '0,0', '#50,0', '')
+    await typeCmd(page, 'SAVE', '')
+    await expect(page.locator('.cmd-output')).toContainText('Saved "drawing1.cota"')
+    await typeCmd(page, 'CIRCLE', '0,0', '10')
+    await typeCmd(page, 'SAVE', 'copia')
+    await expect(page.locator('.cmd-output')).toContainText('Saved "copia.cota"')
+    expect(JSON.parse((await readMem(page, 'drawing1.cota')) as string).entities).toHaveLength(1)
+    expect(JSON.parse((await readMem(page, 'copia.cota')) as string).entities).toHaveLength(2)
+    // Cambiar el nombre arriba y guardar también es otro archivo.
+    await page.getByTestId('doc-name').fill('tercera')
+    await page.getByTestId('doc-name').press('Enter')
+    await typeCmd(page, 'SAVE', '')
+    await expect(page.locator('.cmd-output')).toContainText('Saved "tercera.cota"')
+    expect(JSON.parse((await readMem(page, 'copia.cota')) as string).entities).toHaveLength(2)
+    // Con el mismo nombre, vuelve a escribir el mismo archivo.
+    await typeCmd(page, 'LINE', '0,5', '#9,5', '', 'SAVE', '')
+    expect(JSON.parse((await readMem(page, 'tercera.cota')) as string).entities).toHaveLength(3)
+  })
+
   test('guarda en subcarpetas según la ruta del dibujo y sobrescribe el mismo archivo', async ({ page }) => {
     await typeCmd(page, 'OPENFOLDER')
     await typeCmd(page, 'CIRCLE', '0,0', '10')

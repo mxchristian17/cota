@@ -1424,6 +1424,7 @@ export class Viewport {
     const cast = (x: number, y: number) => {
       const [nx, ny] = this.ndc(x, y)
       this.raycaster.setFromCamera(new THREE.Vector2(nx, ny), this.controller.camera)
+      this.raycaster.ray.copy(this.controller.rayFromNdc(nx, ny)) // desde el plano near (ver `rayFromNdc`)
       return this.raycaster.intersectObjects(this.entityGroup.children, true)
     }
     let hits = cast(clientX, clientY)

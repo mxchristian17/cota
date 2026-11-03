@@ -1,3 +1,4 @@
+import { ABOUT } from '../core/about'
 import { isScript } from '../core/commands/script'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store/store'
@@ -220,6 +221,9 @@ export function CommandLine() {
           }}
           data-testid="command-input"
         />
+        <span className="app-version" title={`${ABOUT.name} ${ABOUT.version}`} data-testid="app-version">
+          v{ABOUT.version}
+        </span>
       </div>
     </div>
   )
