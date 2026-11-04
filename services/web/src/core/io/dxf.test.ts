@@ -295,7 +295,7 @@ describe('DXF: TEXT y MTEXT del CAD clásico', () => {
     const mid = one(body([[0, 'MTEXT'], [10, 0], [20, 10], [30, 0], [40, 2], [71, 5], [1, 'A\\PB']]))
     expect(mid.justify).toBe('center')
     expect(mid.kind).toBe('mtext')
-    expect(mid.position[1]).toBeCloseTo(10 + 2 * 2 * 1.35 * 0.5, 9)
+    expect(mid.position[1]).toBeCloseTo(10 + 2 * 2 * 1.667 * 0.5, 9) // interlineado de MTEXT: 5/3
   })
 
   it('el MTEXT llega como texto plano: sin códigos de formato, con renglones y Unicode', () => {
@@ -624,6 +624,7 @@ describe('entidades de DWG/DXF que Cota dibuja con piezas simples', () => {
     }
     expect(look(0)).toEqual({ font: 'Arial', bold: undefined, widthFactor: 0.82, height: 2 })
     expect(look(1)).toEqual({ font: undefined, bold: undefined, widthFactor: 1.5, height: 2 }) // el 41 del texto manda
+    expect((r.entities[1].props as TextProps).stroke).toBe(true) // SHX: con la fuente de un trazo
     expect(look(2)).toEqual({ font: 'Arial', bold: true, widthFactor: undefined, height: 4 })
     expect(look(3)).toEqual({ font: 'Arial', bold: true, widthFactor: 0.82, height: 2 })
     expect((r.entities[2].props as TextProps).runs).toBeUndefined() // un solo formato: no hacen falta tramos
@@ -657,6 +658,32 @@ describe('entidades de DWG/DXF que Cota dibuja con piezas simples', () => {
     const od = o.entities[0].props as { textOverride: string; style: { DIMTXT: number } }
     expect(od.textOverride).toBe('90.00')
     expect(od.style.DIMTXT).toBeCloseTo(4)
+  })
+
+  it('cotas: la fuente de su texto sale del estilo de texto del estilo de cota, o del suyo propio', () => {
+    const tables =
+      '0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nSTYLE\n' +
+      '0\nSTYLE\n5\nA1\n2\nTT\n70\n0\n40\n0\n41\n1\n3\narial.ttf\n' +
+      '0\nSTYLE\n5\nA2\n2\nTR\n70\n0\n40\n0\n41\n1\n3\ntimes.ttf\n0\nENDTAB\n' +
+      '0\nTABLE\n2\nDIMSTYLE\n0\nDIMSTYLE\n2\nStandard\n70\n0\n340\nA1\n0\nENDTAB\n0\nENDSEC\n'
+    const dim = (...xd: Array<[number, string | number]>) =>
+      rec('DIMENSION', [3, 'Standard'], [70, 32], [10, 10], [20, 5], [30, 0], [13, 0], [23, 0], [33, 0], [14, 10], [24, 0], [34, 0], [42, 10], ...xd)
+    const r = importDxf(tables + dxf(dim(), dim([1001, 'ACAD'], [1000, 'DSTYLE'], [1002, '{'], [1070, 340], [1005, 'A2'], [1002, '}'])))
+    expect(r.entities.map((e) => (e.props as { textFont?: string }).textFont)).toEqual(['Arial', 'Times New Roman'])
+  })
+
+  it('WIPEOUT: una máscara con su contorno (rectángulo o polígono), del color del fondo; vuelve como WIPEOUT', () => {
+    const r = importDxf(dxf(rec('WIPEOUT', [10, 0], [20, 0], [30, 0], [11, 4], [21, 0], [31, 0], [12, 0], [22, 2], [32, 0], [13, 1], [23, 1], [280, 1], [71, 2], [91, 3], [14, -0.5], [24, 0.5], [14, 0.5], [24, 0.5], [14, 0], [24, -0.5])))
+    expect(r.entities).toHaveLength(1)
+    const h = r.entities[0].props as { wipeout?: boolean; pattern: string; loops: Array<{ vertices: number[][] }> }
+    expect(h.wipeout).toBe(true)
+    expect(h.pattern).toBe('SOLID')
+    expect(h.loops[0].vertices).toEqual([[0, 0, 0], [4, 0, 0], [2, 2, 0]])
+    expect(r.simplified).toBeUndefined()
+    const back = importDxf(exportDxf([{ id: 'w', type: 'HATCH', layer: 'A', props: r.entities[0].props } as never], [lineLayer]))
+    const bh = back.entities[0].props as typeof h
+    expect(bh.wipeout).toBe(true)
+    expect(bh.loops[0].vertices.slice(0, 3).map((q) => q.map((x) => Math.round(x * 1e9) / 1e9))).toEqual([[0, 0, 0], [4, 0, 0], [2, 2, 0]])
   })
 
   it('SPLINE definida sólo por los puntos por donde pasa (11/21/31): se dibuja por ellos', () => {

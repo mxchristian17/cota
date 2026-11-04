@@ -2,16 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { fontLook, mtextLead, mtextRuns } from './dxfFont'
 
 describe('fuentes de los textos de DXF/DWG', () => {
-  it('archivos y familias: Arial, su negrita, su angosta; las de trazo quedan con la de Cota', () => {
+  it('archivos y familias: Arial, su negrita, su angosta; las SHX son de un trazo', () => {
     expect(fontLook('arial.ttf')).toEqual({ font: 'Arial', narrow: 1 })
     expect(fontLook('arialbd.ttf')).toEqual({ font: 'Arial', narrow: 1, bold: true })
     expect(fontLook('ARIALN.TTF')).toEqual({ font: 'Arial', narrow: 0.82 })
     expect(fontLook('Arial Narrow')).toEqual({ font: 'Arial', narrow: 0.82 })
     expect(fontLook('times.ttf').font).toBe('Times New Roman')
     expect(fontLook('calibri.ttf')).toEqual({ font: 'Calibri', narrow: 1 }) // termina en "i" y no es itálica
-    expect(fontLook('simplex.shx')).toEqual({ narrow: 1 })
-    expect(fontLook('SIMPLEX')).toEqual({ narrow: 1 })
-    expect(fontLook('txt')).toEqual({ narrow: 1 })
+    expect(fontLook('simplex.shx')).toEqual({ narrow: 1, shx: true })
+    expect(fontLook('SIMPLEX')).toEqual({ narrow: 1, shx: true })
+    expect(fontLook('txt')).toEqual({ narrow: 1, shx: true })
     expect(fontLook(undefined)).toEqual({ narrow: 1 })
   })
 

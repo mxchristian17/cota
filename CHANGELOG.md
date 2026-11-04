@@ -4,6 +4,21 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.23.0] — 2026-11-03
+
+### Added
+- **SHX fonts** (simplex, romans, txt and the rest) are drawn with Cota's single-stroke font, the one of the
+  dimensions, on screen and in plots.
+- **Dimension text in its font**: a dimension whose text style uses a TrueType font (Arial, for example) shows its
+  text in that font, on screen and in plots.
+- **WIPEOUT masks** from DWG and DXF files are applied: a fill of the background color that covers the lines of
+  every layer under it, with the texts on top; they are exported back as WIPEOUT.
+
+### Changed
+- **Text height is the height of the capitals**, as in classic CAD: texts drawn with a font (Cota's and the
+  TrueType ones) were about a quarter smaller than in the drawing they came from. Multiline text from a DWG or DXF
+  keeps the line spacing it had (5/3 of the height times its factor).
+
 ## [2.22.1] — 2026-11-03
 
 ### Fixed

@@ -14,6 +14,8 @@ export interface FontLook {
   italic?: boolean
   /** Factor de ancho propio de la fuente (1, o 0.82 si es angosta). */
   narrow: number
+  /** Fuente de un trazo (SHX): se dibuja con la de trazo de Cota. */
+  shx?: boolean
 }
 
 const SHX = /^(txt|simplex|romans|romand|romant|romanc|isocp|isoct|isocpeur|isocteur|monotxt|gothic[egi]?|italic[ct]?|scripts|scriptc|complex|greek[cs]|cyril|syastro|symath|symusic|ltypeshp|gdt|amgdt|bigfont|chineset)\b/i
@@ -32,7 +34,8 @@ const FAMILIES: Array<[RegExp, string]> = [
 export function fontLook(name: string | undefined): FontLook {
   const n = (name ?? '').trim()
   const isFile = /\.(ttf|ttc|otf)$/i.test(n)
-  if (!n || /\.shx$/i.test(n) || (!isFile && SHX.test(n))) return { narrow: 1 }
+  if (!n) return { narrow: 1 }
+  if (/\.shx$/i.test(n) || (!isFile && SHX.test(n))) return { narrow: 1, shx: true }
   const base = (n.split(/[\\/]/).pop() ?? n).replace(/\.(ttf|ttc|otf)$/i, '')
   const lower = base.toLowerCase()
   // Archivos de Arial: arial, arialbd (negrita), ariali, arialbi, arialn (angosta), arialnb, arialni, arialnbi.

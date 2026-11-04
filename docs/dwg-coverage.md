@@ -10,10 +10,10 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 | LINE, POINT, CIRCLE, ARC, ELLIPSE, SPLINE | Native | Native | |
 | LWPOLYLINE, POLYLINE (2D and 3D) | Native | Native | Bulges and widths kept |
 | POLYLINE (polyface and M×N mesh), 3DFACE, MESH | Mesh | 3DFACE | |
-| TEXT, MTEXT, ATTRIB | Native, with the font of their text style (TrueType fonts are shown with one of the same width), its width factor, and the formatting inside a multiline text (bold, italic, underline, font, height, color, paragraph indent) | Native (width factor; font and width as MTEXT formatting) | SHX fonts are shown with Cota's font; stacked fractions as "1/2" |
+| TEXT, MTEXT, ATTRIB | Native, with the font of their text style (TrueType fonts are shown with one of the same width), its width factor, and the formatting inside a multiline text (bold, italic, underline, font, height, color, paragraph indent) | Native (width factor; font and width as MTEXT formatting) | Text height is the height of the capitals, as in classic CAD; SHX fonts are drawn with Cota's single-stroke font; multiline text keeps its line spacing; stacked fractions as "1/2" |
 | ATTDEF | Native in blocks; its tag outside them | As text | |
 | HATCH, SOLID, TRACE | Native | Native | |
-| DIMENSION | Native | Exploded to lines, arrows and text | |
+| DIMENSION | Native, with the overrides of each dimension and the font of its text style | Exploded to lines, arrows and text | |
 | ARC_DIMENSION, LARGE_RADIAL_DIMENSION | By their stored block | Exploded | |
 | LEADER | Polyline | Polyline | Without the arrow |
 | MLEADER (MULTILEADER) | Lines, arrows and text | The same pieces | Block content only from DWG |
@@ -28,7 +28,7 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 | IMAGE | The picture in its place (clip and fade included) once its file is loaded; until then, its frame and file name | IMAGE (DXF; the file path, not the pixels) | The drawing stores only the file path: open the image together with the drawing, drop it on Cota or load it with `IMAGE`; from the working folder it loads on its own |
 | PDF, DWF and DGN UNDERLAY | File name at the insertion point | Text | The content is an external file |
 | OLE2FRAME | Frame | Polyline | |
-| WIPEOUT | Skipped, with a notice | — | The mask is not applied |
+| WIPEOUT | A mask filled with the background color, over the lines of every layer and under the texts | WIPEOUT | Its frame is not drawn |
 | SHAPE | Point, with a notice | Point | Its drawing is in an external shape file |
 | LIGHT, SUN | Ignored | — | Not drawing content |
 | ACAD_PROXY_ENTITY | By its replacement drawing (DXF); left out (DWG) | The same pieces | Texts of the replacement drawing are not read |

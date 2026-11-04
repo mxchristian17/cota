@@ -1,4 +1,5 @@
 import { decodeTextCodes } from '../text/codes'
+import { imageClip, imagePoint } from '../geom/image'
 import type { Vec3 } from '../math'
 import type { EntityProps, EntityType, ImageProps } from '../document/types'
 
@@ -213,6 +214,20 @@ export function image(c: Codes, files: Map<string, string>): Piece[] {
   const fade = num(c, 283, 0)
   const props: ImageProps = { origin: pointOf(c, 10), u: pointOf(c, 11), v: pointOf(c, 12), size, file: files.get((str(c, 340) ?? '').toUpperCase()) ?? '', ...(clip ? { clip } : {}), ...(fade > 0 ? { fade } : {}) }
   return [{ type: 'IMAGE', props }]
+}
+
+/**
+ * WIPEOUT: una máscara con la forma de una imagen (10/11/12/13/23) y su contorno de recorte (14/24, rectángulo o
+ * polígono): un relleno del color del fondo que tapa lo de abajo.
+ */
+export function wipeout(c: Codes): Piece[] {
+  const p = image(c, new Map())[0].props as ImageProps
+  const xs = c.filter(([k]) => k === 14).map(([, x]) => Number(x))
+  const ys = c.filter(([k]) => k === 24).map(([, y]) => Number(y))
+  const clip = xs.length >= 2 ? xs.map((x, i): [number, number] => [x, ys[i] ?? 0]) : undefined
+  const ring = imageClip({ ...p, ...(clip ? { clip } : {}) }).map(([x, y]) => imagePoint(p, x, y))
+  if (ring.length < 3) return []
+  return [{ type: 'HATCH', props: { loops: [{ vertices: ring }], pattern: 'SOLID', scale: 1, angle: 0, origin: ring[0], island: 'outer', wipeout: true } as EntityProps }]
 }
 
 /** PDFUNDERLAY / DWFUNDERLAY / DGNUNDERLAY: el archivo vive fuera; se marca el punto de inserción con su nombre. */

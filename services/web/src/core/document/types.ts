@@ -195,6 +195,10 @@ export interface TextProps {
   italic?: boolean
   /** Ancho de las letras respecto del normal (estilo de texto, código 41, `\W`); ausente = 1. */
   widthFactor?: number
+  /** Dibujado con la fuente de un trazo (la de las cotas, como las SHX `simplex`/`romans` del plano). */
+  stroke?: boolean
+  /** Interlineado en altos de texto; ausente = el de Cota (1.35). Un MTEXT importado trae el del CAD clásico (5/3). */
+  lineSpacing?: number
   /**
    * Tramos con formato propio de un MTEXT importado (negrita, itálica, subrayado, fuente, alto relativo `h`, color):
    * su texto unido es `text`. Si el texto se edita y deja de coincidir, se ignoran.
@@ -452,6 +456,8 @@ export interface DimensionProps {
   styleName?: string
   /** Lo que difiere del estilo en esta cota (`DIMOVERRIDE`, paleta). */
   overrides?: Partial<DimVars>
+  /** Fuente TrueType del texto (estilo de texto de la cota en un DWG/DXF); ausente = la de trazo de Cota. */
+  textFont?: string
   /** Texto manual que reemplaza la medida (null = medida automática); `<>` inserta la medida. */
   textOverride?: string | null
   /** Eje para ORDINATE ('X' o 'Y'). */
@@ -552,6 +558,8 @@ export interface HatchProps {
   custom?: PatternLine[]
   /** El patrón es el de la biblioteca en pulgadas: se creó en un dibujo en unidades imperiales. */
   imperial?: boolean
+  /** Máscara (WIPEOUT del CAD clásico): relleno del color del fondo que tapa lo que está debajo. */
+  wipeout?: boolean
 }
 
 /** Cómo se plotea un viewport: como se ve, alambre o líneas ocultas. */

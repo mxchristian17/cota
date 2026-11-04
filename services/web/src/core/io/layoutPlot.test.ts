@@ -119,7 +119,8 @@ describe('PLOT completo (E9b)', () => {
     const txt = (rotation: number, normal = [0, 0, 1]): Entity =>
       ({ id: 't', type: 'TEXT', layer: '0', props: { position: [0, 0, 0], text: 'A', height: 100, rotation, justify: 'left', normal } }) as Entity
     const rot = viewportContent(vp().props, [txt(Math.PI / 2)], layers, 'mm', style)
-    expect(rot).toMatch(/\/F1 1 Tf\n0 5\.669 -5\.669 0 [-\d.]+ [-\d.]+ Tm/) // 100 × 1:50 = 2 mm = 5.669 pt
+    // 100 × 1:50 = 2 mm de mayúsculas: la fuente (Helvetica, mayúsculas de 0.716 em) mide 2 / 0.716 mm = 7.918 pt.
+    expect(rot).toMatch(/\/F1 1 Tf\n0 7\.918 -7\.918 0 [-\d.]+ [-\d.]+ Tm/)
     const front = viewportContent(vp(viewAngles('FRONT')).props, [txt(0, [0, -1, 0])], layers, 'mm', style)
     expect(front).toContain(' Tm\n(A) Tj')
     const edge = viewportContent(vp(viewAngles('FRONT')).props, [txt(0)], layers, 'mm', style)

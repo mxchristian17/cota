@@ -8,7 +8,7 @@ import { meshWireframe } from '../editing/mesh'
 import { ellipsePoints, isEllipseArc } from '../geom/ellipse'
 import { tessellateArc } from '../geom/arc'
 import { polylinePoints } from '../geom/polyline'
-import { LINE_SPACING, textSize, textTop } from '../geom/text'
+import { BASELINE_DROP, fontMetrics, lineSpacingOf, textSize, textTop, textStrokePolylines } from '../geom/text'
 import { dimDisplay, type DimContext } from '../dimension/dimGeometry'
 import { viewportRing } from '../layout/viewport'
 import { byLayerOrder } from '../layers/order'
@@ -212,7 +212,9 @@ export function specialOps(
   if (e.type === 'HATCH') {
     if (isSolidHatch(e.props)) {
       const fr = hatchFrame(e.props)
-      return { ops: fillRings(hatchRings(e.props, fr).map((r) => r.map((q) => map(to3(q, fr))))), done: true }
+      const ops = fillRings(hatchRings(e.props, fr).map((r) => r.map((q) => map(to3(q, fr)))))
+      // Máscara (WIPEOUT): del color del papel.
+      return { ops: e.props.wipeout && ops ? `q\n1 1 1 rg\n${ops}Q\n` : ops, done: true }
     }
     const s = hatchStrokesCached(e.props)
     let ops = ''
@@ -366,7 +368,14 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
         for (const poly of meshWireframe(e.props)) out += polyStroke(poly.map((v) => [v[0], v[1]]), t)
         break
       case 'TEXT': {
-        const size = Math.max(4, e.props.height * t.s)
+        if (e.props.stroke && !(e.props.runs && e.props.runs.map((r) => r.s).join('') === e.props.text)) {
+          // Fuente de un trazo (SHX): sus trazos, como en pantalla.
+          for (const pl of textStrokePolylines(e.props)) out += polyStroke(pl.map((q) => [q[0], q[1]]), t)
+          break
+        }
+        // Helvetica: el alto del texto es el de sus mayúsculas, como en pantalla.
+        const size = Math.max(4, (e.props.height * t.s) / fontMetrics('Helvetica').cap)
+        const ls = lineSpacingOf(e.props)
         const lines = e.props.text.split('\n')
         const w = textSize(e.props).width
         const offX = e.props.justify === 'center' ? -w / 2 : e.props.justify === 'right' ? -w : 0
@@ -377,7 +386,7 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
           const sn = Math.sin(e.props.rotation)
           const [px, py] = textTop(e.props)
           lines.forEach((ln, i) => {
-            const dy = -(i + 1) * h * LINE_SPACING + h * 0.25
+            const dy = -h * (BASELINE_DROP + i * ls)
             const o = worldToPage(px + offX * c - dy * sn, py + offX * sn + dy * c, t)
             const k = e.props.widthFactor ?? 1 // factor de ancho: a lo largo del renglón
             out += textTm(ln, o, [c * size * k, sn * size * k], [-sn * size, c * size])
@@ -386,7 +395,7 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
         }
         for (let i = 0; i < lines.length; i++) {
           const top = textTop(e.props)
-          const wy = top[1] - (i + 1) * e.props.height * LINE_SPACING + e.props.height * 0.25
+          const wy = top[1] - e.props.height * (BASELINE_DROP + i * ls)
           const [tx, ty] = worldToPage(top[0] + offX, wy, t)
           // Tz: escala horizontal (factor de ancho del texto, en %).
           const tz = e.props.widthFactor && Math.abs(e.props.widthFactor - 1) > 1e-6 ? `${f(e.props.widthFactor * 100)} Tz\n` : ''
@@ -398,7 +407,17 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
         // Texto vectorial: los trazos del texto se plotean como líneas, igual que en pantalla.
         const d = dimDisplay(e.props, dim)
         for (const [a, c] of d.lines) out += polyStroke([[a[0], a[1]], [c[0], c[1]]], t)
-        for (const st of d.textStrokes) out += polyStroke(st.map((q) => [q[0], q[1]]), t)
+        const sv = e.props.style
+        if (e.props.textFont && d.text.value && !d.text.value.includes('\n') && !sv.DIMTOL && !sv.DIMLIM && !sv.DIMALT) {
+          // Texto con fuente TrueType (como en pantalla): Helvetica centrada en su lugar, con su giro.
+          const h = d.text.height
+          const size = (h * t.s) / fontMetrics('Helvetica').cap
+          const w = textSize({ position: [0, 0, 0], text: d.text.value, height: h, rotation: 0, justify: 'left', normal: [0, 0, 1], font: e.props.textFont }).width
+          const [dx, dy] = [d.text.dir[0], d.text.dir[1]]
+          const [ux, uy] = [d.text.up[0], d.text.up[1]]
+          const o = worldToPage(d.text.pos[0] - (dx * w) / 2 - (ux * h) / 2, d.text.pos[1] - (dy * w) / 2 - (uy * h) / 2, t)
+          out += textTm(d.text.value, o, [dx * size, dy * size], [ux * size, uy * size])
+        } else for (const st of d.textStrokes) out += polyStroke(st.map((q) => [q[0], q[1]]), t)
         for (const poly of d.fills) {
           const pts = poly.map((q) => worldToPage(q[0], q[1], t))
           out += pts.map(([x, y], i) => `${f(x)} ${f(y)} ${i === 0 ? 'm' : 'l'}\n`).join('') + 'h\nf\n'

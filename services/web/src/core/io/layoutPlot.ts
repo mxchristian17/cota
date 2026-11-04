@@ -7,7 +7,7 @@ import { meshWireframe } from '../editing/mesh'
 import { ellipsePoints, isEllipseArc } from '../geom/ellipse'
 import { tessellateArc } from '../geom/arc'
 import { polylinePoints } from '../geom/polyline'
-import { LINE_SPACING, textAxes, textSize, textTop } from '../geom/text'
+import { BASELINE_DROP, fontMetrics, lineSpacingOf, textAxes, textSize, textStrokePolylines, textTop } from '../geom/text'
 import { projectHiddenGroups, type Mesh } from '../projection/orthographic'
 import { dimDisplay, type DimContext } from '../dimension/dimGeometry'
 import { paperSizeMm } from '../layout/paper'
@@ -208,19 +208,28 @@ export function viewportContent(
         body += pts.map(([x, y], i) => `${f(x * MM_TO_PT)} ${f(y * MM_TO_PT)} ${i === 0 ? 'm' : 'l'}\n`).join('') + 'h\nf\n'
       }
     }
-    if (e.type === 'TEXT') {
+    if (e.type === 'TEXT' && e.props.stroke && !(e.props.runs && e.props.runs.map((r) => r.s).join('') === e.props.text)) {
+      // Fuente de un trazo (SHX): sus trazos proyectados, como en pantalla.
+      for (const pl of textStrokePolylines(e.props)) {
+        const pts = pl.map(proj)
+        if (pts.length >= 2 && overlaps(boxOf(pts), clip)) body += polyStroke(pts, PAPER)
+      }
+    } else if (e.type === 'TEXT') {
       // Texto afín: sus ejes (línea de base y altura, con su rotación y plano) proyectados al papel.
       const t = e.props
       const { u, v } = textAxes(t)
-      const toPt = (d: Vec3): [number, number] => [dot(d, right) * k * t.height * MM_TO_PT, dot(d, up) * k * t.height * MM_TO_PT]
+      // El alto es el de las mayúsculas (Helvetica en el PDF) y el ancho, el del texto.
+      const em = t.height / fontMetrics('Helvetica').cap
+      const wf = t.widthFactor ?? 1
+      const toPt = (d: Vec3, s = 1): [number, number] => [dot(d, right) * k * em * s * MM_TO_PT, dot(d, up) * k * em * s * MM_TO_PT]
       const w = textSize(t).width
       const offX = t.justify === 'center' ? -w / 2 : t.justify === 'right' ? -w : 0
       const top = textTop(t)
       t.text.split('\n').forEach((ln, i) => {
-        const dy = -(i + 1) * t.height * LINE_SPACING + t.height * 0.25
+        const dy = -t.height * (BASELINE_DROP + i * lineSpacingOf(t))
         const o = proj([0, 1, 2].map((j) => top[j] + u[j] * offX + v[j] * dy) as Vec3)
         if (o[0] < clip.minX || o[0] > clip.maxX || o[1] < clip.minY || o[1] > clip.maxY) return
-        body += textTm(ln, [o[0] * MM_TO_PT, o[1] * MM_TO_PT], toPt(u), toPt(v))
+        body += textTm(ln, [o[0] * MM_TO_PT, o[1] * MM_TO_PT], toPt(u, wf), toPt(v))
       })
     }
     if (body) out += strokeStyleOps(layer, style, e) + body

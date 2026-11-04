@@ -1,4 +1,4 @@
-import { BASELINE_DROP, LINE_SPACING, attdefText, textAxes, textSize } from '../geom/text'
+import { BASELINE_DROP, attdefText, lineSpacingOf, textAxes, textSize } from '../geom/text'
 import { decodeTextCodes, encodeTextCodes } from '../text/codes'
 import type { Vec3 } from '../math'
 import type { DimensionProps, DrawingVars, Entity, EntityProps, EntityType, ImageProps, InsertProps, Layer, TextRun, LineType, LinetypeDefData, RectangleProps, TextProps } from '../document/types'
@@ -15,7 +15,7 @@ import { acisEdges, sabFromHex, satFromDxf } from './acis'
 import { acisMesh, SOLID_MESH_REF } from './acisMesh'
 import { packedOf, reversePackedFaces, type PackedMesh } from './meshTransfer'
 import { fontLook, mtextLead, mtextRuns, type FontLook } from './dxfFont'
-import { image, infiniteLine, mline, multileader, oleFrame, tolerance, underlay, viewBasis, type Piece } from './dxfExtra'
+import { image, wipeout, infiniteLine, mline, multileader, oleFrame, tolerance, underlay, viewBasis, type Piece } from './dxfExtra'
 
 /**
  * DXF ASCII (subconjunto R2000/AC1015) **sin dependencias**. Exporta/importa las
@@ -206,7 +206,7 @@ function entityDxf(e: Entity, layerName: string): string | null {
     case 'ATTDEF': // ATTDEF nativo fuera de alcance (D2): se exporta como TEXT con el tag
       return entityDxf({ id: e.id, type: 'TEXT', layer: e.layer, props: attdefText(e.props), lineType: e.lineType, ltScale: e.ltScale }, layerName)
     case 'HATCH':
-      return hatchDxf(e.props, h)
+      return e.props.wipeout ? wipeoutDxf(e.props.loops[0]?.vertices ?? [], h) : hatchDxf(e.props, h)
     case 'IMAGE': // necesita su definición en OBJECTS (ver `exportDxf`)
       return null
     case 'SHADE': {
@@ -333,6 +333,20 @@ export function exportDxf(entities: Entity[], layers: Layer[], currentLayer?: st
   }
 
   return header + tables + dims.blocksSection() + ents + objects + p(0, 'EOF')
+}
+
+/** Máscara: WIPEOUT con su contorno como recorte de una "imagen" de 1 × 1 que cubre su caja. */
+function wipeoutDxf(ring: Vec3[], head: string): string | null {
+  if (ring.length < 3) return null
+  const xs = ring.map((q) => q[0])
+  const ys = ring.map((q) => q[1])
+  const [x0, y0] = [Math.min(...xs), Math.min(...ys)]
+  const [w, hh] = [Math.max(...xs) - x0 || 1, Math.max(...ys) - y0 || 1]
+  const z = ring[0][2]
+  let s = p(0, 'WIPEOUT') + head + p(100, 'AcDbWipeout') + p(90, 0) + p(10, x0) + p(20, y0) + p(30, z) + p(11, w) + p(21, 0) + p(31, 0) + p(12, 0) + p(22, hh) + p(32, 0)
+  s += p(13, 1) + p(23, 1) + p(70, 7) + p(280, 1) + p(281, 50) + p(282, 50) + p(283, 0) + p(71, 2) + p(91, ring.length + 1)
+  for (const q of [...ring, ring[0]]) s += p(14, (q[0] - x0) / w - 0.5) + p(24, 0.5 - (q[1] - y0) / hh)
+  return s
 }
 
 function imageDxf(ip: ImageProps, head: string, def: string): string {
@@ -500,15 +514,18 @@ export function shownDecimals(shown: string, measured: number): number | null {
 
 /** Estilos de texto del archivo que se está leyendo (tabla STYLE, por nombre en mayúsculas): fuente y ancho. */
 let textStyles = new Map<string, { look: FontLook; widthFactor: number }>()
+/** Handle → nombre de cada estilo de texto (las cotas lo nombran por handle: DIMTXSTY). */
+let styleHandles = new Map<string, string>()
 
 function styleOf(c: Array<[number, string]>): { look: FontLook; widthFactor: number } {
   return textStyles.get((str(c, 7) ?? 'STANDARD').toUpperCase()) ?? { look: { narrow: 1 }, widthFactor: 1 }
 }
 
 /** Fuente y ancho de un texto, sólo los que difieren de los de Cota (para no escribir lo que no hace falta). */
-function lookProps(look: FontLook, widthFactor: number): Pick<TextProps, 'font' | 'bold' | 'italic' | 'widthFactor'> {
+function lookProps(look: FontLook, widthFactor: number): Pick<TextProps, 'font' | 'bold' | 'italic' | 'widthFactor' | 'stroke'> {
   const w = widthFactor * look.narrow
   return {
+    ...(look.shx ? { stroke: true } : {}),
     ...(look.font ? { font: look.font } : {}),
     ...(look.bold ? { bold: true } : {}),
     ...(look.italic ? { italic: true } : {}),
@@ -574,6 +591,7 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
   // Los records se leen y se procesan de a uno (ver `dxfRecords`). Los de OBJECTS que hacen falta antes (los modelos
   // ACIS binarios y los archivos de imágenes), en una pasada previa sólo si el texto los tiene.
   textStyles = new Map()
+  styleHandles = new Map()
   const layers: DxfLayerSpec[] = []
   const entities: DxfEntitySpec[] = []
   const unsupported = new Set<string>()
@@ -596,7 +614,10 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
     const b = blocks.get((str(rec.codes, 2) ?? '').toUpperCase())
     const t = b?.items.find((it) => it.spec?.type === 'TEXT')?.spec?.props as TextProps | undefined
     const m = rec.codes.find((x) => x[0] === 42)
-    return t && m ? { shownText: t.text, measured: Number(m[1]) } : {}
+    // Estilo de texto propio de la cota (DSTYLE: 340 → handle 1005).
+    const i = rec.codes.findIndex(([k, v], j) => k === 1070 && v.trim() === '340' && rec.codes[j + 1]?.[0] === 1005)
+    const textStyle = i >= 0 ? rec.codes[i + 1][1].trim().toUpperCase() : undefined
+    return { ...(t && m ? { shownText: t.text, measured: Number(m[1]) } : {}), ...(textStyle ? { textStyle } : {}) }
   }
   /** Contenido de cada espacio papel, por el nombre de su bloque (`*Paper_Space…`). */
   const paper = new Map<string, BlockItem[]>()
@@ -676,9 +697,7 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
         noteSimplified('OLE2FRAME')
         return oleFrame(c)
       case 'WIPEOUT':
-        // La máscara no se aplica: lo que tapa se sigue viendo.
-        noteSimplified('WIPEOUT')
-        return []
+        return wipeout(c)
       case 'SHAPE': {
         // Su dibujo está en un archivo de formas externo: queda un punto donde va.
         noteSimplified('SHAPE')
@@ -823,6 +842,8 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
       if (flags & 0x2000000) look.bold = true
       if (flags & 0x1000000) look.italic = true
       if (name) textStyles.set(name, { look, widthFactor: num(rec.codes, 41, 1) || 1 })
+      const h = str(rec.codes, 5)
+      if (name && h) styleHandles.set(h.toUpperCase(), name)
       continue
     }
 
@@ -927,14 +948,21 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
   }
 
   for (const r of dimStyleRecs) dimStyles.push(parseDimStyle(r.codes, blockNames))
+  /** Estilo de cota → handle de su estilo de texto (DIMTXSTY, 340). */
+  const dimTextStyles = new Map(dimStyleRecs.map((r) => [str(r.codes, 2) ?? '', (str(r.codes, 340) ?? '').toUpperCase()]))
   // Cada cota con las variables de su estilo (el documento las vuelve a resolver al agregar los estilos).
   const styled = (e: DxfEntitySpec) => {
     if (e.type !== 'DIMENSION') return
-    const dp = e.props as unknown as DimensionProps & { shownText?: string; measured?: number }
+    const dp = e.props as unknown as DimensionProps & { shownText?: string; measured?: number; textStyle?: string }
     const vars = dimStyles.find((s) => s.name === dp.styleName)?.vars
     const { shownText, measured } = dp
     delete dp.shownText
     delete dp.measured
+    // Fuente del texto: la del estilo de texto de la cota (o el de su estilo de cota) si es TrueType.
+    const ts = styleHandles.get(dp.textStyle ?? dimTextStyles.get(dp.styleName ?? 'Standard') ?? '')
+    delete dp.textStyle
+    const font = ts ? textStyles.get(ts.toUpperCase())?.look.font : undefined
+    if (font) dp.textFont = font
     // Texto propio con formato de MTEXT (p. ej. `{\H22.2x;90.00}`): el texto plano, y su alto pasa a la cota.
     if (dp.textOverride && /[\\{}]/.test(dp.textOverride)) {
       const lead = mtextLead(dp.textOverride)
@@ -1370,9 +1398,14 @@ function parseEntity(rec: Rec): { type: EntityType; props: EntityProps } | null 
         normal: extrusionOf(c),
         kind: 'mtext',
         ...lookProps(look, st.widthFactor * (lead.width ?? 1)),
+        // Interlineado del CAD clásico: 5/3 del alto por el factor del texto (44).
+        lineSpacing: Math.round(((num(c, 44, 1) || 1) * 5000) / 3) / 1000,
       }
       const runs = textRuns(raw, num(c, 40, 2.5), height, text)
-      if (runs) props.runs = runs
+      if (runs) {
+        props.runs = runs
+        delete props.stroke // con formato propio se dibuja como texto con sus fuentes
+      }
       // Sangría del párrafo (`\pxi…,l…;` al principio, en altos de texto): corre el texto alineado a la izquierda. La del
       // primer renglón sólo cuenta si hay uno (el rótulo de una celda); el margen izquierdo, siempre.
       const indent = mtextIndent(raw)
@@ -1384,7 +1417,7 @@ function parseEntity(rec: Rec): { type: EntityType; props: EntityProps } | null 
       // Anclado al medio o abajo (71 = 4…9): el punto de Cota es el de arriba.
       const row = Math.floor((j71 - 1) / 3)
       if (row > 0) {
-        const up = (text.split('\n').length * height * LINE_SPACING * row) / 2
+        const up = (text.split('\n').length * height * lineSpacingOf(props) * row) / 2
         const { v } = textAxes(props)
         props.position = [0, 1, 2].map((i) => props.position[i] + v[i] * up) as Vec3
       }

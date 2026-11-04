@@ -30,7 +30,7 @@ import { pointMarkTexture } from './pointMarks'
 import { ellipsePoints } from '../core/geom/ellipse'
 import { arcBasis, tessellateArc } from '../core/geom/arc'
 import { polylinePoints } from '../core/geom/polyline'
-import { LINE_SPACING, attdefText, cssFontStack, textAxes, textCorners, textTop } from '../core/geom/text'
+import { BASELINE_DROP, attdefText, cssFontStack, fontMetrics, lineSpacingOf, textAxes, textCorners, textStrokePolylines, textTop } from '../core/geom/text'
 import { entityGrips, type Grip } from '../core/editing/grips'
 import { viewportRing } from '../core/layout/viewport'
 import { evaluateFields, fieldSegments, hasFields, type FieldContext } from '../core/fields/fields'
@@ -197,6 +197,9 @@ const FACE_ON_PAPER = '#b8b8b8'
 /** Acumuladores de geometría fusionada por material (batching para modelos pesados). */
 interface MeshBatch { pos: number[]; nor: number[]; ranges: { s: number; id: string }[]; n: number }
 interface LineBatch { pos: number[]; ranges: { s: number; id: string }[]; n: number }
+/** Orden de dibujo de las máscaras (WIPEOUT) y de los textos de trazo: encima de todas las capas (0 = la de arriba). */
+const MASK_ORDER = 0.5
+const TEXT_ORDER = 0.75
 /**
  * Lote de caras sombreadas: las piezas se juntan recién al crear la geometría, en arreglos del tamaño justo (antes se
  * copiaban número por número a listas que ocupaban el doble). `n` cuenta índices (tres por triángulo).
@@ -393,7 +396,7 @@ export class Viewport {
    * Textos en pantalla: cada uno crea su elemento recién cuando se ve y tiene un tamaño que se puede leer, y lo suelta al
    * salir (un ensamble con 45 mil atributos creaba 45 mil elementos y no entraba en la memoria de un teléfono).
    */
-  private textLabels: { el: HTMLDivElement | null; make: () => HTMLDivElement; pos: THREE.Vector3; height: number; u: THREE.Vector3; v: THREE.Vector3; justify: string; widthFactor: number }[] = []
+  private textLabels: { el: HTMLDivElement | null; make: () => HTMLDivElement; pos: THREE.Vector3; height: number; u: THREE.Vector3; v: THREE.Vector3; justify: string; widthFactor: number; em: number }[] = []
   private grid!: THREE.GridHelper
   private bgColor = new THREE.Color(BG_COLOR)
   private visualStyle: VisualStyle = DEFAULT_VISUAL_STYLE
@@ -2027,7 +2030,20 @@ export class Viewport {
     group.userData.entityId = e.id
     const pts: number[] = []
     for (const [s, en] of d.lines) pts.push(s[0], s[1], s[2], en[0], en[1], en[2])
-    for (const st of d.textStrokes) for (let i = 0; i + 1 < st.length; i++) pts.push(...st[i], ...st[i + 1])
+    // Con fuente TrueType (la de su estilo de texto en el plano) el texto va con esa fuente; con tolerancias o unidades
+    // alternativas, en trazos (se arman con ellos).
+    const st = props.style
+    const ttf = !!props.textFont && !!d.text.value && !d.text.value.includes('\n') && !st.DIMTOL && !st.DIMLIM && !st.DIMALT
+    if (ttf) {
+      const n = d.normal ?? [0, 0, 1]
+      const { u: u0, v: v0 } = arcBasis(n)
+      const dir = d.text.dir
+      const rotation = Math.atan2(dir[0] * v0[0] + dir[1] * v0[1] + dir[2] * v0[2], dir[0] * u0[0] + dir[1] * u0[1] + dir[2] * u0[2])
+      const h = d.text.height
+      // El centro del texto en `pos`: arriba de la caja, 0.6 alto más arriba (línea base a 1.1, mayúsculas de 1).
+      const position: Vec3 = [0, 1, 2].map((i) => d.text.pos[i] + d.text.up[i] * h * 0.6) as Vec3
+      this.buildText({ id: e.id, type: 'TEXT', layer: e.layer, props: { position, text: d.text.value, height: h, rotation, justify: 'center', normal: n, kind: 'mtext', font: props.textFont } }, color, false)
+    } else for (const s2 of d.textStrokes) for (let i = 0; i + 1 < s2.length; i++) pts.push(...s2[i], ...s2[i + 1])
     if (pts.length > 0) {
       const g = new THREE.BufferGeometry()
       g.setAttribute('position', this.local(pts))
@@ -2050,15 +2066,39 @@ export class Viewport {
   /** Construye una entidad TEXT: overlay HTML (texto visible que escala con el zoom) + un plano
    *  invisible sobre su caja para poder seleccionarlo con click (pickAt). */
   /** Texto: su etiqueta (bajo demanda) y su caja de selección (en el lote `pick`, o una malla propia si no hay lote). */
-  private buildText(e: import('../core/document/types').TextEntity, color: THREE.Color, selected: boolean, pick?: MeshBatch): void {
+  private buildText(e: import('../core/document/types').TextEntity, color: THREE.Color, selected: boolean, pick?: MeshBatch, strokes?: LineBatch): void {
     const fields = this.data?.fields
     const segments = fields && hasFields(e.props.text) ? fieldSegments(e.props.text, fields) : null
     // Con campos: la caja de selección se mide sobre el texto evaluado.
     const t = segments ? { ...e.props, text: segments.map((s) => s.text).join('') } : e.props
+    const runsOk = !!t.runs && t.runs.map((r) => r.s).join('') === t.text
+    if (t.stroke && !runsOk) {
+      // Fuente de un trazo (las SHX del plano): líneas en el dibujo, como el texto de las cotas.
+      const pos: number[] = []
+      for (const pl of textStrokePolylines(t)) for (let i = 0; i + 1 < pl.length; i++) pos.push(...pl[i], ...pl[i + 1])
+      if (strokes) {
+        strokes.ranges.push({ s: strokes.n, id: e.id })
+        for (let i = 0; i < pos.length; i++) strokes.pos.push(pos[i])
+        strokes.n += pos.length / 3
+      } else if (pos.length) {
+        const g = new THREE.BufferGeometry()
+        g.setAttribute('position', this.local(pos))
+        const l = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: selected ? new THREE.Color('#00e5ff') : color }))
+        l.userData.entityId = e.id
+        this.entityGroup.add(l)
+      }
+    }
     // La fuente del texto (las TrueType del plano, con alternativas de las mismas medidas) o la de Cota.
     const font = t.font ? `font-family:${cssFontStack(t.font)};` : 'font-family:monospace;'
+    // Como en el CAD clásico, el alto es el de las mayúsculas: la fuente va a alto / (mayúscula / em), con el interlineado
+    // del texto; y la etiqueta se corre para que la línea base caiga donde la pone la caja (`BASELINE_DROP`).
+    const fm = fontMetrics(t.font)
+    const em = t.height / fm.cap
+    const lh = lineSpacingOf(t) * fm.cap
+    const baselineAt = ((lh - fm.asc - fm.desc) / 2 + fm.asc) * em
+    const lift = baselineAt - BASELINE_DROP * t.height
     const css =
-      `position:absolute;pointer-events:none;white-space:pre;${font}${t.bold ? 'font-weight:bold;' : ''}${t.italic ? 'font-style:italic;' : ''}line-height:${LINE_SPACING};` +
+      `position:absolute;pointer-events:none;white-space:pre;${font}${t.bold ? 'font-weight:bold;' : ''}${t.italic ? 'font-style:italic;' : ''}line-height:${lh};` +
       `text-align:${t.justify};transform-origin:top left;color:${selected ? '#00e5ff' : '#' + color.getHexString()};z-index:4`
     const make = (): HTMLDivElement => {
       const el = document.createElement('div')
@@ -2088,16 +2128,19 @@ export class Viewport {
       return el
     }
     const ax = textAxes(t)
-    this.textLabels.push({
-      el: null,
-      make,
-      pos: new THREE.Vector3(...textTop(t)),
-      height: t.height,
-      u: new THREE.Vector3(...ax.u),
-      v: new THREE.Vector3(...ax.v),
-      justify: t.justify,
-      widthFactor: t.widthFactor && t.widthFactor > 0 ? t.widthFactor : 1,
-    })
+    if (!(t.stroke && !runsOk)) {
+      this.textLabels.push({
+        el: null,
+        make,
+        pos: new THREE.Vector3(...textTop(t)).addScaledVector(new THREE.Vector3(...ax.v), lift),
+        height: t.height,
+        u: new THREE.Vector3(...ax.u),
+        v: new THREE.Vector3(...ax.v),
+        justify: t.justify,
+        widthFactor: t.widthFactor && t.widthFactor > 0 ? t.widthFactor : 1,
+        em,
+      })
+    }
     // Plano invisible (2 triángulos sobre la caja) para selección por click.
     const c = textCorners(t)
     const pos = [...c[0], ...c[1], ...c[2], ...c[0], ...c[2], ...c[3]]
@@ -2142,7 +2185,7 @@ export class Viewport {
         l.el = l.make()
         this.container.appendChild(l.el)
       }
-      const font = Math.max(7, l.height / wpp)
+      const font = Math.max(7, l.em / wpp)
       l.el.style.fontSize = `${font}px`
       l.el.style.left = `${px[0]}px`
       l.el.style.top = `${px[1]}px`
@@ -2150,7 +2193,7 @@ export class Viewport {
       // Los ejes reales del texto (dirección `u` y "arriba" `v`, en su plano) proyectados a la pantalla
       //: en cualquier vista y UCS el texto se ve con su giro, su escorzo y, visto de atrás,
       // espejado como en el CAD clásico. Un px local equivale a `height / font` unidades de mundo.
-      const k = l.height / font
+      const k = l.em / font
       const pu = this.controller.project(l.pos.clone().addScaledVector(l.u, l.height))
       const pv = this.controller.project(l.pos.clone().addScaledVector(l.v, l.height))
       if (pu && pv) {
@@ -2364,7 +2407,9 @@ export class Viewport {
           let b = textPickB.get(k)
           if (!b) textPickB.set(k, (b = { pos: [], nor: [], ranges: [], n: 0 }))
           const t = e.type === 'TEXT' ? e : { id: e.id, type: 'TEXT' as const, layer: e.layer, props: attdefText(e.props) }
-          this.buildText(t, new THREE.Color(colorHex), false, b)
+          // Con la fuente de un trazo, sus trazos van a un lote de líneas encima del dibujo (como los textos con fuente,
+          // que se ven por encima de todo) y de las máscaras.
+          this.buildText(t, new THREE.Color(colorHex), false, b, getLine(lineB, `${TEXT_ORDER}|${colorHex}`))
           continue
         }
         // Individuales: seleccionadas (resaltado), anotaciones y polilíneas anchas.
@@ -2455,8 +2500,9 @@ export class Viewport {
           continue
         }
         if (e.type === 'HATCH') {
-          // Detrás del contorno (HPDRAWORDER = 3): medio escalón por debajo de su capa.
-          const hro = ro - 0.5
+          // Detrás del contorno (HPDRAWORDER = 3): medio escalón por debajo de su capa. Una máscara (WIPEOUT), encima de
+          // todas las capas: tapa lo de abajo, y los textos quedan encima de ella.
+          const hro = e.props.wipeout ? MASK_ORDER : ro - 0.5
           const strokes = hatchStrokesCached(e.props)
           if (strokes.segs.length) {
             const b = getLine(lineB, `${hro}|${colorHex}`)
@@ -2467,7 +2513,8 @@ export class Viewport {
           for (const d of strokes.dots) getPoints(pointB, `${hro}|${colorHex}`).pos.push(d[0], d[1], d[2])
           const tris = hatchTriangles(e)
           if (tris.length) {
-            const k = `${hro}|${colorHex}|${isSolidHatch(e.props) ? 'solid' : 'pick'}`
+            // Una máscara (WIPEOUT) se rellena con el color del fondo: tapa lo de las capas de abajo.
+            const k = e.props.wipeout ? `${hro}|${bgHex}|mask` : `${hro}|${colorHex}|${isSolidHatch(e.props) ? 'solid' : 'pick'}`
             let b = fillB.get(k)
             if (!b) fillB.set(k, (b = { pos: [], nor: [], ranges: [], n: 0 }))
             b.ranges.push({ s: b.n, id: e.id })
@@ -2588,8 +2635,10 @@ export class Viewport {
     const [ro, colorHex, kind] = key.split('|')
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', this.local(b.pos))
-    const visible = kind === 'solid'
-    const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex), side: THREE.DoubleSide, visible, ...FACE_OFFSET }))
+    const visible = kind === 'solid' || kind === 'mask'
+    // Una máscara tapa lo que se dibujó antes, aunque esté en el mismo plano: sin prueba de profundidad.
+    const mat = kind === 'mask' ? { depthTest: false } : FACE_OFFSET
+    const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex), side: THREE.DoubleSide, visible, ...mat }))
     mesh.userData.ranges = b.ranges
     mesh.userData.rangeKind = 'mesh'
     if (lowPick) mesh.userData.lowPick = true

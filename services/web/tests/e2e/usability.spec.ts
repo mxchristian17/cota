@@ -598,3 +598,35 @@ test.describe('Imágenes de fondo', () => {
     await expect.poll(() => st<boolean>(page, "return !!s.doc.entities.find((e) => e.type === 'IMAGE').props.data")).toBe(true)
   })
 })
+
+test.describe('Máscaras (WIPEOUT)', () => {
+  test('una máscara tapa las líneas de abajo, de cualquier capa, y el texto queda encima', async ({ page }) => {
+    const rec = (type: string, ...codes: Array<[number, string | number]>) => `0\n${type}\n${codes.map(([c, v]) => `${c}\n${v}\n`).join('')}`
+    const DXF =
+      '0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLAYER\n' + rec('LAYER', [2, 'LINEAS'], [62, 1], [70, 0]) + rec('LAYER', [2, 'ROTULOS'], [62, 7], [70, 0]) + '0\nENDTAB\n0\nENDSEC\n' +
+      '0\nSECTION\n2\nENTITIES\n' +
+      rec('LINE', [8, 'LINEAS'], [10, 0], [20, 5], [30, 0], [11, 40], [21, 5], [31, 0]) +
+      rec('WIPEOUT', [8, 'ROTULOS'], [10, 14], [20, 3], [30, 0], [11, 12], [21, 0], [31, 0], [12, 0], [22, 4], [32, 0], [13, 1], [23, 1], [280, 1], [71, 1], [91, 2], [14, -0.5], [24, -0.5], [14, 0.5], [24, 0.5]) +
+      rec('TEXT', [8, 'ROTULOS'], [10, 15], [20, 4], [30, 0], [40, 2], [1, 'NOTA']) + '0\nENDSEC\n0\nEOF\n'
+    await page.goto('/')
+    const input = page.getByTestId('command-input')
+    await expect(input).toBeVisible()
+    const chooser = page.waitForEvent('filechooser')
+    await input.fill('OPEN')
+    await page.keyboard.press('Enter')
+    await (await chooser).setFiles({ name: 'mascara.dxf', mimeType: 'application/dxf', buffer: Buffer.from(DXF) })
+    await expect(page.locator('.cmd-output')).toContainText('Opened')
+    const m = await st<{ order: number; lines: number; bg: boolean }>(
+      page,
+      `let order = null, lines = -Infinity, bg = false
+       const vp = s.activeViewport
+       vp.entityGroup.traverse((o) => {
+         if (o.isMesh && o.material.depthTest === false && o.material.visible) { order = o.renderOrder; bg = o.material.color.getHexString() === vp.bgColor.getHexString() }
+         else if (o.isLineSegments || o.isLine) lines = Math.max(lines, o.renderOrder)
+       })
+       return { order, lines, bg }`,
+    )
+    expect(m.bg).toBe(true) // del color del fondo
+    expect(m.order).toBeGreaterThan(m.lines) // encima de las líneas, aunque su capa esté abajo
+  })
+})
