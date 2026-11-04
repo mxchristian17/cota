@@ -4,6 +4,17 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.22.0] — 2026-11-03
+
+### Added
+- **Texts keep their font and width** from DWG and DXF files: the TrueType font of their text style is shown with a
+  font of the same measures (Arial with Liberation Sans where Arial is missing), narrow fonts and width factors make
+  the letters as narrow or wide as in the drawing, and bold and italic styles are kept. A title block now fits its
+  cells as it was drawn. SHX fonts are shown with Cota's font.
+- **Formatting inside multiline text** is kept: bold, italic, underline, font, height and color changes within a text
+  (a bold label followed by a smaller value in a title block cell, for example).
+- Plots and DXF export keep the width factor; DXF export also writes the font as formatting.
+
 ## [2.21.2] — 2026-11-03
 
 ### Fixed

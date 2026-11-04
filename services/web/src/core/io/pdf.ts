@@ -379,7 +379,8 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
           lines.forEach((ln, i) => {
             const dy = -(i + 1) * h * LINE_SPACING + h * 0.25
             const o = worldToPage(px + offX * c - dy * sn, py + offX * sn + dy * c, t)
-            out += textTm(ln, o, [c * size, sn * size], [-sn * size, c * size])
+            const k = e.props.widthFactor ?? 1 // factor de ancho: a lo largo del renglón
+            out += textTm(ln, o, [c * size * k, sn * size * k], [-sn * size, c * size])
           })
           break
         }
@@ -387,7 +388,9 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
           const top = textTop(e.props)
           const wy = top[1] - (i + 1) * e.props.height * LINE_SPACING + e.props.height * 0.25
           const [tx, ty] = worldToPage(top[0] + offX, wy, t)
-          out += `BT\n/F1 ${f(size)} Tf\n${f(tx)} ${f(ty)} Td\n(${pdfText(lines[i])}) Tj\nET\n`
+          // Tz: escala horizontal (factor de ancho del texto, en %).
+          const tz = e.props.widthFactor && Math.abs(e.props.widthFactor - 1) > 1e-6 ? `${f(e.props.widthFactor * 100)} Tz\n` : ''
+          out += `BT\n/F1 ${f(size)} Tf\n${tz}${f(tx)} ${f(ty)} Td\n(${pdfText(lines[i])}) Tj\nET\n`
         }
         break
       }

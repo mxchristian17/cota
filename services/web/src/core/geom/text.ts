@@ -4,17 +4,35 @@ import type { AttdefProps, TextProps } from '../document/types'
 
 /** Aspecto aproximado (ancho/alto) de una glifa monoespaciada, para estimar la caja. */
 const GLYPH_ASPECT = 0.6
+/** Lo mismo para una fuente proporcional (Arial y similares: el promedio de un texto en mayúsculas y minúsculas). */
+const PROPORTIONAL_ASPECT = 0.55
 /** Interlineado (alto de línea / alto de texto). */
 export const LINE_SPACING = 1.35
 /** Distancia de la parte de arriba de la caja a la línea base del primer renglón, en altos de texto. */
 export const BASELINE_DROP = LINE_SPACING - 0.25
+
+/** Sólo los campos con valor (los ausentes no se escriben en el dibujo). */
+const defined = <T extends object>(o: T): Partial<T> => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>
+
+/**
+ * Familia CSS de una fuente de dibujo, con las que tienen sus mismas medidas como alternativa (Liberation en Linux): así
+ * un texto ocupa en pantalla lo que ocupaba en el plano.
+ */
+export function cssFontStack(font: string): string {
+  const f = font.toLowerCase()
+  if (/^(arial|helvetica)/.test(f)) return 'Arial, "Liberation Sans", Helvetica, sans-serif'
+  if (/^times/.test(f)) return '"Times New Roman", "Liberation Serif", Times, serif'
+  if (/^cour/.test(f)) return '"Courier New", "Liberation Mono", monospace'
+  return `"${font.replace(/"/g, '')}", Arial, "Liberation Sans", sans-serif`
+}
 
 const addv = (p: Vec3, q: Vec3, s = 1): Vec3 => [p[0] + q[0] * s, p[1] + q[1] * s, p[2] + q[2] * s]
 
 /** Líneas del texto (separadas por `\n`). */
 /** Un ATTDEF suelto se dibuja (y se mide) como un texto con su tag, como el CAD clásico. */
 export function attdefText(p: AttdefProps): TextProps {
-  return { position: p.position, text: p.tag, height: p.height, rotation: p.rotation, justify: p.justify, normal: p.normal }
+  const { font, bold, italic, widthFactor } = p
+  return { position: p.position, text: p.tag, height: p.height, rotation: p.rotation, justify: p.justify, normal: p.normal, ...defined({ font, bold, italic, widthFactor }) }
 }
 
 export function textLines(t: TextProps): string[] {
@@ -46,7 +64,7 @@ export function textAxes(t: TextProps): { u: Vec3; v: Vec3 } {
 export function textSize(t: TextProps): { width: number; height: number } {
   const lines = textLines(t)
   const cols = lines.reduce((m, l) => Math.max(m, l.length), 1)
-  return { width: cols * t.height * GLYPH_ASPECT, height: lines.length * t.height * LINE_SPACING }
+  return { width: cols * t.height * (t.font ? PROPORTIONAL_ASPECT : GLYPH_ASPECT) * (t.widthFactor ?? 1), height: lines.length * t.height * LINE_SPACING }
 }
 
 /** Punto de arriba de la caja del texto (sobre la línea de `position`): para TEXT, una línea base más arriba. */

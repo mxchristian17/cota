@@ -189,6 +189,27 @@ export interface TextProps {
    * anteriores, rótulos): como `mtext`, salvo que se muestra como TEXT si tiene un solo renglón.
    */
   kind?: 'text' | 'mtext'
+  /** Fuente TrueType del estilo (p. ej. `Arial`); ausente = la de Cota. Las angostas llegan como su familia con `widthFactor`. */
+  font?: string
+  bold?: boolean
+  italic?: boolean
+  /** Ancho de las letras respecto del normal (estilo de texto, código 41, `\W`); ausente = 1. */
+  widthFactor?: number
+  /**
+   * Tramos con formato propio de un MTEXT importado (negrita, itálica, subrayado, fuente, alto relativo `h`, color):
+   * su texto unido es `text`. Si el texto se edita y deja de coincidir, se ignoran.
+   */
+  runs?: TextRun[]
+}
+
+export interface TextRun {
+  s: string
+  b?: boolean
+  i?: boolean
+  u?: boolean
+  f?: string
+  h?: number
+  c?: string
 }
 
 export interface ExtrudeProps {

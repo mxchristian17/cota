@@ -1,7 +1,7 @@
 import { BASELINE_DROP, LINE_SPACING, attdefText, textAxes, textSize } from '../geom/text'
 import { decodeTextCodes, encodeTextCodes } from '../text/codes'
 import type { Vec3 } from '../math'
-import type { DrawingVars, Entity, EntityProps, EntityType, ImageProps, InsertProps, Layer, LineType, LinetypeDefData, RectangleProps, TextProps } from '../document/types'
+import type { DrawingVars, Entity, EntityProps, EntityType, ImageProps, InsertProps, Layer, TextRun, LineType, LinetypeDefData, RectangleProps, TextProps } from '../document/types'
 import { pointMap, transformEntity as transformInsertEntity } from '../editing/block'
 import { BYBLOCK, BYLAYER, CONTINUOUS, linetypeLabel, patternLength } from '../linetype/linetypes'
 import { hatchDxf, parseHatch } from './dxfHatch'
@@ -14,6 +14,7 @@ import { normAngle } from '../geom/arc'
 import { acisEdges, sabFromHex, satFromDxf } from './acis'
 import { acisMesh, SOLID_MESH_REF } from './acisMesh'
 import { packedOf, reversePackedFaces, type PackedMesh } from './meshTransfer'
+import { fontLook, mtextLead, mtextRuns, type FontLook } from './dxfFont'
 import { image, infiniteLine, mline, multileader, oleFrame, tolerance, underlay, viewBasis, type Piece } from './dxfExtra'
 
 /**
@@ -127,7 +128,10 @@ function entityDxf(e: Entity, layerName: string): string | null {
       if (text.includes('\n') || e.props.kind === 'mtext') {
         // MTEXT: punto de inserción (arriba, a la izquierda/centro/derecha) en el mundo; \P = salto de renglón.
         const deg = (rotation * 180) / Math.PI
-        const mt = encodeTextCodes(text.replace(/[\\{}]/g, (c) => '\\' + c)).split('\n').join('\\P')
+        // Fuente y ancho como formato al comienzo (\f, \W), que es como los lee el CAD clásico.
+        const { font, bold, italic, widthFactor: wf } = e.props
+        const lead = (font ? `\\f${font}|b${bold ? 1 : 0}|i${italic ? 1 : 0}|c0|p34;` : '') + (wf && Math.abs(wf - 1) > 1e-6 ? `\\W${wf};` : '')
+        const mt = lead + encodeTextCodes(text.replace(/[\\{}]/g, (c) => '\\' + c)).split('\n').join('\\P')
         const ins = p(10, position[0]) + p(20, position[1]) + p(30, position[2]) + p(40, th) + p(50, deg)
         return p(0, 'MTEXT') + h + ins + p(71, justify === 'right' ? 3 : justify === 'center' ? 2 : 1) + p(1, mt) + extrusion(normal)
       }
@@ -142,7 +146,8 @@ function entityDxf(e: Entity, layerName: string): string | null {
       const ins = p(10, q[0]) + p(20, q[1]) + p(30, q[2]) + p(40, th) + p(50, deg)
       const a = toOcs(at, normal)
       const jc = justify === 'left' ? '' : p(72, justify === 'center' ? 1 : 2) + p(11, a[0]) + p(21, a[1]) + p(31, a[2])
-      return p(0, 'TEXT') + h + ins + p(1, encodeTextCodes(text)) + jc + extrusion(normal)
+      const wf = e.props.widthFactor && Math.abs(e.props.widthFactor - 1) > 1e-6 ? p(41, e.props.widthFactor) : ''
+      return p(0, 'TEXT') + h + ins + p(1, encodeTextCodes(text)) + wf + jc + extrusion(normal)
     }
     case 'RECTANGLE': {
       const [x, y, z] = e.props.corner
@@ -467,6 +472,41 @@ export function mtextIndent(raw: string): { first: number; left: number } {
   return out
 }
 
+/**
+ * Tramos con formato de un MTEXT, si su formato cambia dentro del texto (si no, alcanza con el del texto entero). `base`
+ * es el alto del código 40 y `height` el del texto ya con el formato del comienzo; los tramos guardan su alto relativo.
+ */
+function textRuns(raw: string, base: number, height: number, text: string): TextRun[] | undefined {
+  const runs = mtextRuns(raw, base).map((r): TextRun => {
+    const h = Math.round((r.height / height) * 1000) / 1000
+    const c = typeof r.color === 'number' ? (r.color === 7 ? undefined : aciToHex(r.color)) : r.color
+    const f = r.font ? fontLook(r.font).font : undefined
+    return { s: decodeTextCodes(r.s), ...(r.bold ? { b: true } : {}), ...(r.italic ? { i: true } : {}), ...(r.underline ? { u: true } : {}), ...(f ? { f } : {}), ...(h !== 1 ? { h } : {}), ...(c ? { c } : {}) }
+  })
+  if (runs.map((r) => r.s).join('') !== text) return undefined
+  const key = (r: TextRun) => JSON.stringify({ ...r, s: undefined })
+  const styled = new Set(runs.filter((r) => r.s.trim()).map(key))
+  return styled.size > 1 ? runs.filter((r) => r.s) : undefined
+}
+
+/** Estilos de texto del archivo que se está leyendo (tabla STYLE, por nombre en mayúsculas): fuente y ancho. */
+let textStyles = new Map<string, { look: FontLook; widthFactor: number }>()
+
+function styleOf(c: Array<[number, string]>): { look: FontLook; widthFactor: number } {
+  return textStyles.get((str(c, 7) ?? 'STANDARD').toUpperCase()) ?? { look: { narrow: 1 }, widthFactor: 1 }
+}
+
+/** Fuente y ancho de un texto, sólo los que difieren de los de Cota (para no escribir lo que no hace falta). */
+function lookProps(look: FontLook, widthFactor: number): Pick<TextProps, 'font' | 'bold' | 'italic' | 'widthFactor'> {
+  const w = widthFactor * look.narrow
+  return {
+    ...(look.font ? { font: look.font } : {}),
+    ...(look.bold ? { bold: true } : {}),
+    ...(look.italic ? { italic: true } : {}),
+    ...(w > 0 && isFinite(w) && Math.abs(w - 1) > 1e-6 ? { widthFactor: Math.round(w * 1e4) / 1e4 } : {}),
+  }
+}
+
 function num(codes: Array<[number, string]>, code: number, def = 0): number {
   const f = codes.find((c) => c[0] === code)
   return f ? Number(f[1]) : def
@@ -524,6 +564,7 @@ function* dxfRecords(text: string): Generator<Rec> {
 export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: PackedMesh[]; proxyShapes?: Map<string, Array<{ pts: Vec3[] } | { vertices: Vec3[]; faces: number[][] }>> } = {}): DxfImportResult {
   // Los records se leen y se procesan de a uno (ver `dxfRecords`). Los de OBJECTS que hacen falta antes (los modelos
   // ACIS binarios y los archivos de imágenes), en una pasada previa sólo si el texto los tiene.
+  textStyles = new Map()
   const layers: DxfLayerSpec[] = []
   const entities: DxfEntitySpec[] = []
   const unsupported = new Set<string>()
@@ -754,6 +795,18 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
         const aspect = num(rec.codes, 41, 1)
         view = { center, height, aspect: aspect > 0 && isFinite(aspect) ? aspect : 1, direction, target }
       }
+      continue
+    }
+
+    if (table === 'STYLE' && rec.type === 'STYLE') {
+      // Fuente (3: archivo; la familia y negrita/itálica de una TrueType también van en el XDATA, 1000/1071) y ancho (41).
+      const name = (str(rec.codes, 2) ?? '').toUpperCase()
+      const flags = num(rec.codes, 1071, 0)
+      const family = rec.codes.find((c) => c[0] === 1000)?.[1].trim()
+      const look = fontLook(str(rec.codes, 3) || family)
+      if (flags & 0x2000000) look.bold = true
+      if (flags & 0x1000000) look.italic = true
+      if (name) textStyles.set(name, { look, widthFactor: num(rec.codes, 41, 1) || 1 })
       continue
     }
 
@@ -1251,6 +1304,11 @@ function parseEntity(rec: Rec): { type: EntityType; props: EntityProps } | null 
         justify: aligned && (h72 === 1 || h72 === 4) ? 'center' : aligned && h72 === 2 ? 'right' : 'left',
         normal,
         kind: 'text',
+        // El ancho propio del texto (41) manda sobre el de su estilo.
+        ...(() => {
+          const st = styleOf(c)
+          return lookProps(st.look, c.some(([code]) => code === 41) ? num(c, 41, 1) || 1 : st.widthFactor)
+        })(),
       }
       // Arriba (73 = 3) o al medio (73 = 2, o 72 = 4 "Middle") del alto: se baja a la línea base.
       const down = !aligned ? 0 : v73 === 3 ? height : v73 === 2 || h72 === 4 ? height / 2 : 0
@@ -1265,7 +1323,12 @@ function parseEntity(rec: Rec): { type: EntityType; props: EntityProps } | null 
       const raw = c.filter(([code]) => code === 3 || code === 1).map(([, v]) => v).join('')
       const j71 = num(c, 71) || 1
       const text = decodeTextCodes(plainMtext(raw))
-      const height = num(c, 40, 2.5)
+      // El formato del comienzo (fuente, alto, ancho) vale para todo el texto; si no, el del estilo.
+      const lead = mtextLead(raw)
+      const st = styleOf(c)
+      const leadLook = lead.font ? fontLook(lead.font) : null
+      const look: FontLook = leadLook ? { ...leadLook, bold: lead.bold || leadLook.bold, italic: lead.italic || leadLook.italic } : st.look
+      const height = (lead.height ?? num(c, 40, 2.5)) * (lead.heightScale ?? 1)
       const rotation = c.some(([code]) => code === 50) || !c.some(([code]) => code === 11) ? (num(c, 50) * Math.PI) / 180 : Math.atan2(num(c, 21), num(c, 11, 1))
       const props: TextProps = {
         position: [num(c, 10), num(c, 20), num(c, 30)],
@@ -1275,7 +1338,10 @@ function parseEntity(rec: Rec): { type: EntityType; props: EntityProps } | null 
         justify: (['left', 'center', 'right'] as const)[(j71 - 1) % 3],
         normal: extrusionOf(c),
         kind: 'mtext',
+        ...lookProps(look, st.widthFactor * (lead.width ?? 1)),
       }
+      const runs = textRuns(raw, num(c, 40, 2.5), height, text)
+      if (runs) props.runs = runs
       // Sangría del párrafo (`\pxi…,l…;` al principio, en altos de texto): corre el texto alineado a la izquierda. La del
       // primer renglón sólo cuenta si hay uno (el rótulo de una celda); el margen izquierdo, siempre.
       const indent = mtextIndent(raw)

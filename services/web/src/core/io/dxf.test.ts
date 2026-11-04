@@ -603,6 +603,41 @@ describe('entidades de DWG/DXF que Cota dibuja con piezas simples', () => {
     expect((r.entities[0].props as { position: number[] }).position[0]).toBeCloseTo(110)
   })
 
+  it('fuente y ancho de los textos: del estilo (STYLE), del código 41 y del formato del MTEXT; vuelven al exportar', () => {
+    const tables =
+      '0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nSTYLE\n' +
+      '0\nSTYLE\n2\nAngosta\n70\n0\n40\n0\n41\n1\n3\nARIALN.TTF\n' +
+      '0\nSTYLE\n2\nTitulo\n70\n0\n40\n0\n41\n1\n3\narialbd.ttf\n' +
+      '0\nSTYLE\n2\nTrazo\n70\n0\n40\n0\n41\n0.8\n3\nsimplex.shx\n0\nENDTAB\n0\nENDSEC\n'
+    const r = importDxf(
+      tables +
+        dxf(
+          rec('TEXT', [7, 'Angosta'], [10, 0], [20, 0], [30, 0], [40, 2], [1, 'A']),
+          rec('TEXT', [7, 'Trazo'], [10, 0], [20, 0], [30, 0], [40, 2], [41, 1.5], [1, 'B']),
+          rec('MTEXT', [7, 'Titulo'], [10, 0], [20, 0], [30, 0], [40, 4], [1, 'Obra']),
+          rec('MTEXT', [7, 'Standard'], [10, 0], [20, 0], [30, 0], [40, 4], [1, '{\\fArial Narrow|b1|i0;\\H0.5x;Celda}']),
+        ),
+    )
+    const look = (i: number) => {
+      const { font, bold, widthFactor, height } = r.entities[i].props as TextProps
+      return { font, bold, widthFactor, height }
+    }
+    expect(look(0)).toEqual({ font: 'Arial', bold: undefined, widthFactor: 0.82, height: 2 })
+    expect(look(1)).toEqual({ font: undefined, bold: undefined, widthFactor: 1.5, height: 2 }) // el 41 del texto manda
+    expect(look(2)).toEqual({ font: 'Arial', bold: true, widthFactor: undefined, height: 4 })
+    expect(look(3)).toEqual({ font: 'Arial', bold: true, widthFactor: 0.82, height: 2 })
+    expect((r.entities[2].props as TextProps).runs).toBeUndefined() // un solo formato: no hacen falta tramos
+    const mixed = importDxf(dxf(rec('MTEXT', [10, 0], [20, 0], [30, 0], [40, 4], [1, '{\\fArial|b1;Obra\\fArial|b0;: \\H0.5x;Nombre}'])))
+    expect((mixed.entities[0].props as TextProps).runs).toEqual([{ s: 'Obra', b: true, f: 'Arial' }, { s: ': ', f: 'Arial' }, { s: 'Nombre', f: 'Arial', h: 0.5 }])
+    const back = importDxf(exportDxf(r.entities.map((e, i) => ({ id: `t${i}`, type: 'TEXT', layer: 'A', props: e.props })) as never, [lineLayer]))
+    expect(back.entities.map((e) => [(e.props as TextProps).font, (e.props as TextProps).bold, (e.props as TextProps).widthFactor])).toEqual([
+      [undefined, undefined, 0.82],
+      [undefined, undefined, 1.5],
+      ['Arial', true, undefined],
+      ['Arial', true, 0.82],
+    ])
+  })
+
   it('SPLINE definida sólo por los puntos por donde pasa (11/21/31): se dibuja por ellos', () => {
     const r = importDxf(dxf(rec('SPLINE', [70, 0], [71, 3], [74, 3], [12, 1], [22, 0], [32, 0], [11, 0], [21, 0], [31, 0], [11, 5], [21, 2], [31, 0], [11, 10], [21, 0], [31, 0])))
     expect(r.entities[0].props).toEqual({ controlPoints: [[0, 0, 0], [5, 2, 0], [10, 0, 0]], degree: 3 })

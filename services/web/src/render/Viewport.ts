@@ -30,7 +30,7 @@ import { pointMarkTexture } from './pointMarks'
 import { ellipsePoints } from '../core/geom/ellipse'
 import { arcBasis, tessellateArc } from '../core/geom/arc'
 import { polylinePoints } from '../core/geom/polyline'
-import { LINE_SPACING, attdefText, textAxes, textCorners, textTop } from '../core/geom/text'
+import { LINE_SPACING, attdefText, cssFontStack, textAxes, textCorners, textTop } from '../core/geom/text'
 import { entityGrips, type Grip } from '../core/editing/grips'
 import { viewportRing } from '../core/layout/viewport'
 import { evaluateFields, fieldSegments, hasFields, type FieldContext } from '../core/fields/fields'
@@ -393,7 +393,7 @@ export class Viewport {
    * Textos en pantalla: cada uno crea su elemento recién cuando se ve y tiene un tamaño que se puede leer, y lo suelta al
    * salir (un ensamble con 45 mil atributos creaba 45 mil elementos y no entraba en la memoria de un teléfono).
    */
-  private textLabels: { el: HTMLDivElement | null; make: () => HTMLDivElement; pos: THREE.Vector3; height: number; u: THREE.Vector3; v: THREE.Vector3; justify: string }[] = []
+  private textLabels: { el: HTMLDivElement | null; make: () => HTMLDivElement; pos: THREE.Vector3; height: number; u: THREE.Vector3; v: THREE.Vector3; justify: string; widthFactor: number }[] = []
   private grid!: THREE.GridHelper
   private bgColor = new THREE.Color(BG_COLOR)
   private visualStyle: VisualStyle = DEFAULT_VISUAL_STYLE
@@ -2055,8 +2055,10 @@ export class Viewport {
     const segments = fields && hasFields(e.props.text) ? fieldSegments(e.props.text, fields) : null
     // Con campos: la caja de selección se mide sobre el texto evaluado.
     const t = segments ? { ...e.props, text: segments.map((s) => s.text).join('') } : e.props
+    // La fuente del texto (las TrueType del plano, con alternativas de las mismas medidas) o la de Cota.
+    const font = t.font ? `font-family:${cssFontStack(t.font)};` : 'font-family:monospace;'
     const css =
-      `position:absolute;pointer-events:none;white-space:pre;font-family:monospace;line-height:${LINE_SPACING};` +
+      `position:absolute;pointer-events:none;white-space:pre;${font}${t.bold ? 'font-weight:bold;' : ''}${t.italic ? 'font-style:italic;' : ''}line-height:${LINE_SPACING};` +
       `text-align:${t.justify};transform-origin:top left;color:${selected ? '#00e5ff' : '#' + color.getHexString()};z-index:4`
     const make = (): HTMLDivElement => {
       const el = document.createElement('div')
@@ -2066,6 +2068,19 @@ export class Viewport {
           const span = document.createElement('span')
           span.textContent = s.text
           if (s.field) span.style.background = 'rgba(140,140,140,0.45)'
+          el.appendChild(span)
+        }
+      } else if (t.runs && t.runs.map((r) => r.s).join('') === t.text) {
+        // Formato dentro del texto (MTEXT importado): un tramo por cambio de negrita, fuente, alto o color.
+        for (const r of t.runs) {
+          const span = document.createElement('span')
+          span.textContent = r.s
+          span.style.fontWeight = r.b ? 'bold' : 'normal'
+          span.style.fontStyle = r.i ? 'italic' : 'normal'
+          if (r.u) span.style.textDecoration = 'underline'
+          if (r.f) span.style.fontFamily = cssFontStack(r.f)
+          if (r.h) span.style.fontSize = `${r.h}em`
+          if (r.c && !selected) span.style.color = r.c
           el.appendChild(span)
         }
       } else el.textContent = t.text
@@ -2081,6 +2096,7 @@ export class Viewport {
       u: new THREE.Vector3(...ax.u),
       v: new THREE.Vector3(...ax.v),
       justify: t.justify,
+      widthFactor: t.widthFactor && t.widthFactor > 0 ? t.widthFactor : 1,
     })
     // Plano invisible (2 triángulos sobre la caja) para selección por click.
     const c = textCorners(t)
@@ -2139,10 +2155,11 @@ export class Viewport {
       const pv = this.controller.project(l.pos.clone().addScaledVector(l.v, l.height))
       if (pu && pv) {
         const s = k / l.height
-        const [a, b] = [(pu[0] - px[0]) * s, (pu[1] - px[1]) * s]
+        // El factor de ancho estira o angosta las letras a lo largo de su renglón.
+        const [a, b] = [(pu[0] - px[0]) * s * l.widthFactor, (pu[1] - px[1]) * s * l.widthFactor]
         const [c, d] = [-(pv[0] - px[0]) * s, -(pv[1] - px[1]) * s]
         l.el.style.transform = `matrix(${a},${b},${c},${d},0,0) translate(${ax},0)`
-      } else l.el.style.transform = `translate(${ax},0)`
+      } else l.el.style.transform = `scaleX(${l.widthFactor}) translate(${ax},0)`
     }
   }
 

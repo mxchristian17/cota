@@ -10,7 +10,7 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 | LINE, POINT, CIRCLE, ARC, ELLIPSE, SPLINE | Native | Native | |
 | LWPOLYLINE, POLYLINE (2D and 3D) | Native | Native | Bulges and widths kept |
 | POLYLINE (polyface and M×N mesh), 3DFACE, MESH | Mesh | 3DFACE | |
-| TEXT, MTEXT, ATTRIB | Native | Native | MTEXT formatting is reduced to plain text |
+| TEXT, MTEXT, ATTRIB | Native, with the font of their text style (TrueType fonts are shown with one of the same width), its width factor, and the formatting inside a multiline text (bold, italic, underline, font, height, color, paragraph indent) | Native (width factor; font and width as MTEXT formatting) | SHX fonts are shown with Cota's font; stacked fractions as "1/2" |
 | ATTDEF | Native in blocks; its tag outside them | As text | |
 | HATCH, SOLID, TRACE | Native | Native | |
 | DIMENSION | Native | Exploded to lines, arrows and text | |
