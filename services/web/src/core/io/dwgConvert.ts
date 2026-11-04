@@ -1,4 +1,4 @@
-import { CadDictionary, DimensionArc, DwgReader, Field, FieldList, DxfReader, DxfWriter, GraphicsType, Insert, ProxyGeometryReader, Line, Mesh, ModelerGeometry, MText, MultiLeader, Polyline3D, ProxyEntity, Solid, UnknownEntity, XYZ, type CadDocument, type Entity, type IProxyGeometry, type ModelerGeometryWire } from '@node-projects/acad-ts'
+import { CadDictionary, DimensionArc, DwgReader, Field, FieldList, Hatch, DxfReader, DxfWriter, GraphicsType, Insert, ProxyGeometryReader, Line, Mesh, ModelerGeometry, MText, MultiLeader, Polyline3D, ProxyEntity, Solid, UnknownEntity, XYZ, type CadDocument, type Entity, type IProxyGeometry, type ModelerGeometryWire } from '@node-projects/acad-ts'
 
 import { acisEdges } from './acis'
 import { acisMesh, SOLID_MESH_REF } from './acisMesh'
@@ -25,6 +25,7 @@ export function convertDwgToDxfBytes(data: ArrayBuffer, light = false): CadConve
   const wireSolids = solidsAsWires(doc, solidMeshes, light)
   simplifyForDxf(doc)
   adoptOrphans(doc)
+  hatchAnglesToDegrees(doc)
   return { bytes: writeDxfBytes(doc), wireSolids, solidMeshes }
 }
 
@@ -38,7 +39,32 @@ export function binaryDxfToDxfBytes(data: ArrayBuffer, light = false): CadConver
   const wireSolids = solidsAsWires(doc, solidMeshes, light)
   simplifyForDxf(doc)
   adoptOrphans(doc)
+  hatchAnglesToDegrees(doc)
   return { bytes: writeDxfBytes(doc), wireSolids, solidMeshes }
+}
+
+/**
+ * Ángulos de los sombreados en grados: acad-ts los guarda en radianes (como el DWG) y su escritor de DXF los escribe
+ * tal cual en el ángulo del patrón (52) y en el de cada una de sus líneas (53), que en DXF van en grados. Las líneas
+ * salían casi paralelas y patrones como GRAVEL quedaban en guiones sueltos.
+ */
+export function hatchAnglesToDegrees(doc: CadDocument): void {
+  const deg = 180 / Math.PI
+  const done = new Set<object>() // un patrón puede ser el mismo objeto en varios sombreados
+  for (const br of doc.blockRecords ?? []) {
+    for (const e of br.entities) {
+      if (!(e instanceof Hatch) || done.has(e)) continue
+      done.add(e)
+      // El campo, no `patternAngle`: su setter además gira las líneas del patrón.
+      const h = e as unknown as { _patternAngle: number }
+      h._patternAngle *= deg
+      for (const l of e.pattern?.lines ?? []) {
+        if (done.has(l)) continue
+        done.add(l)
+        l.angle *= deg
+      }
+    }
+  }
 }
 
 /**

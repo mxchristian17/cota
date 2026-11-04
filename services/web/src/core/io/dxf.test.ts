@@ -686,6 +686,13 @@ describe('entidades de DWG/DXF que Cota dibuja con piezas simples', () => {
     expect(bh.loops[0].vertices.slice(0, 3).map((q) => q.map((x) => Math.round(x * 1e9) / 1e9))).toEqual([[0, 0, 0], [4, 0, 0], [2, 2, 0]])
   })
 
+  it('transparencia (440): la opacidad del objeto se lee como su transparencia y vuelve igual al exportar', () => {
+    const r = importDxf(dxf(rec('LINE', [10, 0], [20, 0], [30, 0], [11, 1], [21, 0], [31, 0], [440, 0x02000033]), rec('LINE', [10, 0], [20, 0], [30, 0], [11, 1], [21, 0], [31, 0], [440, 0x020000ff])))
+    expect(r.entities.map((e) => e.transparency)).toEqual([0.8, undefined])
+    const back = importDxf(exportDxf(r.entities.map((e, i) => ({ id: `l${i}`, type: e.type, layer: 'A', props: e.props, ...(e.transparency ? { transparency: e.transparency } : {}) })) as never, [lineLayer]))
+    expect(back.entities.map((e) => e.transparency)).toEqual([0.8, undefined])
+  })
+
   it('SPLINE definida sólo por los puntos por donde pasa (11/21/31): se dibuja por ellos', () => {
     const r = importDxf(dxf(rec('SPLINE', [70, 0], [71, 3], [74, 3], [12, 1], [22, 0], [32, 0], [11, 0], [21, 0], [31, 0], [11, 5], [21, 2], [31, 0], [11, 10], [21, 0], [31, 0])))
     expect(r.entities[0].props).toEqual({ controlPoints: [[0, 0, 0], [5, 2, 0], [10, 0, 0]], degree: 3 })

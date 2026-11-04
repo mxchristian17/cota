@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ACadVersion, BlockRecord, CadDocument, Circle, DwgWriter, DxfWriter, Field, FieldList, Insert, Layer, Line, ModelerGeometryWire, Solid3D, XY, XYZ } from '@node-projects/acad-ts'
+import { ACadVersion, BlockRecord, CadDocument, Circle, DwgWriter, DxfWriter, Field, FieldList, Hatch, HatchPattern, HatchPatternLine, Insert, Layer, Line, ModelerGeometryWire, Solid3D, XY, XYZ } from '@node-projects/acad-ts'
 import { CadTimeoutError, dwgToDxfText, dwgVersion, importCadInWorker } from './dwg'
 import { importDxf } from './dxf'
-import { adoptOrphans, solidsAsWires } from './dwgConvert'
+import { adoptOrphans, hatchAnglesToDegrees, solidsAsWires } from './dwgConvert'
 
 /** Un DWG 2018 armado en el test: una línea y un círculo en una capa, y un bloque insertado dos veces. */
 function sampleDwg(): ArrayBuffer {
@@ -207,5 +207,23 @@ describe('entidades proxy de un DXF', () => {
     adoptOrphans(doc)
     expect(child.owner).toBe(parent)
     expect(parent.owner).toBe(list)
+  })
+
+  it('los ángulos de los sombreados van en grados al DXF intermedio (acad-ts los guarda en radianes)', () => {
+    const doc = new CadDocument()
+    const pat = new HatchPattern('GRAVEL')
+    const a = new Hatch()
+    a.pattern = pat
+    a.patternAngle = Math.PI / 6
+    const line = new HatchPatternLine()
+    line.angle = (228.0128 * Math.PI) / 180
+    pat.lines.push(line)
+    const b = new Hatch()
+    b.pattern = pat // el mismo patrón en dos sombreados: se convierte una vez
+    doc.modelSpace!.entities.add(a)
+    doc.modelSpace!.entities.add(b)
+    hatchAnglesToDegrees(doc)
+    expect(line.angle).toBeCloseTo(228.0128, 9)
+    expect(a.patternAngle).toBeCloseTo(30, 9)
   })
 })

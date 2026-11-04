@@ -656,7 +656,7 @@ export const useStore = create<AppState>((set, get) => {
     for (const { layout, s } of tabs) {
       doc.setActiveTab(layout.id)
       for (const e of s.entities) {
-        doc.addEntity({ type: e.type, layer: layerId(e.layerName), props: e.props, lineType: e.lineType ?? 'BYLAYER', ltScale: e.ltScale ?? 1, color: e.color ?? 'BYLAYER', lineWeight: e.lineWeight ?? -1 })
+        doc.addEntity({ type: e.type, layer: layerId(e.layerName), props: e.props, lineType: e.lineType ?? 'BYLAYER', ltScale: e.ltScale ?? 1, color: e.color ?? 'BYLAYER', lineWeight: e.lineWeight ?? -1, ...(e.transparency ? { transparency: e.transparency } : {}) })
       }
       for (const v of s.viewports) {
         const props = newViewportProps(v.center, v.width, v.height)
@@ -696,7 +696,7 @@ export const useStore = create<AppState>((set, get) => {
     }
     for (const e of entities) {
       const layerId = idByName.get(e.layerName.toLowerCase()) ?? doc.firstLayerId
-      const added = doc.addEntity({ type: e.type, layer: layerId, props: e.props, lineType: e.lineType ?? 'BYLAYER', ltScale: e.ltScale ?? 1, color: e.color ?? 'BYLAYER', lineWeight: e.lineWeight ?? -1 })
+      const added = doc.addEntity({ type: e.type, layer: layerId, props: e.props, lineType: e.lineType ?? 'BYLAYER', ltScale: e.ltScale ?? 1, color: e.color ?? 'BYLAYER', lineWeight: e.lineWeight ?? -1, ...(e.transparency ? { transparency: e.transparency } : {}) })
       if (added.lineType && added.lineType !== 'BYBLOCK') doc.loadLinetype(added.lineType)
       if (added.type === 'DIMENSION' && doc.dimStyleDef(added.props.styleName ?? '')) doc.restyleDimension(added.props, added.props.styleName, added.props.overrides)
     }

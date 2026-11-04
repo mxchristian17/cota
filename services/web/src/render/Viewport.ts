@@ -2399,7 +2399,7 @@ export class Viewport {
         const layer = layerMap.get(e.layer)
         if (!layerVisible(layer)) continue
         const selected = selection.has(e.id)
-        const colorHex = this.layerHex(layer, e.color)
+        const colorHex = this.entityHex(layer, e)
 
         if (!selected && (e.type === 'TEXT' || e.type === 'ATTDEF')) {
           // Su caja de selección va a un lote invisible (una sola malla para miles de textos).
@@ -2775,6 +2775,18 @@ export class Viewport {
    * Color con que se ve una capa: el color 7 según el fondo y las bloqueadas atenuadas (como LAYLOCKFADECTL 50); se
    * ven y dan snaps. Las congeladas no se dibujan (como las apagadas).
    */
+  /** Color con que se ve una entidad: el suyo o el de su capa, mezclado con el fondo según su transparencia. */
+  private entityHex(layer: Layer | undefined, e: Entity): string {
+    const hex = this.layerHex(layer, e.color)
+    const t = e.transparency
+    if (!t || t <= 0) return hex
+    const k = Math.min(1, t)
+    const bg = '#' + this.bgColor.getHexString()
+    const ch = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16)
+    const mix = [0, 1, 2].map((i) => Math.round(ch(hex, i) * (1 - k) + ch(bg, i) * k))
+    return '#' + mix.map((v) => v.toString(16).padStart(2, '0')).join('')
+  }
+
   private layerHex(layer: Layer | undefined, own?: string): string {
     // Color propio del objeto, o el de su capa (ByLayer); las bloqueadas se atenúan igual.
     const hex = this.ink((own?.startsWith('#') ? own : undefined) ?? layer?.color ?? '#ffffff')
@@ -2850,7 +2862,7 @@ export class Viewport {
       const layer = layerMap.get(e.layer)
       if (!layerVisible(layer)) return
       const selected = selection.has(e.id)
-      const color = new THREE.Color(selected ? HIGHLIGHT : this.layerHex(layer, e.color))
+      const color = new THREE.Color(selected ? HIGHLIGHT : this.entityHex(layer, e))
       if (e.type === 'SOLID3D') {
         this.entityGroup.add(this.buildSolid(e, color, selected))
         return

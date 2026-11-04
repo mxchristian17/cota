@@ -152,9 +152,10 @@ export function plotColor(hex: string, style: PlotStyle): [number, number, numbe
  * Operadores de color y ancho de una capa (lineweight en mm absolutos del papel). Los tipos de línea no
  * usan el patrón de trazo del PDF: los trazos se generan como geometría, igual que en pantalla.
  */
-export function strokeStyleOps(layer: Layer | undefined, style: PlotStyleOpts = DEFAULT_STYLE, own?: Pick<Entity, 'color' | 'lineWeight'>): string {
-  // Color y grosor propios del objeto, o los de su capa (ByLayer).
-  const [r, g, b] = plotColor((own?.color?.startsWith('#') ? own.color : undefined) ?? layer?.color ?? '#000000', style.plotStyle)
+export function strokeStyleOps(layer: Layer | undefined, style: PlotStyleOpts = DEFAULT_STYLE, own?: Pick<Entity, 'color' | 'lineWeight' | 'transparency'>): string {
+  // Color y grosor propios del objeto, o los de su capa (ByLayer); con transparencia, mezclado con el papel (blanco).
+  const t = Math.min(1, Math.max(0, own?.transparency ?? 0))
+  const [r, g, b] = plotColor((own?.color?.startsWith('#') ? own.color : undefined) ?? layer?.color ?? '#000000', style.plotStyle).map((c) => c * (1 - t) + t) as [number, number, number]
   const lw0 = own?.lineWeight !== undefined && own.lineWeight >= 0 ? own.lineWeight : layer?.lineWeight
   const lwMm = style.lineWeights ? lw0 || DEFAULT_LW_MM : THIN_LW_MM
   const lw = Math.max(0.1, lwMm * MM_TO_PT)

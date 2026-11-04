@@ -45,12 +45,21 @@ function commonCodes(e: Entity): string {
     if (aciToHex(aci).toLowerCase() !== e.color.toLowerCase()) out += p(420, hexToTruecolor(e.color))
   }
   if (e.lineWeight !== undefined && e.lineWeight >= 0) out += p(370, e.lineWeight === 0 ? -3 : Math.round(e.lineWeight * 100))
+  if (e.transparency) out += p(440, 0x02000000 | Math.round((1 - Math.min(1, e.transparency)) * 255))
   return out
 }
 
-/** Color y grosor propios de un record (62/420, 370); ByLayer/ByBlock/Default de color quedan sin color propio. */
-function ownColorWeight(codes: Rec['codes']): Pick<DxfEntitySpec, 'color' | 'lineWeight'> {
-  const out: Pick<DxfEntitySpec, 'color' | 'lineWeight'> = {}
+/**
+ * Color, grosor y transparencia propios de un record (62/420, 370, 440); ByLayer/ByBlock/Default de color quedan sin
+ * color propio. La transparencia (440) es 0x020000AA con la opacidad AA (0–255).
+ */
+function ownColorWeight(codes: Rec['codes']): Pick<DxfEntitySpec, 'color' | 'lineWeight' | 'transparency'> {
+  const out: Pick<DxfEntitySpec, 'color' | 'lineWeight' | 'transparency'> = {}
+  const tr = num(codes, 440, -1)
+  if (tr >= 0 && tr & 0x02000000) {
+    const t = Math.round((1 - (tr & 0xff) / 255) * 1000) / 1000
+    if (t > 0) out.transparency = t
+  }
   const tc = codes.find(([c]) => c === 420)
   const aci = num(codes, 62, 256)
   if (tc) out.color = truecolorToHex(Number(tc[1]))
@@ -380,9 +389,10 @@ export interface DxfEntitySpec {
   /** Tipo de línea del objeto (código 6; ausente = ByLayer) y su escala (48). */
   lineType?: string
   ltScale?: number
-  /** Color propio (62/420; ausente = ByLayer) y grosor en mm (370; ausente = ByLayer). */
+  /** Color propio (62/420; ausente = ByLayer), grosor en mm (370; ausente = ByLayer) y transparencia (440, 0–1). */
   color?: string
   lineWeight?: number
+  transparency?: number
 }
 
 export interface DxfImportResult {

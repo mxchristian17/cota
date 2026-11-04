@@ -624,6 +624,8 @@ export interface EntityCommon {
   color?: string
   /** Grosor propio en mm (0 = Default); ausente = ByLayer. En un `EntityInput`, -1 explícito evita tomar CELWEIGHT. */
   lineWeight?: number
+  /** Transparencia propia, 0 (opaco) a 1; ausente = opaco. Se ve como su color mezclado con el fondo. */
+  transparency?: number
   /** Firma de tamaño de sólidos y mallas: esfera envolvente y clave del contenido. */
   size?: import('../render/lod').SizeSig
 }

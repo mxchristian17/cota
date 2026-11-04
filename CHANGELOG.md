@@ -4,6 +4,18 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.24.0] — 2026-11-04
+
+### Added
+- **Transparency** of objects from DWG and DXF files (hatches at 50 %, for example) is applied: they show lighter,
+  mixed with the background (and with the paper in plots), so a transparent fill no longer hides the pattern under it.
+  It is kept when exporting to DXF.
+
+### Fixed
+- **Hatch patterns from DWG files** (GRAVEL, AR-CONC, AR-SAND, bricks and the rest) came out broken: the angles of the
+  pattern and of its lines were written in radians where degrees go, so every line of the pattern lay almost flat and
+  gravel, for example, showed as loose dashes instead of stones.
+
 ## [2.23.0] — 2026-11-03
 
 ### Added

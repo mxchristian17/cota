@@ -28,6 +28,7 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 | IMAGE | The picture in its place (clip and fade included) once its file is loaded; until then, its frame and file name | IMAGE (DXF; the file path, not the pixels) | The drawing stores only the file path: open the image together with the drawing, drop it on Cota or load it with `IMAGE`; from the working folder it loads on its own |
 | PDF, DWF and DGN UNDERLAY | File name at the insertion point | Text | The content is an external file |
 | OLE2FRAME | Frame | Polyline | |
+| Transparency (440) | Applied: the color is mixed with the background (on screen) or the paper (in plots) | Native | Layer transparency is not read |
 | WIPEOUT | A mask filled with the background color, over the lines of every layer and under the texts | WIPEOUT | Its frame is not drawn |
 | SHAPE | Point, with a notice | Point | Its drawing is in an external shape file |
 | LIGHT, SUN | Ignored | — | Not drawing content |
