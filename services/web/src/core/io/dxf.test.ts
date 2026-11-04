@@ -300,6 +300,11 @@ describe('DXF: TEXT y MTEXT del CAD clásico', () => {
 
   it('el MTEXT llega como texto plano: sin códigos de formato, con renglones y Unicode', () => {
     expect(plainMtext('{\\fArial|b1|i0;\\H2.5;Hola}\\Pmundo \\U+2205 20 \\S1/2; \\{x\\}')).toBe('Hola\nmundo ∅ 20 1/2 {x}')
+    // \p…; (sangría y tabulaciones del párrafo) no es un salto ni se ve; \A (alineación) y \C (color) tampoco.
+    expect(plainMtext('\\pxi4.5;{\\C7;TITULO}')).toBe('TITULO')
+    expect(plainMtext('\\pxt0;{\\T1.1;\\C7;Director:\\PIng. Pérez}')).toBe('Director:\nIng. Pérez')
+    expect(plainMtext('\\A1;32.90')).toBe('32.90')
+    expect(plainMtext('Escalas: ^JIndicadas ^Iy x^ 2')).toBe('Escalas: \nIndicadas     y x^2')
     const m = one(body([[0, 'MTEXT'], [10, 0], [20, 0], [30, 0], [40, 2], [1, '%%c10\\P{\\C1;rojo}']]))
     expect(m.text).toBe('Ø10\nrojo')
   })
@@ -589,6 +594,11 @@ describe('entidades de DWG/DXF que Cota dibuja con piezas simples', () => {
     expect(types.filter((t) => t === 'POLYLINE')).toHaveLength(3) // tres casillas
     expect(types).toContain('CIRCLE') // el círculo del símbolo de posición
     expect(r.entities.filter((e) => e.type === 'TEXT').map((e) => (e.props as { text: string }).text)).toEqual(['0.2', 'A'])
+  })
+
+  it('SPLINE definida sólo por los puntos por donde pasa (11/21/31): se dibuja por ellos', () => {
+    const r = importDxf(dxf(rec('SPLINE', [70, 0], [71, 3], [74, 3], [12, 1], [22, 0], [32, 0], [11, 0], [21, 0], [31, 0], [11, 5], [21, 2], [31, 0], [11, 10], [21, 0], [31, 0])))
+    expect(r.entities[0].props).toEqual({ controlPoints: [[0, 0, 0], [5, 2, 0], [10, 0, 0]], degree: 3 })
   })
 
   it('IMAGE: la imagen con su lugar, su tamaño y el archivo; vuelve igual al exportar', () => {

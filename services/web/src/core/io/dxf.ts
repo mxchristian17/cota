@@ -441,12 +441,16 @@ interface Rec {
 export function plainMtext(raw: string): string {
   return raw
     .replace(/\\U\+([0-9a-f]{4})/gi, (_, h: string) => String.fromCharCode(parseInt(h, 16)))
-    .replace(/\\[Pp]/g, '\n')
+    // \p…; son las propiedades del párrafo (sangrías, tabulaciones); sólo \P (mayúscula) es un salto de renglón.
+    .replace(/\\p[^;]*;/g, '')
+    .replace(/\\P/g, '\n')
     .replace(/\\S([^;]*);/g, (_, s: string) => s.replace(/[#^]/, '/'))
-    .replace(/\\[ACcFfHhQTWp][^;]*;/g, '')
+    .replace(/\\[ACcFfHhQTW][^;]*;/g, '')
     .replace(/\\[LlOoKkNX]/g, '')
     .replace(/\\~/g, ' ')
     .replace(/\\([\\{}])|[{}]/g, (_, e?: string) => e ?? '')
+    // Caracteres de control escritos con circunflejo: ^J salto de renglón, ^I tabulación, ^M retorno; "^ " es un ^.
+    .replace(/\^([IJM ])/g, (_, k: string) => (k === 'J' ? '\n' : k === 'I' ? '    ' : k === ' ' ? '^' : ''))
 }
 
 function num(codes: Array<[number, string]>, code: number, def = 0): number {
@@ -1318,19 +1322,28 @@ function parseEntity(rec: Rec): { type: EntityType; props: EntityProps } | null 
       return vertices.length >= 2 ? { type: 'POLYLINE', props: { vertices, closed: false } as EntityProps } : null
     }
     case 'SPLINE': {
-      const cps: Vec3[] = []
-      let x: number | null = null
-      let y: number | null = null
-      for (const [code, val] of c) {
-        if (code === 10) x = Number(val)
-        else if (code === 20) y = Number(val)
-        else if (code === 30 && x !== null && y !== null) {
-          cps.push([x, y, Number(val)])
-          x = null
-          y = null
+      // Puntos de control (10/20/30) o, si la curva se definió por los puntos por donde pasa, ésos (11/21/31): así
+      // la guardan algunos programas y el lector de DWG, sin los de control. Cota dibuja la curva pasando por ellos.
+      const points = (base: number): Vec3[] => {
+        const out: Vec3[] = []
+        let x: number | null = null
+        let y: number | null = null
+        const flush = (z = 0) => {
+          if (x !== null && y !== null) out.push([x, y, z])
+          x = y = null
         }
+        for (const [code, val] of c) {
+          if (code === base) {
+            flush()
+            x = Number(val)
+          } else if (code === base + 10) y = Number(val)
+          else if (code === base + 20) flush(Number(val))
+        }
+        flush()
+        return out
       }
-      return { type: 'SPLINE', props: { controlPoints: cps, degree: num(c, 71, 3) } }
+      const cps = points(10)
+      return { type: 'SPLINE', props: { controlPoints: cps.length >= 2 ? cps : points(11), degree: num(c, 71, 3) } }
     }
     default:
       return null

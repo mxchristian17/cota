@@ -1,4 +1,4 @@
-import { DimensionArc, DwgReader, DxfReader, DxfWriter, GraphicsType, Insert, ProxyGeometryReader, Line, Mesh, ModelerGeometry, MText, MultiLeader, Polyline3D, ProxyEntity, Solid, UnknownEntity, XYZ, type CadDocument, type Entity, type IProxyGeometry, type ModelerGeometryWire } from '@node-projects/acad-ts'
+import { CadDictionary, DimensionArc, DwgReader, Field, FieldList, DxfReader, DxfWriter, GraphicsType, Insert, ProxyGeometryReader, Line, Mesh, ModelerGeometry, MText, MultiLeader, Polyline3D, ProxyEntity, Solid, UnknownEntity, XYZ, type CadDocument, type Entity, type IProxyGeometry, type ModelerGeometryWire } from '@node-projects/acad-ts'
 
 import { acisEdges } from './acis'
 import { acisMesh, SOLID_MESH_REF } from './acisMesh'
@@ -24,6 +24,7 @@ export function convertDwgToDxfBytes(data: ArrayBuffer, light = false): CadConve
   const solidMeshes: PackedMesh[] = []
   const wireSolids = solidsAsWires(doc, solidMeshes, light)
   simplifyForDxf(doc)
+  adoptOrphans(doc)
   return { bytes: writeDxfBytes(doc), wireSolids, solidMeshes }
 }
 
@@ -36,7 +37,32 @@ export function binaryDxfToDxfBytes(data: ArrayBuffer, light = false): CadConver
   const solidMeshes: PackedMesh[] = []
   const wireSolids = solidsAsWires(doc, solidMeshes, light)
   simplifyForDxf(doc)
+  adoptOrphans(doc)
   return { bytes: writeDxfBytes(doc), wireSolids, solidMeshes }
+}
+
+/**
+ * Objetos sin dueño: el lector deja así algunos (los campos anidados de un FIELD, p. ej. el de un texto que muestra un
+ * dato del dibujo) y el escritor de DXF escribe el dueño de cada objeto: con uno solo así fallaba todo el archivo. Cada
+ * uno pasa a ser del objeto que lo contiene.
+ */
+export function adoptOrphans(doc: CadDocument): void {
+  const seen = new Set<object>()
+  type Node = { owner?: unknown; xDictionary?: unknown } | null | undefined
+  const visit = (o: Node, parent: unknown): void => {
+    if (!o || typeof o !== 'object' || seen.has(o)) return
+    seen.add(o)
+    if (o.owner == null && parent) o.owner = parent
+    visit(o.xDictionary as Node, o)
+    if (o instanceof CadDictionary) for (const e of o) visit(e as Node, o)
+    if (o instanceof Field) for (const c of o.children ?? []) visit(c as Node, o)
+    if (o instanceof FieldList) for (const f of o.fields ?? []) visit(f as Node, o)
+  }
+  visit(doc.rootDictionary as Node, null)
+  for (const br of doc.blockRecords ?? []) {
+    visit(br as Node, null)
+    for (const e of br.entities) visit(e as Node, br)
+  }
 }
 
 function writeDxfBytes(doc: CadDocument): Uint8Array {

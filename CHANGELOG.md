@@ -4,6 +4,17 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.21.1] — 2026-11-03
+
+### Fixed
+- **DWG files with fields in their texts** (a title block that shows a property of the drawing, for example) did not
+  open: a nested field without an owner stopped the whole conversion. They open now.
+- **Splines defined by the points they pass through**, without control points (as some programs write them and as
+  the DWG reader delivers them), came in empty; they are now drawn through those points (e.g. the water line of a
+  longitudinal profile).
+- **Paragraph codes in multiline text** (`\p…;`, indents and tabs) and control characters written as `^J` / `^I`
+  showed up as stray characters in title blocks ("xt0;", "^J"); they now become line breaks and spacing.
+
 ## [2.21.0] — 2026-11-03
 
 ### Added

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ACadVersion, BlockRecord, CadDocument, Circle, DwgWriter, DxfWriter, Insert, Layer, Line, ModelerGeometryWire, Solid3D, XY, XYZ } from '@node-projects/acad-ts'
+import { ACadVersion, BlockRecord, CadDocument, Circle, DwgWriter, DxfWriter, Field, FieldList, Insert, Layer, Line, ModelerGeometryWire, Solid3D, XY, XYZ } from '@node-projects/acad-ts'
 import { CadTimeoutError, dwgToDxfText, dwgVersion, importCadInWorker } from './dwg'
 import { importDxf } from './dxf'
-import { solidsAsWires } from './dwgConvert'
+import { adoptOrphans, solidsAsWires } from './dwgConvert'
 
 /** Un DWG 2018 armado en el test: una línea y un círculo en una capa, y un bloque insertado dos veces. */
 function sampleDwg(): ArrayBuffer {
@@ -193,5 +193,19 @@ describe('entidades proxy de un DXF', () => {
     const r = importDxf(text, { proxyShapes: shapes })
     expect(r.entities.map((e) => e.type)).toEqual(['POLYLINE'])
     expect(r.unsupported).toEqual([])
+  })
+
+  it('un campo anidado sin dueño (así lo deja el lector) no impide escribir el DXF intermedio', () => {
+    const doc = new CadDocument()
+    const parent = new Field()
+    const child = new Field()
+    parent.children.push(child)
+    const list = new FieldList()
+    list.fields.push(parent)
+    doc.rootDictionary!.add(Object.assign(list, { name: 'ACAD_FIELDLIST' }))
+    ;(child as unknown as { owner: unknown }).owner = null
+    adoptOrphans(doc)
+    expect(child.owner).toBe(parent)
+    expect(parent.owner).toBe(list)
   })
 })
