@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { exportDxf, importDxf, plainMtext } from './dxf'
+import { exportDxf, importDxf, mtextIndent, plainMtext } from './dxf'
 import { textTop } from '../geom/text'
 import type { TextProps } from '../document/types'
 import { DEFAULT_DIM_STYLE } from '../dimension/dimGeometry'
@@ -305,6 +305,8 @@ describe('DXF: TEXT y MTEXT del CAD clásico', () => {
     expect(plainMtext('\\pxt0;{\\T1.1;\\C7;Director:\\PIng. Pérez}')).toBe('Director:\nIng. Pérez')
     expect(plainMtext('\\A1;32.90')).toBe('32.90')
     expect(plainMtext('Escalas: ^JIndicadas ^Iy x^ 2')).toBe('Escalas: \nIndicadas     y x^2')
+    // La sangría del párrafo (en altos de texto) corre el texto alineado a la izquierda: 2 × 5 = 10.
+    expect(mtextIndent('\\pxi1.5,l0.5,t4;{\\C7;A}')).toEqual({ first: 1.5, left: 0.5 })
     const m = one(body([[0, 'MTEXT'], [10, 0], [20, 0], [30, 0], [40, 2], [1, '%%c10\\P{\\C1;rojo}']]))
     expect(m.text).toBe('Ø10\nrojo')
   })
@@ -594,6 +596,11 @@ describe('entidades de DWG/DXF que Cota dibuja con piezas simples', () => {
     expect(types.filter((t) => t === 'POLYLINE')).toHaveLength(3) // tres casillas
     expect(types).toContain('CIRCLE') // el círculo del símbolo de posición
     expect(r.entities.filter((e) => e.type === 'TEXT').map((e) => (e.props as { text: string }).text)).toEqual(['0.2', 'A'])
+  })
+
+  it('MTEXT con sangría de párrafo: alineado a la izquierda, el texto empieza corrido (en altos de texto)', () => {
+    const r = importDxf(dxf(rec('MTEXT', [10, 100], [20, 50], [30, 0], [40, 5], [71, 1], [1, '\\pxi2;Celda'])))
+    expect((r.entities[0].props as { position: number[] }).position[0]).toBeCloseTo(110)
   })
 
   it('SPLINE definida sólo por los puntos por donde pasa (11/21/31): se dibuja por ellos', () => {

@@ -4,6 +4,12 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.21.2] — 2026-11-03
+
+### Fixed
+- **Paragraph indents of multiline text** (`\pi…;`, measured in text heights) are applied to left-aligned text: the
+  titles of a title block, indented to sit inside their cell, came out over its left border.
+
 ## [2.21.1] — 2026-11-03
 
 ### Fixed

@@ -453,6 +453,20 @@ export function plainMtext(raw: string): string {
     .replace(/\^([IJM ])/g, (_, k: string) => (k === 'J' ? '\n' : k === 'I' ? '    ' : k === ' ' ? '^' : ''))
 }
 
+/** Sangría al comienzo de un MTEXT (`\pxi1.5,l2;`): la del primer renglón (`i`) y la izquierda (`l`), en altos de texto. */
+export function mtextIndent(raw: string): { first: number; left: number } {
+  const m = /^\{?\\p([^;]*);/.exec(raw)
+  const out = { first: 0, left: 0 }
+  if (!m) return out
+  for (const t of m[1].replace(/^x/, '').split(',')) {
+    const v = Number(t.slice(1))
+    if (!Number.isFinite(v)) continue
+    if (t[0] === 'i') out.first = v
+    else if (t[0] === 'l') out.left = v
+  }
+  return out
+}
+
 function num(codes: Array<[number, string]>, code: number, def = 0): number {
   const f = codes.find((c) => c[0] === code)
   return f ? Number(f[1]) : def
@@ -1261,6 +1275,14 @@ function parseEntity(rec: Rec): { type: EntityType; props: EntityProps } | null 
         justify: (['left', 'center', 'right'] as const)[(j71 - 1) % 3],
         normal: extrusionOf(c),
         kind: 'mtext',
+      }
+      // Sangría del párrafo (`\pxi…,l…;` al principio, en altos de texto): corre el texto alineado a la izquierda. La del
+      // primer renglón sólo cuenta si hay uno (el rótulo de una celda); el margen izquierdo, siempre.
+      const indent = mtextIndent(raw)
+      if (props.justify === 'left' && (indent.first || indent.left)) {
+        const k = (text.includes('\n') ? indent.left : indent.first + indent.left) * height
+        const { u } = textAxes(props)
+        props.position = [0, 1, 2].map((i) => props.position[i] + u[i] * k) as Vec3
       }
       // Anclado al medio o abajo (71 = 4…9): el punto de Cota es el de arriba.
       const row = Math.floor((j71 - 1) / 3)
