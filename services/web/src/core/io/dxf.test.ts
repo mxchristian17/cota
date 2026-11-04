@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { exportDxf, importDxf, mtextIndent, plainMtext } from './dxf'
+import { exportDxf, importDxf, mtextIndent, plainMtext, shownDecimals } from './dxf'
 import { textTop } from '../geom/text'
 import type { TextProps } from '../document/types'
 import { DEFAULT_DIM_STYLE } from '../dimension/dimGeometry'
@@ -636,6 +636,27 @@ describe('entidades de DWG/DXF que Cota dibuja con piezas simples', () => {
       ['Arial', true, undefined],
       ['Arial', true, 0.82],
     ])
+  })
+
+  it('cotas: los cambios propios de cada una (DSTYLE) y los decimales con que se veía (el texto de su bloque)', () => {
+    expect(shownDecimals('\\A1;32.90', 32.89999)).toBeNull() // sin decodificar no es el número
+    expect(shownDecimals('32.90', 32.89999)).toBe(2)
+    expect(shownDecimals('12', 12.0004)).toBe(0)
+    expect(shownDecimals('33.10', 32.9)).toBeNull()
+    const dim = (blk: string, m: number, ...xd: Array<[number, string | number]>) =>
+      rec('DIMENSION', [2, blk], [3, 'Standard'], [70, 32], [10, 10], [20, 5], [30, 0], [13, 0], [23, 0], [33, 0], [14, m], [24, 0], [34, 0], [42, m], ...xd)
+    const blocks = '0\nSECTION\n2\nBLOCKS\n0\nBLOCK\n2\n*D1\n10\n0\n20\n0\n30\n0\n0\nMTEXT\n8\n0\n10\n5\n20\n1\n30\n0\n40\n1\n1\n\\A1;32.90\n0\nENDBLK\n0\nENDSEC\n'
+    const r = importDxf(blocks + dxf(dim('*D1', 32.89999), dim('*D9', 12, [1001, 'ACAD'], [1000, 'DSTYLE'], [1002, '{'], [1070, 271], [1070, 1], [1070, 140], [1040, 0.4], [1002, '}'])))
+    const dims = r.entities.filter((e) => e.type === 'DIMENSION').map((e) => e.props as { overrides?: Record<string, unknown>; style: { DIMDEC: number; DIMTXT: number } })
+    expect(dims[0].overrides).toEqual({ DIMDEC: 2 })
+    expect(dims[0].style.DIMDEC).toBe(2)
+    expect(dims[1].overrides).toEqual({ DIMDEC: 1, DIMTXT: 0.4 })
+    expect(dims[1].style.DIMTXT).toBe(0.4)
+    // Un texto propio con formato: plano, y su alto relativo agranda el de la cota (0.2 × 20 = 4).
+    const o = importDxf(dxf(dim('*D9', 12, [1, '{\\H20x;90.00}'], [1001, 'ACAD'], [1000, 'DSTYLE'], [1002, '{'], [1070, 140], [1040, 0.2], [1002, '}'])))
+    const od = o.entities[0].props as { textOverride: string; style: { DIMTXT: number } }
+    expect(od.textOverride).toBe('90.00')
+    expect(od.style.DIMTXT).toBeCloseTo(4)
   })
 
   it('SPLINE definida sólo por los puntos por donde pasa (11/21/31): se dibuja por ellos', () => {

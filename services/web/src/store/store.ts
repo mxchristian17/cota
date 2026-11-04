@@ -698,7 +698,7 @@ export const useStore = create<AppState>((set, get) => {
       const layerId = idByName.get(e.layerName.toLowerCase()) ?? doc.firstLayerId
       const added = doc.addEntity({ type: e.type, layer: layerId, props: e.props, lineType: e.lineType ?? 'BYLAYER', ltScale: e.ltScale ?? 1, color: e.color ?? 'BYLAYER', lineWeight: e.lineWeight ?? -1 })
       if (added.lineType && added.lineType !== 'BYBLOCK') doc.loadLinetype(added.lineType)
-      if (added.type === 'DIMENSION' && doc.dimStyleDef(added.props.styleName ?? '')) doc.restyleDimension(added.props, added.props.styleName, undefined)
+      if (added.type === 'DIMENSION' && doc.dimStyleDef(added.props.styleName ?? '')) doc.restyleDimension(added.props, added.props.styleName, added.props.overrides)
     }
     if (unsupported.length) print(`Unsupported entities skipped: ${unsupported.join(', ')}.`)
     if (r.meshedSolids) print(`${r.meshedSolids} 3D solid(s) read with their faces (as meshes).`)

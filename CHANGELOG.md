@@ -4,6 +4,15 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.22.1] — 2026-11-03
+
+### Fixed
+- **Dimension overrides** kept in DWG and DXF files (precision, text height, arrow size and the rest that a dimension
+  changes from its style) are applied; they were ignored, so dimensions came in with the style's text size and
+  decimals. When a dimension's own picture shows the measurement with other decimals than its style, Cota keeps
+  those decimals.
+- **Dimension text with formatting** (`{\H20x;90.00}`) shows as plain text at its height instead of tiny.
+
 ## [2.22.0] — 2026-11-03
 
 ### Added

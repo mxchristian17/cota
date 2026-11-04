@@ -1,7 +1,7 @@
 import { BASELINE_DROP, LINE_SPACING, attdefText, textAxes, textSize } from '../geom/text'
 import { decodeTextCodes, encodeTextCodes } from '../text/codes'
 import type { Vec3 } from '../math'
-import type { DrawingVars, Entity, EntityProps, EntityType, ImageProps, InsertProps, Layer, TextRun, LineType, LinetypeDefData, RectangleProps, TextProps } from '../document/types'
+import type { DimensionProps, DrawingVars, Entity, EntityProps, EntityType, ImageProps, InsertProps, Layer, TextRun, LineType, LinetypeDefData, RectangleProps, TextProps } from '../document/types'
 import { pointMap, transformEntity as transformInsertEntity } from '../editing/block'
 import { BYBLOCK, BYLAYER, CONTINUOUS, linetypeLabel, patternLength } from '../linetype/linetypes'
 import { hatchDxf, parseHatch } from './dxfHatch'
@@ -489,6 +489,15 @@ function textRuns(raw: string, base: number, height: number, text: string): Text
   return styled.size > 1 ? runs.filter((r) => r.s) : undefined
 }
 
+/** Decimales con que un texto muestra una medida (`32.90` → 2), o null si el texto no es esa medida. */
+export function shownDecimals(shown: string, measured: number): number | null {
+  const m = /(\d+)(?:[.,](\d+))?/.exec(shown)
+  if (!m || !isFinite(measured)) return null
+  const n = m[2]?.length ?? 0
+  const v = Number(`${m[1]}.${m[2] ?? '0'}`)
+  return Math.abs(v - Number(measured.toFixed(n))) < 1e-9 ? n : null
+}
+
 /** Estilos de texto del archivo que se está leyendo (tabla STYLE, por nombre en mayúsculas): fuente y ancho. */
 let textStyles = new Map<string, { look: FontLook; widthFactor: number }>()
 
@@ -582,6 +591,13 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
   /** Definiciones de la sección BLOCKS (punto base + contenido) e inserciones a expandir. */
   const blocks = new Map<string, { base: Vec3; items: BlockItem[] }>()
   let block: { base: Vec3; items: BlockItem[] } | null = null
+  /** Lo que mostraba una cota según su bloque (el texto, ya armado) y su medida real (42): ver `styled`. */
+  const dimShown = (rec: Rec): { shownText?: string; measured?: number } => {
+    const b = blocks.get((str(rec.codes, 2) ?? '').toUpperCase())
+    const t = b?.items.find((it) => it.spec?.type === 'TEXT')?.spec?.props as TextProps | undefined
+    const m = rec.codes.find((x) => x[0] === 42)
+    return t && m ? { shownText: t.text, measured: Number(m[1]) } : {}
+  }
   /** Contenido de cada espacio papel, por el nombre de su bloque (`*Paper_Space…`). */
   const paper = new Map<string, BlockItem[]>()
   const paperItems = (name: string): BlockItem[] => {
@@ -855,7 +871,7 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
         if (dim) block.items.push({ insert: dim })
         else if (rec.type === 'DIMENSION') {
           const d = parseDimension(rec.codes)
-          if (d) block.items.push({ spec: { type: 'DIMENSION', layerName: str(rec.codes, 8) ?? '0', props: { ...d.props, styleName: d.styleName } as unknown as EntityProps } })
+          if (d) block.items.push({ spec: { type: 'DIMENSION', layerName: str(rec.codes, 8) ?? '0', props: { ...d.props, styleName: d.styleName, ...dimShown(rec) } as unknown as EntityProps } })
         } else for (const spec of specsOf(rec) ?? []) block.items.push({ spec })
       }
       continue
@@ -870,7 +886,7 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
       else if (rec.type === 'INSERT') items.push({ insert: rec })
       else if (rec.type === 'DIMENSION') {
         const d = parseDimension(rec.codes)
-        if (d) items.push({ spec: { type: 'DIMENSION', layerName: str(rec.codes, 8) ?? '0', props: { ...d.props, styleName: d.styleName } as unknown as EntityProps } })
+        if (d) items.push({ spec: { type: 'DIMENSION', layerName: str(rec.codes, 8) ?? '0', props: { ...d.props, styleName: d.styleName, ...dimShown(rec) } as unknown as EntityProps } })
       } else if (blockDim(rec)) items.push({ insert: blockDim(rec)! })
       else if (rec.type === 'ACAD_TABLE') items.push({ insert: tableInsert(rec) })
       else {
@@ -901,7 +917,7 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
     const layerName = str(rec.codes, 8) ?? '0'
     if (rec.type === 'DIMENSION') {
       const dim = parseDimension(rec.codes)
-      if (dim) entities.push({ type: 'DIMENSION', layerName, props: { ...dim.props, styleName: dim.styleName } as unknown as EntityProps })
+      if (dim) entities.push({ type: 'DIMENSION', layerName, props: { ...dim.props, styleName: dim.styleName, ...dimShown(rec) } as unknown as EntityProps })
       else unsupported.add('DIMENSION (type)')
       continue
     }
@@ -914,8 +930,23 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
   // Cada cota con las variables de su estilo (el documento las vuelve a resolver al agregar los estilos).
   const styled = (e: DxfEntitySpec) => {
     if (e.type !== 'DIMENSION') return
-    const dp = e.props as { styleName?: string; style?: unknown }
-    dp.style = resolveDimVars(dimStyles.find((s) => s.name === dp.styleName)?.vars)
+    const dp = e.props as unknown as DimensionProps & { shownText?: string; measured?: number }
+    const vars = dimStyles.find((s) => s.name === dp.styleName)?.vars
+    const { shownText, measured } = dp
+    delete dp.shownText
+    delete dp.measured
+    // Texto propio con formato de MTEXT (p. ej. `{\H22.2x;90.00}`): el texto plano, y su alto pasa a la cota.
+    if (dp.textOverride && /[\\{}]/.test(dp.textOverride)) {
+      const lead = mtextLead(dp.textOverride)
+      dp.textOverride = decodeTextCodes(plainMtext(dp.textOverride))
+      const k = (lead.height ?? 0) > 0 ? lead.height! / (dp.overrides?.DIMTXT ?? vars?.DIMTXT ?? 2.5) : (lead.heightScale ?? 1)
+      if (Math.abs(k - 1) > 1e-6) dp.overrides = { ...dp.overrides, DIMTXT: (dp.overrides?.DIMTXT ?? vars?.DIMTXT ?? 2.5) * k }
+    }
+    // La precisión con que el plano mostraba la medida (el texto del bloque de la cota, que el CAD clásico regenera): si
+    // es la misma medida con otra cantidad de decimales que la del estilo, la cota la conserva.
+    const n = shownText !== undefined && measured !== undefined && !dp.textOverride ? shownDecimals(shownText, Math.abs(measured * (dp.overrides?.DIMLFAC ?? vars?.DIMLFAC ?? 1))) : null
+    if (n !== null && n !== (dp.overrides?.DIMDEC ?? vars?.DIMDEC) && /^(LINEAR|ALIGNED|RADIUS|DIAMETER|ORDINATE)$/.test(dp.dimType)) dp.overrides = { ...dp.overrides, DIMDEC: n }
+    dp.style = resolveDimVars(vars, dp.overrides)
   }
   // Las de los bloques y hojas, antes de ubicarlas: transformar una cota necesita su estilo.
   for (const b of [...blocks.values(), ...[...paper.values()].map((items) => ({ items }))]) for (const it of b.items) if (it.spec) styled(it.spec)

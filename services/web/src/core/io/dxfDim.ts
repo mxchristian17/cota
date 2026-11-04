@@ -238,6 +238,32 @@ export function parseDimStyle(c: Codes, blockNames: Map<string, string>): DimSty
   return { name: str(c, 2) ?? 'Standard', vars: resolveDimVars(v as unknown as DimVars) }
 }
 
+/**
+ * Variables que una cota cambia de su estilo: el XDATA "ACAD" con DSTYLE { código, valor, … } (lo que DIMOVERRIDE o la
+ * paleta de propiedades del CAD clásico dejan en cada cota). Las flechas (por handle) no se leen.
+ */
+export function dimOverrides(c: Codes): Partial<DimVars> | undefined {
+  const at = c.findIndex(([k, v], i) => k === 1000 && v.trim() === 'DSTYLE' && c[i - 1]?.[0] === 1001)
+  if (at < 0) return undefined
+  const out: Record<string, unknown> = {}
+  for (let i = at + 1; i + 1 < c.length; i++) {
+    const [k, v] = c[i]
+    if (k === 1002 && v.trim() === '}') break
+    if (k !== 1070) continue
+    const info = DIM_VAR_INFO.find((x) => x.dxf === Number(v))
+    const raw = c[i + 1][1]
+    i++
+    if (!info || info.kind === 'arrow' || info.name === 'DIMDSEP') continue
+    const n = Number(raw)
+    if (info.kind === 'string') out[info.name] = fromDxfText(raw.trim())
+    else if (info.kind === 'bool') out[info.name] = n !== 0
+    else if (info.kind === 'color') out[info.name] = n === 0 || n === 256 || !Number.isFinite(n) ? null : aciToHex(Math.abs(n))
+    else if (info.kind === 'lineweight') out[info.name] = n < 0 || !Number.isFinite(n) ? null : n / 100
+    else if (Number.isFinite(n)) out[info.name] = n
+  }
+  return Object.keys(out).length ? (out as Partial<DimVars>) : undefined
+}
+
 /** Una entidad DIMENSION de DXF como cota (sin el estilo resuelto), o null si el tipo no se soporta. */
 export function parseDimension(c: Codes): { props: Omit<DimensionProps, 'style'>; styleName: string } | null {
   const flags = num(c, 70) ?? 0
@@ -252,6 +278,8 @@ export function parseDimension(c: Codes): { props: Omit<DimensionProps, 'style'>
   if (Math.abs(n[0]) > 1e-9 || Math.abs(n[1]) > 1e-9 || n[2] < 0) extra.normal = n
   const t = str(c, 1)
   if (t !== undefined && t !== '' && t !== '<>') extra.textOverride = fromDxfText(t)
+  const ov = dimOverrides(c)
+  if (ov) extra.overrides = ov
   if (flags & 128) extra.textAt = p11
   const obl = num(c, 52)
   if (obl) extra.oblique = obl
