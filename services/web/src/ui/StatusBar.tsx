@@ -192,6 +192,7 @@ export function StatusBar() {
   const polar = useStore((s) => s.polar)
   const togglePolar = useStore((s) => s.togglePolar)
   const toggleDynInput = useStore((s) => s.toggleDynInput)
+  const setDrawingVar = useStore((s) => s.setDrawingVar)
   const setUcs = useStore((s) => s.setUcs)
   const selection = useStore((s) => s.selection)
   const doc = useStore((s) => s.doc)
@@ -295,6 +296,15 @@ export function StatusBar() {
           onClick={withFocus(toggleDynInput)}
         >
           DYN
+        </button>
+        <button
+          className={'status-toggle' + (doc.vars.LWDISPLAY ? ' on' : '')}
+          title="Show lineweights in the model (LWDISPLAY)"
+          data-testid="lwt-toggle"
+          aria-pressed={!!doc.vars.LWDISPLAY}
+          onClick={withFocus(() => setDrawingVar('LWDISPLAY', doc.vars.LWDISPLAY ? 0 : 1))}
+        >
+          LWT
         </button>
         <button
           className={'status-toggle' + (isWorld ? '' : ' on')}

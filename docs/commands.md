@@ -274,6 +274,7 @@ Type the name to see or change the value.
 | `OFFSETGAPTYPE` | Gap fill when offsetting polylines: 0 extend, 1 fillet, 2 chamfer |
 | `POLARANG` | Polar tracking angle increment in degrees (POLAR / F10 tracks multiples of it from the base point) |
 | `PICKSTYLE` | Group selection: 1 = picking a grouped object selects its group, 0 = single objects (Ctrl+Shift+A toggles) |
+| `LWDISPLAY` | Show lineweights in the model (ON/OFF); layouts always show them |
 | `ZOOMFACTOR` | Mouse wheel zoom step (3–100) |
 | `RENDERMINPX` | Draw solids smaller than this many pixels as a point (0 = off) |
 | `ZOOMWHEEL` | Mouse wheel direction: 0 = forward zooms in, 1 = forward zooms out |

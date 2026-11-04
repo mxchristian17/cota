@@ -124,6 +124,7 @@ active viewport; opening it again restores them.
 | **SNAP** | <kbd>F9</kbd> | Snaps the cursor to a grid of fixed spacing |
 | **OTRACK** (object snap tracking) | <kbd>F11</kbd> | Hover a snap point to acquire it; dashed tracking lines show alignments with it |
 | **DYN** (dynamic input) | <kbd>F12</kbd> | After the first point, typed `x,y` is relative without `@` |
+| **LWT** (lineweights) | | Shows lineweights in the model, in pixels that do not change with the zoom (thicker than 0.25 mm only). It is saved with the drawing (`LWDISPLAY`); layouts always show lineweights |
 
 Measure distances with `DIST`. `ID` shows the coordinates of a point, `AREA` the area and perimeter of points or
 an object (with `Add area`/`Subtract area` for a running total), `LIST` the properties of the selected objects and

@@ -108,7 +108,18 @@ export interface ViewportData {
    * viewport flotante). Sin él (espacio modelo) las líneas son finas.
    */
   lwUnitsPerMm?: number
+  /**
+   * Grosores en el modelo con LWDISPLAY (LWT): píxeles de pantalla por mm, fijos con el zoom (como el CAD clásico,
+   * que en el modelo los muestra en píxeles). Hasta 0,25 mm quedan finas.
+   */
+  lwPxPerMm?: number
 }
+
+/**
+ * LWDISPLAY en el modelo: píxeles por mm de grosor. Las de hasta 0,25 mm quedan de un píxel y las más gruesas se ven
+ * en proporción (0,40 mm = 4 px, 1 mm = 10 px), sin cambiar con el zoom.
+ */
+export const MODEL_LW_PX_PER_MM = 10
 
 export interface RectPx {
   minX: number
@@ -2388,9 +2399,9 @@ export class Viewport {
     const getLine = (m: Map<string, LineBatch>, k: string): LineBatch => { let b = m.get(k); if (!b) { b = { pos: [], ranges: [], n: 0 }; m.set(k, b) } return b }
     const getPoints = (m: Map<string, PointBatch>, k: string): PointBatch => { let b = m.get(k); if (!b) { b = { pos: [] }; m.set(k, b) } return b }
     const bgHex = '#' + this.bgColor.getHexString()
-    // Grosor de capa (mm; 0 = Default, 0.25 mm) sólo en los layouts.
-    const lwUnits = this.data?.lwUnitsPerMm
-    const lwKey = (l: Layer | undefined, own?: number): string => (lwUnits ? `|${(own !== undefined && own >= 0 ? own : l?.lineWeight) || 0.25}` : '')
+    // Grosor de capa (mm; 0 = Default, 0.25 mm) en los layouts y, con LWDISPLAY, en el modelo.
+    const lwShown = !!(this.data?.lwUnitsPerMm || this.data?.lwPxPerMm)
+    const lwKey = (l: Layer | undefined, own?: number): string => (lwShown ? `|${(own !== undefined && own >= 0 ? own : l?.lineWeight) || 0.25}` : '')
     this.wideLines = []
 
     this.unpickable = new Set(entities.filter((e) => !layerEditable(layerMap.get(e.layer))).map((e) => e.id))
@@ -2695,7 +2706,7 @@ export class Viewport {
     seg.userData.rangeKind = 'line'
     seg.renderOrder = Number(ro)
     this.entityGroup.add(seg)
-    if (lw && !pickOnly && this.data?.lwUnitsPerMm) {
+    if (lw && !pickOnly && (this.data?.lwUnitsPerMm || this.data?.lwPxPerMm)) {
       // Línea con grosor (en píxeles según el zoom): se ve en lugar de la fina, que queda para el pick.
       const wg = new LineSegmentsGeometry().setPositions(pos)
       const mat = new LineMaterial({ color: new THREE.Color(colorHex).getHex(), linewidth: 1 })
@@ -2721,12 +2732,13 @@ export class Viewport {
       for (const o of this.entityGroup.children) if (o.userData.pointMark) ((o as THREE.Points).material as THREE.PointsMaterial).size = px
     }
     const units = this.data?.lwUnitsPerMm
-    if (!this.wideLines.length || !units) return
-    const wpp = this.controller.worldPerPx() || 1
+    const pxPerMm = units ? 0 : this.data?.lwPxPerMm
+    if (!this.wideLines.length || !(units || pxPerMm)) return
+    const wpp = pxPerMm ? 1 : this.controller.worldPerPx() || 1
     if (wpp === this.lineweightZoom) return
     this.lineweightZoom = wpp
     for (const w of this.wideLines) {
-      const px = (w.mm * units) / wpp
+      const px = pxPerMm ? (w.mm > 0.25 ? w.mm * pxPerMm : 0) : (w.mm * units!) / wpp
       const show = px > 1.5
       w.wide.visible = show
       ;(w.thin.material as THREE.LineBasicMaterial).visible = !show

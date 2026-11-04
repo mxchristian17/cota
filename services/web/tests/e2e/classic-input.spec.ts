@@ -33,6 +33,23 @@ test.describe('Cota: command line like classic CAD', () => {
     await expect(page.getByTestId('dyn-toggle')).toHaveAttribute('aria-pressed', 'false')
   })
 
+  test('LWT shows lineweights in the model, in pixels that do not change with the zoom', async ({ page }) => {
+    const { cmd } = await open(page)
+    await cmd('LWEIGHT', '0.5', 'LINE', '0,0', '100,0', '')
+    const wide = "const vp = [...s.viewports][0]; return vp.wideLines.filter((w) => w.wide.visible).map((w) => w.wide.material.linewidth)"
+    expect(await st(page, wide)).toEqual([])
+    await page.getByTestId('lwt-toggle').click()
+    await expect(page.getByTestId('lwt-toggle')).toHaveAttribute('aria-pressed', 'true')
+    expect(await st(page, 'return s.doc.vars.LWDISPLAY')).toBe(1)
+    await expect.poll(() => st(page, wide)).toEqual([5])
+    await cmd('ZOOM', '0.5x')
+    await page.waitForTimeout(300)
+    expect(await st(page, wide)).toEqual([5])
+    await cmd('LWDISPLAY', 'OFF')
+    await expect(page.getByTestId('lwt-toggle')).toHaveAttribute('aria-pressed', 'false')
+    await expect.poll(() => st(page, wide)).toEqual([])
+  })
+
   test('Esc cancels the whole command: EXPORT does not export, -LAYER does not go back to its options', async ({ page }) => {
     const { input, cmd } = await open(page)
     let downloads = 0

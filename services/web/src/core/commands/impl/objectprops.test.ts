@@ -23,6 +23,16 @@ describe('Color y grosor por objeto', () => {
     expect([n.color, n.lineWeight]).toEqual([undefined, undefined]) // ByLayer
   })
 
+  it('LWDISPLAY (LWT) muestra los grosores en el modelo: ON/OFF y queda en el dibujo', async () => {
+    const h = makeEngine()
+    expect(h.doc.vars.LWDISPLAY).toBe(0)
+    await h.run('LWT', 'ON')
+    expect(h.doc.vars.LWDISPLAY).toBe(1)
+    await h.run('LWDISPLAY', 'x', 'off')
+    expect(h.doc.vars.LWDISPLAY).toBe(0)
+    expect(h.prints.join('\n')).toContain('Requires ON or OFF.')
+  })
+
   it('LWEIGHT redondea al estándar más cercano; COLOR acepta índice, #rrggbb y r,g,b', async () => {
     const h = makeEngine()
     await h.run('LWEIGHT', '0.33', 'COLOR', '30')

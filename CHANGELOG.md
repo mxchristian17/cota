@@ -4,6 +4,17 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.25.0] — 2026-11-04
+
+### Added
+- **Lineweights in the model** (**LWT** in the status bar, or `LWDISPLAY`): lines thicker than 0.25 mm show thick,
+  in pixels that do not change with the zoom, as in classic CAD. The setting is saved with the drawing, and DWG and
+  DXF files that have it on open with it on.
+
+### Fixed
+- **Dimensions with their own color** (black on a green layer, for example) showed in the color of their layer; their
+  own color, lineweight and transparency are now read from DWG and DXF files and kept when exporting to DXF.
+
 ## [2.24.0] — 2026-11-04
 
 ### Added

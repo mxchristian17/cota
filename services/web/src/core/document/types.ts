@@ -870,6 +870,8 @@ export interface DrawingVars {
   CECOLOR?: string
   /** Grosor de los objetos nuevos en mm (0 = Default); ausente = ByLayer. */
   CELWEIGHT?: number
+  /** Grosores de línea en pantalla en el modelo (LWT); los layouts los muestran siempre. */
+  LWDISPLAY?: 0 | 1
   CELTSCALE?: number
   PSLTSCALE?: 0 | 1
   MSLTSCALE?: 0 | 1

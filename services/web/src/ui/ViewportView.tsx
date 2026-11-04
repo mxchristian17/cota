@@ -1,6 +1,6 @@
 import { openContextMenu } from './DimContextMenu'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Viewport } from '../render/Viewport'
+import { MODEL_LW_PX_PER_MM, Viewport } from '../render/Viewport'
 import { useStore } from '../store/store'
 import { sysvars } from '../core/commands/sysvars'
 import { VPORT_VIEWS, type CameraMode, type ViewName } from '../core/view'
@@ -157,6 +157,7 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
         fields: fieldContextFor(s.doc, s.docName + DRAWING_EXT, MODEL_TAB),
         attdisp: s.doc.attdisp,
         linetypes: s.doc.linetypeContext('model'),
+        lwPxPerMm: s.doc.vars.LWDISPLAY ? MODEL_LW_PX_PER_MM : undefined,
       }
     })
     vp.setPreviewProvider((cursor) => computePreview(cursor))

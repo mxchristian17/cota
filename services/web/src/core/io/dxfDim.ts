@@ -118,7 +118,8 @@ export class DxfDimWriter {
   }
 
   /** La cota como `DIMENSION` nativa (y su bloque), o null si no tiene equivalente. */
-  dimension(e: DimensionEntity, layer: string): string | null {
+  /** `common`: color, grosor y transparencia propios del objeto (grupos 62/420/370/440). */
+  dimension(e: DimensionEntity, layer: string, common = ''): string | null {
     const pr = e.props
     if (!NATIVE.has(pr.dimType) || !inXY(pr) || pr.transScale) return null
     const d = dimDisplay(pr)
@@ -164,6 +165,7 @@ export class DxfDimWriter {
     return (
       p(0, 'DIMENSION') +
       p(8, layer) +
+      common +
       p(2, block) +
       p(3, this.styleOf(pr)) +
       pts +

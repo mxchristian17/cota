@@ -57,3 +57,22 @@ export const lweightCommand: Command = {
     }
   },
 }
+
+/** LWDISPLAY (LWT): grosores de línea en pantalla en el modelo, sí/no. */
+export const lwdisplayCommand: Command = {
+  name: 'LWDISPLAY',
+  aliases: ['LWT'],
+  description: 'Show lineweights in the model (ON/OFF); layouts always show them',
+  async run(ctx) {
+    const cur = ctx.doc.vars.LWDISPLAY ? 'ON' : 'OFF'
+    for (;;) {
+      const r = await ctx.getString(`Enter new value for LWDISPLAY [ON/OFF] <${cur}>: `, { default: '' })
+      if (r === null) return
+      const t = r.trim().toUpperCase()
+      if (!t) return
+      if (t === 'ON' || t === '1') return ctx.doc.setVar('LWDISPLAY', 1)
+      if (t === 'OFF' || t === '0') return ctx.doc.setVar('LWDISPLAY', 0)
+      ctx.print('Requires ON or OFF.')
+    }
+  },
+}

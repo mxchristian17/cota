@@ -179,6 +179,7 @@ export class DocumentModel {
       HPORIGIN: v.HPORIGIN,
       CECOLOR: v.CECOLOR,
       CELWEIGHT: v.CELWEIGHT,
+      LWDISPLAY: v.LWDISPLAY ?? 0,
     }
   }
 

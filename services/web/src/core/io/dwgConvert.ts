@@ -1,4 +1,4 @@
-import { CadDictionary, DimensionArc, DwgReader, Field, FieldList, Hatch, DxfReader, DxfWriter, GraphicsType, Insert, ProxyGeometryReader, Line, Mesh, ModelerGeometry, MText, MultiLeader, Polyline3D, ProxyEntity, Solid, UnknownEntity, XYZ, type CadDocument, type Entity, type IProxyGeometry, type ModelerGeometryWire } from '@node-projects/acad-ts'
+import { CadDictionary, DimensionArc, DwgHeaderReader, DwgReader, Field, FieldList, Hatch, DxfReader, DxfWriter, GraphicsType, Insert, ProxyGeometryReader, Line, Mesh, ModelerGeometry, MText, MultiLeader, Polyline3D, ProxyEntity, Solid, UnknownEntity, XYZ, type CadDocument, type Entity, type IProxyGeometry, type ModelerGeometryWire } from '@node-projects/acad-ts'
 
 import { acisEdges } from './acis'
 import { acisMesh, SOLID_MESH_REF } from './acisMesh'
@@ -19,7 +19,41 @@ export interface CadConversion {
   solidMeshes: PackedMesh[]
 }
 
+/**
+ * LWDISPLAY del DWG (grosores en pantalla): va invertido en el bit 0x200 de las banderas del encabezado (puesto = no
+ * se ven). El lector de acad-ts compara ese bit con 1 y siempre lo da apagado (su escritor lo pone bien). Se toma la
+ * bandera al leerla: es el último entero leído cuando el lector guarda `displayLineWeight`.
+ */
+function readLwDisplayFlag(): void {
+  type Reading = { _reader: { readBitLong(): number }; _header: object }
+  const proto = DwgHeaderReader.prototype as unknown as { read(v: number): unknown; cotaLwDisplay?: true }
+  if (proto.cotaLwDisplay) return
+  const read = proto.read
+  proto.read = function (this: Reading, v: number) {
+    const reader = this._reader
+    const readBitLong = reader.readBitLong.bind(reader)
+    let last = 0
+    reader.readBitLong = () => (last = readBitLong())
+    const header = this._header
+    this._header = new Proxy(header, {
+      set: (t, k, value) => Reflect.set(t, k, k === 'displayLineWeight' ? !(last & 0x200) : value),
+      get: (t, k) => {
+        const x = Reflect.get(t, k)
+        return typeof x === 'function' ? x.bind(t) : x
+      },
+    })
+    try {
+      return read.call(this, v)
+    } finally {
+      this._header = header
+      delete (reader as Partial<Reading['_reader']>).readBitLong
+    }
+  }
+  proto.cotaLwDisplay = true
+}
+
 export function convertDwgToDxfBytes(data: ArrayBuffer, light = false): CadConversion {
+  readLwDisplayFlag()
   const doc = DwgReader.readFromStream(data, null)
   const solidMeshes: PackedMesh[] = []
   const wireSolids = solidsAsWires(doc, solidMeshes, light)

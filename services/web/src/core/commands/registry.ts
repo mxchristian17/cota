@@ -70,7 +70,7 @@ import { purgeCommand } from './impl/purge'
 import { threadCommand } from './impl/thread'
 import { scriptCommand } from './impl/script'
 import { agentCommand, compactCommand } from './impl/agent'
-import { colorCommand, lweightCommand } from './impl/objectprops'
+import { colorCommand, lwdisplayCommand, lweightCommand } from './impl/objectprops'
 import { areaCommand, idCommand, listCommand, masspropCommand, polarAngCommand } from './impl/inquiry'
 import { exportCommand, importCommand } from './impl/io'
 import { imageCmdlineCommand, imageCommand } from './impl/image'
@@ -169,6 +169,7 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   engine.register(compactCommand)
   engine.register(colorCommand)
   engine.register(lweightCommand)
+  registerVariable(engine, lwdisplayCommand)
   engine.register(blockCommand)
   engine.register(insertCommand)
   engine.register(explodeCommand)

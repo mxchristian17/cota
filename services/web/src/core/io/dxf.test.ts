@@ -322,7 +322,7 @@ describe('DXF: tipos de línea, anchos y HATCH', () => {
         { name: 'HIDDEN', description: 'Hidden', pattern: [6.35, -3.175] },
         { name: 'CENTER', description: 'Center', pattern: [31.75, -6.35, 6.35, -6.35] },
       ],
-      vars: { LTSCALE: 10, CELTYPE: 'HIDDEN', PSLTSCALE: 0 },
+      vars: { LTSCALE: 10, CELTYPE: 'HIDDEN', PSLTSCALE: 0, LWDISPLAY: 1 },
     })
     expect(txt).toContain('LTYPE')
     const r = importDxf(txt)
@@ -331,7 +331,7 @@ describe('DXF: tipos de línea, anchos y HATCH', () => {
     expect(r.layers[0].lineType).toBe('HIDDEN')
     expect(r.entities[0].lineType).toBe('CENTER')
     expect(r.entities[0].ltScale).toBe(2)
-    expect(r.vars).toEqual({ LTSCALE: 10, CELTYPE: 'HIDDEN', PSLTSCALE: 0 })
+    expect(r.vars).toEqual({ LTSCALE: 10, CELTYPE: 'HIDDEN', PSLTSCALE: 0, LWDISPLAY: 1 })
   })
 
   it('LWPOLYLINE con ancho constante (43) y por tramo (40/41)', () => {
@@ -670,6 +670,16 @@ describe('entidades de DWG/DXF que Cota dibuja con piezas simples', () => {
       rec('DIMENSION', [3, 'Standard'], [70, 32], [10, 10], [20, 5], [30, 0], [13, 0], [23, 0], [33, 0], [14, 10], [24, 0], [34, 0], [42, 10], ...xd)
     const r = importDxf(tables + dxf(dim(), dim([1001, 'ACAD'], [1000, 'DSTYLE'], [1002, '{'], [1070, 340], [1005, 'A2'], [1002, '}'])))
     expect(r.entities.map((e) => (e.props as { textFont?: string }).textFont)).toEqual(['Arial', 'Times New Roman'])
+  })
+
+  it('cotas: su color propio (420/62), grosor y transparencia se leen y vuelven al exportar', () => {
+    const dim = (...own: Array<[number, string | number]>) =>
+      rec('DIMENSION', [8, 'A'], ...own, [3, 'Standard'], [70, 32], [10, 10], [20, 5], [30, 0], [13, 0], [23, 0], [33, 0], [14, 10], [24, 0], [34, 0], [42, 10])
+    const r = importDxf(dxf(dim([420, 0]), dim([62, 3], [370, 40], [440, 0x02000080]), dim()))
+    const own = (es: typeof r.entities) => es.map((e) => [e.color, e.lineWeight, e.transparency])
+    expect(own(r.entities)).toEqual([['#000000', undefined, undefined], ['#00ff00', 0.4, 0.498], [undefined, undefined, undefined]])
+    const back = importDxf(exportDxf(r.entities.map((e, i) => ({ id: `d${i}`, type: e.type, layer: 'A', props: e.props, color: e.color, lineWeight: e.lineWeight, transparency: e.transparency })) as never, [lineLayer]))
+    expect(own(back.entities)).toEqual(own(r.entities))
   })
 
   it('WIPEOUT: una máscara con su contorno (rectángulo o polígono), del color del fondo; vuelve como WIPEOUT', () => {

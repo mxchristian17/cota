@@ -49,6 +49,18 @@ describe('DWG en el navegador (acad-ts)', () => {
     expect(heads).toEqual([200, 300])
   })
 
+  it('LWDISPLAY del DWG (bit 0x200 de las banderas, invertido) llega al DXF', async () => {
+    const shown = (on: boolean) => {
+      const doc = new CadDocument()
+      doc.header!.version = ACadVersion.AC1032
+      doc.header!.displayLineWeight = on
+      const bytes = DwgWriter.writeToBuffer(doc)
+      return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+    }
+    expect(importDxf(await dwgToDxfText(shown(true))).vars.LWDISPLAY).toBe(1)
+    expect(importDxf(await dwgToDxfText(shown(false))).vars.LWDISPLAY).toBe(0)
+  })
+
   it('un archivo que no es DWG se reconoce antes de intentar leerlo', () => {
     expect(dwgVersion(new TextEncoder().encode('0\nSECTION').buffer as ArrayBuffer)).toBeNull()
   })

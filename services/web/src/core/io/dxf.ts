@@ -272,7 +272,7 @@ function lwpolyline(
 export interface DxfLinetypeOptions {
   /** Tipos de línea cargados (tabla LTYPE). */
   linetypes?: LinetypeDefData[]
-  /** Variables del dibujo ($LTSCALE, $CELTYPE, $CELTSCALE, $PSLTSCALE). */
+  /** Variables del dibujo ($LTSCALE, $CELTYPE, $CELTSCALE, $PSLTSCALE, $LWDISPLAY). */
   vars?: DrawingVars
 }
 
@@ -285,6 +285,7 @@ export function exportDxf(entities: Entity[], layers: Layer[], currentLayer?: st
   if (v.CELTYPE !== undefined) hv += p(9, '$CELTYPE') + p(6, linetypeLabel(v.CELTYPE))
   if (v.CELTSCALE !== undefined) hv += p(9, '$CELTSCALE') + p(40, v.CELTSCALE)
   if (v.PSLTSCALE !== undefined) hv += p(9, '$PSLTSCALE') + p(70, v.PSLTSCALE)
+  if (v.LWDISPLAY !== undefined) hv += p(9, '$LWDISPLAY') + p(290, v.LWDISPLAY)
   const header = hv ? p(0, 'SECTION') + p(2, 'HEADER') + hv + p(0, 'ENDSEC') : ''
 
   // Tabla LTYPE: ByBlock, ByLayer, Continuous y los cargados, con su patrón.
@@ -326,7 +327,7 @@ export function exportDxf(entities: Entity[], layers: Layer[], currentLayer?: st
       ents += imageDxf(e.props, p(8, layerName) + commonCodes(e), def.handle)
       continue
     }
-    const dxf = (e.type === 'DIMENSION' ? dims.dimension(e, layerName) : null) ?? entityDxf(e, layerName)
+    const dxf = (e.type === 'DIMENSION' ? dims.dimension(e, layerName, commonCodes(e)) : null) ?? entityDxf(e, layerName)
     if (dxf) ents += dxf
   }
   ents += p(0, 'ENDSEC')
@@ -404,7 +405,7 @@ export interface DxfImportResult {
   dimStyles: DimStyleDef[]
   /** Tipos de línea de la tabla LTYPE. */
   linetypes: LinetypeDefData[]
-  /** Variables del HEADER: $LTSCALE, $CELTYPE, $CELTSCALE, $PSLTSCALE. */
+  /** Variables del HEADER: $LTSCALE, $CELTYPE, $CELTSCALE, $PSLTSCALE, $LWDISPLAY. */
   vars: DrawingVars
   /**
    * Vista con que se guardó el dibujo (VPORT `*Active`; con varios visores, el primero, que es el activo): dirección
@@ -776,10 +777,17 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
       ...ownColorWeight(rec.codes),
     }))
   }
+  /** Cota nativa, con su color, grosor y transparencia propios (las partes ByBlock de su bloque los toman). */
+  const dimSpec = (rec: Rec): DxfEntitySpec | null => {
+    const d = parseDimension(rec.codes)
+    if (!d) return null
+    const props = { ...d.props, styleName: d.styleName, ...dimShown(rec) } as unknown as EntityProps
+    return { type: 'DIMENSION', layerName: str(rec.codes, 8) ?? '0', props, ...ownColorWeight(rec.codes) }
+  }
   /** Cota sin formato propio (de arco, de radio grande): se dibuja con su bloque anónimo. */
   const blockDim = (rec: Rec): Rec | null => {
     if (rec.type !== 'ARC_DIMENSION' && rec.type !== 'LARGE_RADIAL_DIMENSION') return null
-    const keep = rec.codes.filter(([k]) => k === 2 || k === 8)
+    const keep = rec.codes.filter(([k]) => [2, 8, 62, 420, 370, 440].includes(k))
     return keep.some(([k]) => k === 2) ? { type: 'INSERT', codes: keep } : null
   }
 
@@ -802,6 +810,8 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
         if (cels && Number(cels[1]) > 0) vars.CELTSCALE = Number(cels[1])
         const ps = hv('$PSLTSCALE')
         if (ps) vars.PSLTSCALE = Number(ps[1]) ? 1 : 0
+        const lwd = hv('$LWDISPLAY')
+        if (lwd) vars.LWDISPLAY = Number(lwd[1]) ? 1 : 0
       }
       continue
     }
@@ -901,8 +911,8 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
         const dim = blockDim(rec)
         if (dim) block.items.push({ insert: dim })
         else if (rec.type === 'DIMENSION') {
-          const d = parseDimension(rec.codes)
-          if (d) block.items.push({ spec: { type: 'DIMENSION', layerName: str(rec.codes, 8) ?? '0', props: { ...d.props, styleName: d.styleName, ...dimShown(rec) } as unknown as EntityProps } })
+          const d = dimSpec(rec)
+          if (d) block.items.push({ spec: d })
         } else for (const spec of specsOf(rec) ?? []) block.items.push({ spec })
       }
       continue
@@ -916,8 +926,8 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
       if (rec.type === 'VIEWPORT') items.push({ viewport: rec })
       else if (rec.type === 'INSERT') items.push({ insert: rec })
       else if (rec.type === 'DIMENSION') {
-        const d = parseDimension(rec.codes)
-        if (d) items.push({ spec: { type: 'DIMENSION', layerName: str(rec.codes, 8) ?? '0', props: { ...d.props, styleName: d.styleName, ...dimShown(rec) } as unknown as EntityProps } })
+        const d = dimSpec(rec)
+        if (d) items.push({ spec: d })
       } else if (blockDim(rec)) items.push({ insert: blockDim(rec)! })
       else if (rec.type === 'ACAD_TABLE') items.push({ insert: tableInsert(rec) })
       else {
@@ -945,10 +955,9 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
       for (const spec of specsOf(rec) ?? []) entities.push(spec)
       continue
     }
-    const layerName = str(rec.codes, 8) ?? '0'
     if (rec.type === 'DIMENSION') {
-      const dim = parseDimension(rec.codes)
-      if (dim) entities.push({ type: 'DIMENSION', layerName, props: { ...dim.props, styleName: dim.styleName, ...dimShown(rec) } as unknown as EntityProps })
+      const dim = dimSpec(rec)
+      if (dim) entities.push(dim)
       else unsupported.add('DIMENSION (type)')
       continue
     }
