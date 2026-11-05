@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
+import { pdfText } from '../../src/test/pdfText'
 
 /** Notas de uso real: selección con el mouse, ventanas en cualquier vista, guardar, deshacer y capas de la selección. */
 const st = <T,>(page: Page, js: string) => page.evaluate((c) => new Function('s', c)((window as any).__cotaStore.getState()), js) as Promise<T>
@@ -558,6 +559,25 @@ test.describe('Imágenes de fondo', () => {
     await clickAt(page, [1008, 2003, 0])
     await page.waitForTimeout(450)
     expect(await st<string[]>(page, `return s.selection.map((id) => s.doc.getEntity(id).type)`)).toEqual(['IMAGE'])
+    // Al plotear, la imagen va con sus píxeles: en la vista previa y en el PDF.
+    await page.keyboard.press('Escape')
+    await input.fill('PLOT')
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('plot-dialog')).toBeVisible()
+    await expect
+      .poll(() =>
+        page.getByTestId('plot-preview').evaluate((c: HTMLCanvasElement) => {
+          const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data
+          let red = 0
+          for (let i = 0; i < d.length; i += 4) if (d[i] > 200 && d[i + 1] < 60 && d[i + 2] < 60) red++
+          return red
+        }),
+      )
+      .toBeGreaterThan(20)
+    const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('plot-ok').click()])
+    const pdf = pdfText(readFileSync(await download.path()))
+    expect(pdf).toContain('/Subtype /Image /Width 4 /Height 2')
+    expect(pdf).toMatch(/cm\n\/Im0 Do/)
   })
 
   test('abierto el plano solo: la imagen se carga con Load… en sus propiedades, o soltando el archivo sobre Cota', async ({ page }) => {

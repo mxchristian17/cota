@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { computePlotTransform, exportPdf, MM_TO_PT, PAGE_SIZES, plotContentStream, strokeStyleOps, worldToPage } from './pdf'
-import type { Entity, Layer } from '../document/types'
+import { computePlotTransform, exportPdf, MM_TO_PT, PAGE_SIZES, PlotRasters, plotContentStream, strokeStyleOps, worldToPage } from './pdf'
+import type { Entity, ImageEntity, Layer } from '../document/types'
 import { pdfText } from '../../test/pdfText'
 
 const layers: Layer[] = [
@@ -98,6 +98,27 @@ describe('exportPdf', () => {
     // Al revés: un relleno después de la línea la tapa.
     const back = plotContentStream([line('ln', '0'), { id: 'fill', type: 'HATCH', layer: '0', props: sq }], layers, t)
     expect(back.search(/f\*\n/)).toBeGreaterThan(back.search(/ l\nS\n/))
+  })
+
+  it('las imágenes se imprimen con sus píxeles, en su lugar, recortadas por su marco y con su desvanecido', () => {
+    const img = (fade?: number): ImageEntity => ({ id: 'i', type: 'IMAGE', layer: '0', props: { origin: [10, 20, 0], u: [5, 0, 0], v: [0, 5, 0], size: [2, 1], file: 'a.png', data: 'data:x', ...(fade ? { fade } : {}) } })
+    const raster = { w: 2, h: 1, rgb: Uint8Array.from([0, 0, 0, 200, 0, 0]), alpha: Uint8Array.from([255, 128]) }
+    const rasters = new PlotRasters(new Map([['data:x', raster]]))
+    const t = { s: 1, ox: 0, oy: 0 }
+    const c = plotContentStream([img()], layers, t, undefined, undefined, undefined, rasters)
+    // La matriz lleva el cuadrado unidad a la imagen: 2 × 1 píxeles de 5 unidades desde (10, 20).
+    expect(c).toContain('q\n10 25 m\n20 25 l\n20 20 l\n10 20 l\n10 25 l\nh\nW n\n10 0 0 5 10 20 cm\n/Im0 Do\nQ\n')
+    const pdf = pdfText(exportPdf([img()], layers, { rasters }).bytes)
+    expect(pdf).toContain('/XObject << /Im0 ')
+    expect(pdf).toMatch(/\/Subtype \/Image \/Width 2 \/Height 1 \/BitsPerComponent 8 \/ColorSpace \/DeviceRGB \/Filter \/FlateDecode \/SMask \d+ 0 R/)
+    expect(pdf).toContain('/ColorSpace /DeviceGray') // la transparencia de la imagen, como máscara
+    // Desvanecida al 50 %: mezclada con el papel; otra imagen del mismo archivo sin desvanecer, otro nombre.
+    const both = new PlotRasters(new Map([['data:x', raster]]))
+    expect(both.name(img(50).props)).toBe('Im0')
+    expect([...both.used.get('Im0')!.rgb]).toEqual([128, 128, 128, 228, 128, 128])
+    expect(both.name(img().props)).toBe('Im1')
+    // Sin sus píxeles, sólo el marco.
+    expect(plotContentStream([img()], layers, t)).not.toContain(' Do')
   })
 
   it('marca empty cuando no hay geometría imprimible', () => {

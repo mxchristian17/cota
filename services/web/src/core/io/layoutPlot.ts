@@ -13,7 +13,7 @@ import { dimDisplay, type DimContext } from '../dimension/dimGeometry'
 import { paperSizeMm } from '../layout/paper'
 import { paperPerModel } from '../layout/scale'
 import { viewBasis, viewportRing } from '../layout/viewport'
-import { MM_TO_PT, entityOps, f, paintLayer, paintOrder, pdfDocument, pdfFont, plotContentStream, polyStroke, specialOps, strokeStyleOps, textTm, type PaintLayer, type PdfPage, type PlotStyleOpts, type PlotTransform } from './pdf'
+import { MM_TO_PT, entityOps, f, imageOps, paintLayer, paintOrder, pdfDocument, pdfFont, plotContentStream, polyStroke, specialOps, strokeStyleOps, textTm, type PaintLayer, type PdfPage, type PlotRasters, type PlotStyleOpts, type PlotTransform } from './pdf'
 import type { LinetypeContext } from '../linetype/linetypes'
 import { entityBounds } from '../editing/bounds'
 
@@ -30,6 +30,8 @@ export interface LayoutPlotInput {
   meshOf?: MeshOf
   /** Tipos de línea con la escala del papel (LTSCALE) y PSLTSCALE. */
   linetypes?: LinetypeContext
+  /** Píxeles de las imágenes (compartidos entre las hojas de un PDF); sin ellos, sólo su marco. */
+  rasters?: PlotRasters
 }
 
 export type MeshOf = (e: Entity) => Mesh | null
@@ -160,6 +162,7 @@ export function viewportContent(
   style: PlotStyleOpts,
   meshOf?: MeshOf,
   lt?: LinetypeContext,
+  rasters?: PlotRasters,
 ): string {
   const ring = viewportRing(vp).map(([x, y]): [number, number] => [x, y])
   const clip = boxOf(ring)
@@ -203,6 +206,9 @@ export function viewportContent(
     }
     if (outside(e)) continue
     let body = ''
+    // Una imagen: sus píxeles debajo de su marco.
+    const raster = e.type === 'IMAGE' ? rasters?.name(e.props) : undefined
+    if (raster && e.type === 'IMAGE') body += imageOps(e.props, toPt, raster)
     const special = specialOps(e, (id) => layerMap.get(id), ltVp, toPt, clipPt)
     if (special) body += special.ops
     if (!special?.done) {
@@ -263,12 +269,12 @@ export function layoutPage(input: LayoutPlotInput): PdfPage {
   const style: PlotStyleOpts = { plotStyle: ps.plotStyle, lineWeights: ps.plotLineweights }
   let views = ''
   for (const e of input.paper) {
-    if (e.type === 'VIEWPORT' && e.props.on) views += viewportContent(e.props, input.model, layers, input.units, style, input.meshOf, input.linetypes)
+    if (e.type === 'VIEWPORT' && e.props.on) views += viewportContent(e.props, input.model, layers, input.units, style, input.meshOf, input.linetypes, input.rasters)
   }
   // "Hide paperspace objects": los sólidos del papel también con líneas ocultas (vista en planta).
   const hidePaper = ps.hidePaperspaceObjects && !!input.meshOf && input.paper.some(is3d)
   const paperOrdered = input.paper // en su orden de dibujo
-  let paper = plotContentStream(hidePaper ? paperOrdered.filter((e) => !is3d(e)) : paperOrdered, layers, PAPER, style, { annoScale: 1 }, input.linetypes)
+  let paper = plotContentStream(hidePaper ? paperOrdered.filter((e) => !is3d(e)) : paperOrdered, layers, PAPER, style, { annoScale: 1 }, input.linetypes, input.rasters)
   if (hidePaper) {
     const layerMap = new Map(layers.map((l) => [l.id, l]))
     const top = { right: [1, 0, 0] as Vec3, up: [0, 1, 0] as Vec3, out: [0, 0, 1] as Vec3 }
@@ -281,5 +287,5 @@ export function layoutPage(input: LayoutPlotInput): PdfPage {
 
 /** PDF con una página por layout (PLOT del layout activo; PUBLISH con varios). */
 export function plotLayouts(inputs: LayoutPlotInput[]): Uint8Array {
-  return pdfDocument(inputs.map(layoutPage))
+  return pdfDocument(inputs.map(layoutPage), inputs[0]?.rasters)
 }

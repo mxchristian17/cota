@@ -47,7 +47,9 @@ export function PlotDialog() {
     if (open) setO(saved)
   }, [open, saved])
 
-  const r = useMemo(() => (open ? preview(o) : null), [open, o, preview])
+  // La versión del dibujo: la vista previa se rehace cuando llegan los píxeles de las imágenes (se decodifican aparte).
+  const version = useStore((s) => s.version)
+  const r = useMemo(() => (open ? preview(o) : null), [open, o, preview, version])
 
   useEffect(() => {
     const c = canvas.current

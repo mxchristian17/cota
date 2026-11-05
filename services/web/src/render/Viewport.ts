@@ -2657,14 +2657,14 @@ export class Viewport {
     ranked(m.material, this.rankK)
   }
 
-  /** Puntos de los tipos de línea/patrones: 2 px fijos (como el punto del CAD clásico), no seleccionables. */
+  /** Puntos de los tipos de línea/patrones: 1 px fijo (como el punto del CAD clásico), no seleccionables. */
   private addPointBatch(b: PointBatch, key: string): void {
     if (!b.pos.length) return
     const [ro, colorHex] = key.split('|')
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', this.local(b.pos))
     g.setAttribute(RANK_ATTR, new THREE.BufferAttribute(Float32Array.from(b.rank), 1))
-    const pts = new THREE.Points(g, ranked(new THREE.PointsMaterial({ color: new THREE.Color(colorHex), size: 2, sizeAttenuation: false }), this.rankK))
+    const pts = new THREE.Points(g, ranked(new THREE.PointsMaterial({ color: new THREE.Color(colorHex), size: 1, sizeAttenuation: false }), this.rankK))
     pts.renderOrder = Number(ro)
     pts.raycast = () => {} // el pick lo resuelve el recorrido invisible
     this.entityGroup.add(pts)
@@ -2983,7 +2983,7 @@ export class Viewport {
     if (d.dots.length) {
       const g = new THREE.BufferGeometry()
       g.setAttribute('position', this.local(d.dots.flat()))
-      const pts = new THREE.Points(g, new THREE.PointsMaterial({ color, size: 2, sizeAttenuation: false }))
+      const pts = new THREE.Points(g, new THREE.PointsMaterial({ color, size: 1, sizeAttenuation: false }))
       pts.raycast = () => {}
       group.add(pts)
     }
@@ -3122,7 +3122,7 @@ export class Viewport {
     if (s.dots.length) {
       const g = new THREE.BufferGeometry()
       g.setAttribute('position', this.local(s.dots.flat()))
-      const pts = new THREE.Points(g, new THREE.PointsMaterial({ color, size: 2, sizeAttenuation: false }))
+      const pts = new THREE.Points(g, new THREE.PointsMaterial({ color, size: 1, sizeAttenuation: false }))
       pts.raycast = () => {}
       group.add(pts)
     }

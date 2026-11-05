@@ -55,7 +55,8 @@ import {
 } from '../core/layout/template'
 import { layoutViews, mergeSegments, orthoProject, projectHidden, segmentsBounds, snapToHints, solidCircleHints, viewHints, viewOffsets, type CircleHint, type Mesh, type ProjBasis, type ProjItem } from '../core/projection/orthographic'
 import { fromVec3, toVec3 } from '../core/math'
-import { MM_TO_PT, modelPlotPage, pdfDocument, type PdfPage, type PlotArea } from '../core/io/pdf'
+import { MM_TO_PT, modelPlotPage, pdfDocument, PlotRasters, type PdfPage, type PdfRaster, type PlotArea } from '../core/io/pdf'
+import { decodeRaster } from '../core/io/rasterDecode'
 import { layoutPage, plotLayouts } from '../core/io/layoutPlot'
 import { DEFAULT_PLOT, plotPage, type PlotSettings } from '../core/io/plotSettings'
 import { paperPerModel, unitToMm } from '../core/layout/scale'
@@ -445,7 +446,7 @@ export interface AppState {
   /** Opciones del último PLOT del modelo (se recuerdan en la sesión). */
   plotSettings: PlotSettings
   /** Página que saldría con esas opciones (para la vista previa), y si se puede usar Display (vista en planta). */
-  plotPreview: (s: PlotSettings) => { page: PdfPage; empty: boolean; layout: string | null; displayAvailable: boolean; scale: number | null }
+  plotPreview: (s: PlotSettings) => { page: PdfPage; empty: boolean; layout: string | null; displayAvailable: boolean; scale: number | null; rasters?: PlotRasters }
   /** Cierra el diálogo de PLOT: 'plot' descarga el PDF con esas opciones. */
   resolvePlot: (r: 'plot' | 'window' | 'cancel', s?: PlotSettings) => void
   /** PUBLISH: un PDF con una página por layout (en el orden de las pestañas). */
@@ -1065,7 +1066,20 @@ export const useStore = create<AppState>((set, get) => {
   }
 
   /** Hoja de un layout lista para plotear: bloques expandidos, campos evaluados y mallas para las ocultas. */
-  const layoutPlotInput = (layoutId: string, base: string) => {
+  // Píxeles de las imágenes del dibujo para el PDF, por sus datos (se decodifican una vez, antes de plotear).
+  const rasterCache = new Map<string, PdfRaster | null>()
+  const ensureRasters = async (): Promise<boolean> => {
+    let added = false
+    for (const e of drawingImages(doc)) {
+      const d = e.props.data
+      if (!d || rasterCache.has(d)) continue
+      rasterCache.set(d, await decodeRaster(d))
+      added = true
+    }
+    return added
+  }
+  const plotRasters = () => new PlotRasters(new Map([...rasterCache].filter((x): x is [string, PdfRaster] => !!x[1])))
+  const layoutPlotInput = (layoutId: string, base: string, rasters?: PlotRasters) => {
     const layout = doc.getLayout(layoutId)!
     const fields = fieldContextFor(doc, base + DRAWING_EXT, layoutId)
     const expand = (list: Entity[]) => resolveFieldTexts(expandEntities(list, doc.blocks, { attdisp: doc.attdisp, skipLayers: frozenLayerIds(doc.layers) }), fields)
@@ -1077,6 +1091,7 @@ export const useStore = create<AppState>((set, get) => {
       units: doc.units,
       meshOf: (e: Entity) => (e.type === 'SOLID3D' ? solidMesh(e.props) : e.type === 'MESH3D' ? e.props : null),
       linetypes: doc.linetypeContext('paper'),
+      rasters,
     }
   }
   const downloadBytes = (bytes: Uint8Array, name: string) => {
@@ -2705,7 +2720,7 @@ export const useStore = create<AppState>((set, get) => {
       bump()
       print('AI changes discarded.')
     },
-    publishLayouts: (ids) => {
+    publishLayouts: async (ids) => {
       const layouts = doc.layouts.filter((l) => ids.includes(l.id))
       if (!layouts.length) return print('No layouts to publish.')
       // Los layouts que nunca se abrieron se arman antes (rótulo + viewport), como al activarlos.
@@ -2719,13 +2734,16 @@ export const useStore = create<AppState>((set, get) => {
       }
       doc.meta.plotted = new Date().toISOString() // campo PlotDate
       const base = get().docName || 'drawing'
-      const bytes = plotLayouts(layouts.map((l) => layoutPlotInput(l.id, base)))
+      await ensureRasters()
+      const rasters = plotRasters()
+      const bytes = plotLayouts(layouts.map((l) => layoutPlotInput(l.id, base, rasters)))
       downloadBytes(bytes, `${base}.pdf`)
       print(`<Published ${layouts.length} sheet(s) to "${base}.pdf">`)
     },
-    exportPdf: () => {
+    exportPdf: async () => {
       // -PLOT y PLOT ▸ Plot: el layout activo 1:1 con su Page Setup, o el modelo con las opciones del diálogo.
       const base = get().docName || 'drawing'
+      await ensureRasters()
       const r = get().plotPreview(get().plotSettings)
       if (r.empty && !r.layout) {
         print('Nothing to plot (no printable/visible geometry).')
@@ -2733,7 +2751,7 @@ export const useStore = create<AppState>((set, get) => {
       }
       doc.meta.plotted = new Date().toISOString() // campo PlotDate
       const name = r.layout ? `${base}-${r.layout}.pdf` : `${base}.pdf`
-      downloadBytes(pdfDocument([r.page]), name)
+      downloadBytes(pdfDocument([r.page], r.rasters), name)
       print(`<Plotted "${name}">`)
     },
     plotPreview: (st) => {
@@ -2741,9 +2759,13 @@ export const useStore = create<AppState>((set, get) => {
       const layout = doc.activeLayout
       const vp = get().activeViewport
       const displayAvailable = !layout && !!vp && vp.kind === 'model' && vp.isPlanView()
+      // Las imágenes que falten se decodifican aparte y la vista previa se rehace cuando están.
+      void ensureRasters().then((added) => added && bump())
+      const rasters = plotRasters()
+      const withImages = (page: PdfPage): PdfPage => ({ ...page, images: rasters.used })
       if (layout) {
         // Layout: la hoja 1:1 en su papel, con cada viewport a escala (Page Setup).
-        return { page: layoutPage(layoutPlotInput(layout.id, base)), empty: false, layout: layout.name, displayAvailable, scale: 1 }
+        return { page: withImages(layoutPage(layoutPlotInput(layout.id, base, rasters))), empty: false, layout: layout.name, displayAvailable, scale: 1, rasters }
       }
       const fields = fieldContextFor(doc, base + DRAWING_EXT, doc.activeTab)
       const entities = resolveFieldTexts(expandEntities(doc.entities, doc.blocks, { attdisp: doc.attdisp, skipLayers: frozenLayerIds(doc.layers) }), fields)
@@ -2756,9 +2778,10 @@ export const useStore = create<AppState>((set, get) => {
         center: st.center,
         scale: st.scale === null ? undefined : paperPerModel(st.scale, doc.units) * MM_TO_PT,
         style: { plotStyle: st.plotStyle, lineWeights: st.lineWeights },
+        rasters,
       })
       // Escala papel:dibujo que resulta (la de "ajustar al papel" se calcula).
-      return { page, empty, layout: null, displayAvailable, scale: empty ? null : transform.s / MM_TO_PT / unitToMm(doc.units) }
+      return { page: withImages(page), empty, layout: null, displayAvailable, scale: empty ? null : transform.s / MM_TO_PT / unitToMm(doc.units), rasters }
     },
     resolvePlot: (r, st) => {
       const res = plotResolve

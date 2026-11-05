@@ -1,4 +1,4 @@
-import type { PdfPage } from './pdf'
+import type { PdfPage, PdfRaster } from './pdf'
 
 /**
  * Vista previa de una página del ploteo: interpreta el content stream que genera Cota (trazos, rellenos,
@@ -58,6 +58,28 @@ function tokenize(src: string): Tok[] {
     }
   }
   return out
+}
+
+/** Lienzo con los píxeles de una imagen del PDF (uno por imagen, se reusa). */
+const canvases = new WeakMap<PdfRaster, HTMLCanvasElement>()
+function rasterCanvas(r: PdfRaster): HTMLCanvasElement | null {
+  let c = canvases.get(r)
+  if (c) return c
+  c = document.createElement('canvas')
+  c.width = r.w
+  c.height = r.h
+  const g = c.getContext('2d')
+  if (!g) return null
+  const img = g.createImageData(r.w, r.h)
+  for (let i = 0; i < r.w * r.h; i++) {
+    img.data[i * 4] = r.rgb[i * 3]
+    img.data[i * 4 + 1] = r.rgb[i * 3 + 1]
+    img.data[i * 4 + 2] = r.rgb[i * 3 + 2]
+    img.data[i * 4 + 3] = r.alpha ? r.alpha[i] : 255
+  }
+  g.putImageData(img, 0, 0)
+  canvases.set(r, c)
+  return c
 }
 
 const rgb = (a: number[]) => `rgb(${a.map((v) => Math.round(Math.max(0, Math.min(1, v)) * 255)).join(',')})`
@@ -181,6 +203,22 @@ export function drawPdfPage(canvas: HTMLCanvasElement, page: PdfPage, width: num
         fontSize = a[0] ?? 1
         font = ops.find((o): o is { name: string } => typeof o === 'object' && 'name' in o)?.name ?? 'F1'
         break
+      case 'cm':
+        g.transform(a[0], a[1], a[2], a[3], a[4], a[5])
+        break
+      case 'Do': {
+        // Una imagen: el cuadrado unidad de la matriz actual, con su primera fila arriba.
+        const n = ops.find((o): o is { name: string } => typeof o === 'object' && 'name' in o)?.name ?? ''
+        const r = page.images?.get(n)
+        const c = r && rasterCanvas(r)
+        if (c) {
+          g.save()
+          g.transform(1, 0, 0, -1, 0, 1)
+          g.drawImage(c, 0, 0, 1, 1)
+          g.restore()
+        }
+        break
+      }
       case 'gs': {
         // Transparencia: `/GaNN` lleva la opacidad en %.
         const n = ops.find((o): o is { name: string } => typeof o === 'object' && 'name' in o)?.name ?? ''

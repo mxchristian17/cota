@@ -1,7 +1,7 @@
 import { lineSpan } from '../geom/xline'
-import { imageRing } from '../geom/image'
+import { imagePoint, imageRing } from '../geom/image'
 import { layerShown } from '../layers/visibility'
-import type { Entity, Layer, PlotStyle, ShadeProps } from '../document/types'
+import type { Entity, ImageProps, Layer, PlotStyle, ShadeProps } from '../document/types'
 import { entityBounds } from '../editing/bounds'
 import { solidWireframe } from '../editing/solid'
 import { meshWireframe } from '../editing/mesh'
@@ -60,6 +60,8 @@ export interface PlotOptions {
   center?: boolean
   /** Estilo de ploteo (color/monocromo/grises) y lineweights. */
   style?: PlotStyleOpts
+  /** Píxeles de las imágenes; sin ellos, sólo su marco. */
+  rasters?: PlotRasters
 }
 
 export interface PlotTransform {
@@ -339,7 +341,7 @@ function circleStroke(cx: number, cy: number, r: number, t: PlotTransform): stri
 }
 
 /** Genera el content stream (operadores) del dibujo proyectado a papel. */
-export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTransform, style?: PlotStyleOpts, dim?: DimContext, lt?: LinetypeContext): string {
+export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTransform, style?: PlotStyleOpts, dim?: DimContext, lt?: LinetypeContext, rasters?: PlotRasters): string {
   const layerMap = new Map(layers.map((l) => [l.id, l]))
   const layerOf = (id: string) => layerMap.get(id)
   const toPage = (q: Vec3): [number, number] => worldToPage(q[0], q[1], t)
@@ -462,10 +464,13 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
         // Sólo el marco (su contenido lo proyecta el ploteo del layout).
         out += polyStroke(viewportRing(e.props).map((v) => [v[0], v[1]]), t)
         break
-      case 'IMAGE':
-        // El marco (los píxeles todavía no se imprimen).
+      case 'IMAGE': {
+        // Sus píxeles (si se cargó el archivo) y su marco.
+        const name = rasters?.name(e.props)
+        if (name) out += imageOps(e.props, toPage, name)
         out += polyStroke(imageRing(e.props).map((v) => [v[0], v[1]]), t)
         break
+      }
     }
     return out
   }
@@ -488,6 +493,64 @@ export interface PdfPage {
   w: number
   h: number
   content: string
+  /** Las imágenes que usa (`/ImN`), para la vista previa. */
+  images?: Map<string, PdfRaster>
+}
+
+/** Píxeles de una imagen para el PDF: RGB de 8 bits (y su alfa, si tiene transparencia), o un JPEG tal cual. */
+export interface PdfRaster {
+  w: number
+  h: number
+  rgb: Uint8Array
+  alpha?: Uint8Array
+  /** El archivo JPEG (RGB), que el PDF lleva sin recomprimir. */
+  jpeg?: Uint8Array
+}
+
+/**
+ * Imágenes de un ploteo: los píxeles de cada archivo (por sus datos) y los que usa el PDF, con un nombre `/ImN` por
+ * archivo y desvanecido (el desvanecido se mezcla con el papel, como en pantalla con el fondo).
+ */
+export class PlotRasters {
+  readonly used = new Map<string, PdfRaster>()
+  private readonly names = new Map<string, string>()
+  constructor(private readonly byData: Map<string, PdfRaster>) {}
+  name(p: ImageProps): string | undefined {
+    const r = p.data ? this.byData.get(p.data) : undefined
+    if (!r) return undefined
+    const fade = Math.round(Math.max(0, Math.min(100, p.fade ?? 0)))
+    const key = `${fade}|${p.data}`
+    let n = this.names.get(key)
+    if (!n) {
+      n = `Im${this.names.size}`
+      this.names.set(key, n)
+      this.used.set(n, fade ? { w: r.w, h: r.h, rgb: r.rgb.map((c) => Math.round(c + ((255 - c) * fade) / 100)), alpha: r.alpha } : r)
+    }
+    return n
+  }
+}
+
+/** Una imagen en su lugar (la matriz lleva el cuadrado unidad de la imagen a sus esquinas), recortada por su marco. */
+export function imageOps(p: ImageProps, map: (q: Vec3) => [number, number], name: string): string {
+  const [w, h] = p.size
+  const o = map(imagePoint(p, -0.5, h - 0.5))
+  const r = map(imagePoint(p, w - 0.5, h - 0.5))
+  const t = map(imagePoint(p, -0.5, -0.5))
+  const clip = imageRing(p).map(map)
+  const path = clip.map(([x, y], i) => `${f(x)} ${f(y)} ${i === 0 ? 'm' : 'l'}\n`).join('')
+  return `q\n${path}h\nW n\n${f(r[0] - o[0])} ${f(r[1] - o[1])} ${f(t[0] - o[0])} ${f(t[1] - o[1])} ${f(o[0])} ${f(o[1])} cm\n/${name} Do\nQ\n`
+}
+
+/** Componentes de color de un JPEG (marcador SOF), o 0 si no se reconoce. */
+function jpegComponents(b: Uint8Array): number {
+  for (let i = 2; i + 9 < b.length; ) {
+    if (b[i] !== 0xff) return 0
+    const m = b[i + 1]
+    const len = (b[i + 2] << 8) | b[i + 3]
+    if (m >= 0xc0 && m <= 0xc3) return b[i + 9]
+    i += 2 + len
+  }
+  return 0
 }
 
 /** Helvetica, negrita, itálica y negrita itálica (`/F1`…`/F4`). */
@@ -498,9 +561,17 @@ export const pdfFont = (t: { bold?: boolean; italic?: boolean }): string => `/F$
  * Documento PDF 1.4 con una o más páginas: Helvetica (con sus variantes) como fuente, los contenidos comprimidos
  * (Flate) y los estados de transparencia que usen (`/GaNN gs`, opacidad en %).
  */
-export function pdfDocument(pages: PdfPage[]): Uint8Array {
-  // 1 catálogo, 2 árbol de páginas, 3–6 fuentes; luego por página: objeto página + su contenido.
+export function pdfDocument(pages: PdfPage[], rasters?: PlotRasters): Uint8Array {
+  // 1 catálogo, 2 árbol de páginas, 3–6 fuentes; luego por página: objeto página + su contenido; al final, las
+  // imágenes (cada una con su máscara de transparencia, si tiene).
   const first = 3 + FONTS.length
+  const images = [...(rasters?.used ?? new Map<string, PdfRaster>())]
+  const imageObj = new Map<string, number>()
+  let nextObj = first + 2 * pages.length
+  for (const [name, r] of images) {
+    imageObj.set(name, nextObj)
+    nextObj += r.alpha ? 2 : 1
+  }
   const kids = pages.map((_, i) => `${first + 2 * i} 0 R`).join(' ')
   const objects: Array<string | Uint8Array> = [
     '<< /Type /Catalog /Pages 2 0 R >>',
@@ -512,14 +583,31 @@ export function pdfDocument(pages: PdfPage[]): Uint8Array {
   pages.forEach((p, i) => {
     const alphas = [...new Set([...p.content.matchAll(/\/Ga(\d+) gs/g)].map((m) => Number(m[1])))]
     const gs = alphas.length ? ` /ExtGState << ${alphas.map((a) => `/Ga${a} << /ca ${a / 100} /CA ${a / 100} >>`).join(' ')} >>` : ''
+    const used = [...new Set([...p.content.matchAll(/\/(Im\d+) Do/g)].map((m) => m[1]))].filter((n) => imageObj.has(n))
+    const xo = used.length ? ` /XObject << ${used.map((n) => `/${n} ${imageObj.get(n)} 0 R`).join(' ')} >>` : ''
     const data = zlibSync(latin1Bytes(p.content), { level: 6 })
     const head = latin1Bytes(`<< /Length ${data.length} /Filter /FlateDecode >>\nstream\n`)
     const stream = new Uint8Array(head.length + data.length + 10)
     stream.set(head)
     stream.set(data, head.length)
     stream.set(latin1Bytes('\nendstream'), head.length + data.length)
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(p.w)} ${f(p.h)}] /Contents ${first + 1 + 2 * i} 0 R /Resources << /Font << ${fonts} >>${gs} >> >>`, stream)
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(p.w)} ${f(p.h)}] /Contents ${first + 1 + 2 * i} 0 R /Resources << /Font << ${fonts} >>${gs}${xo} >> >>`, stream)
   })
+  const streamObj = (dict: string, data: Uint8Array): Uint8Array => {
+    const head = latin1Bytes(`<< ${dict} /Length ${data.length} >>\nstream\n`)
+    const out = new Uint8Array(head.length + data.length + 10)
+    out.set(head)
+    out.set(data, head.length)
+    out.set(latin1Bytes('\nendstream'), head.length + data.length)
+    return out
+  }
+  for (const [name, r] of images) {
+    const base = `/Type /XObject /Subtype /Image /Width ${r.w} /Height ${r.h} /BitsPerComponent 8`
+    const mask = r.alpha ? ` /SMask ${imageObj.get(name)! + 1} 0 R` : ''
+    const jpeg = r.jpeg && jpegComponents(r.jpeg) === 3 && !r.alpha
+    objects.push(jpeg ? streamObj(`${base} /ColorSpace /DeviceRGB /Filter /DCTDecode`, r.jpeg!) : streamObj(`${base} /ColorSpace /DeviceRGB /Filter /FlateDecode${mask}`, zlibSync(r.rgb, { level: 6 })))
+    if (r.alpha) objects.push(streamObj(`${base} /ColorSpace /DeviceGray /Filter /FlateDecode`, zlibSync(r.alpha, { level: 6 })))
+  }
 
   const parts: Uint8Array[] = []
   let size = 0
@@ -569,7 +657,7 @@ export function modelPlotPage(entities: Entity[], layers: Layer[], opts: PlotOpt
     : printable
   const bounds = area ?? drawingBounds(printable) ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 }
   const transform = computePlotTransform(bounds, page, margin, opts.scale, opts.center ?? true)
-  let content = inArea.length > 0 ? plotContentStream(inArea, layers, transform, opts.style, undefined, opts.linetypes) : ''
+  let content = inArea.length > 0 ? plotContentStream(inArea, layers, transform, opts.style, undefined, opts.linetypes, opts.rasters) : ''
   if (area && content) {
     // Lo que sale del área no se plotea (como la ventana de ploteo del CAD clásico).
     const [x0, y0] = worldToPage(area.minX, area.minY, transform)
@@ -590,5 +678,5 @@ ${content}Q
 /** Genera un PDF vectorial (una página) del dibujo, respetando line weight/color/printable/visible. */
 export function exportPdf(entities: Entity[], layers: Layer[], opts: PlotOptions = {}): PlotResult {
   const { page, transform, empty } = modelPlotPage(entities, layers, opts)
-  return { bytes: pdfDocument([page]), transform, empty }
+  return { bytes: pdfDocument([page], opts.rasters), transform, empty }
 }

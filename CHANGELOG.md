@@ -4,6 +4,17 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.28.0] — 2026-11-04
+
+### Added
+- **Images in plots**: the pictures of a drawing (IMAGE) plot with their pixels, in their place, clipped to their frame
+  and with their fade, in the PDF and in the plot preview (until now only their frame). JPEG pictures go into the PDF
+  as they are, without growing it.
+
+### Changed
+- **Hatch and linetype dots are 1 pixel on screen**, as in classic CAD (they were 2): dense patterns such as sand or
+  concrete look on screen as they plot, instead of covering what is under them.
+
 ## [2.27.1] — 2026-11-04
 
 ### Fixed
