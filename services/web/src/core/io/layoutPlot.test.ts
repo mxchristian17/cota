@@ -4,6 +4,7 @@ import { defaultPageSetup } from '../layout/paper'
 import { newViewportProps, viewAngles } from '../layout/viewport'
 import { MM_TO_PT } from './pdf'
 import { layoutPage, plotLayouts, plotsHidden, viewportContent } from './layoutPlot'
+import { pdfText } from '../../test/pdfText'
 
 const layer = (id: string, color: string, extra: Partial<Layer> = {}): Layer => ({
   id,
@@ -28,6 +29,19 @@ const style = { plotStyle: 'color' as const, lineWeights: true }
 const pt = (mm: number) => (Math.round(mm * MM_TO_PT * 1000) / 1000).toString()
 
 describe('PLOT de layout (E9a)', () => {
+  it('lo que cae fuera del viewport no se escribe (ni los tramos de un sombreado)', () => {
+    const near = viewportContent(vp().props, [line('a', [0, 0, 0], [1000, 0, 0])], layers, 'mm', style)
+    const far = viewportContent(vp().props, [line('a', [0, 0, 0], [1000, 0, 0]), line('b', [90000, 0, 0], [91000, 0, 0])], layers, 'mm', style)
+    expect(far).toBe(near)
+    // Un sombreado de patrón que asoma: sólo sus tramos dentro del contorno.
+    const big = { loops: [{ vertices: [[-2000, -1000, 0], [60000, -1000, 0], [60000, 1000, 0], [-2000, 1000, 0]] as [number, number, number][] }], pattern: 'ANSI31', scale: 100, angle: 0, origin: [0, 0, 0] as [number, number, number], island: 'outer' as const }
+    const h = viewportContent(vp().props, [{ id: 'h', type: 'HATCH', layer: '0', props: big }], layers, 'mm', style)
+    const xs = [...h.matchAll(/^(-?[\d.]+) -?[\d.]+ [ml]$/gm)].map((m) => Number(m[1]) / MM_TO_PT)
+    expect(xs.length).toBeGreaterThan(10)
+    // El viewport llega a x = 150 mm del papel y el sombreado a 1300: sólo quedan los tramos que lo cruzan.
+    expect(Math.max(...xs)).toBeLessThan(300)
+  })
+
   it('a 1:50 una línea de 1000 mm del modelo mide 20 mm en el papel', () => {
     const s = viewportContent(vp().props, [line('a', [0, 0, 0], [1000, 0, 0])], layers, 'mm', style)
     expect(s).toContain(`${pt(100)} ${pt(100)} m\n${pt(120)} ${pt(100)} l\nS`)
@@ -84,7 +98,7 @@ describe('PLOT de layout (E9a)', () => {
     expect(page.h).toBeCloseTo(297 * MM_TO_PT, 6)
     expect(page.content.match(/W n/g)).toHaveLength(1) // sólo el viewport encendido
     expect(page.content).toContain(`${pt(10)} ${pt(10)} m\n${pt(20)} ${pt(10)} l`) // papel 1:1
-    const pdf = new TextDecoder('latin1').decode(plotLayouts([{ layout, paper, model, layers, units: 'mm' }, { layout, paper: [], model, layers, units: 'mm' }]))
+    const pdf = pdfText(plotLayouts([{ layout, paper, model, layers, units: 'mm' }, { layout, paper: [], model, layers, units: 'mm' }]))
     expect(pdf).toContain('/Count 2')
     expect(pdf).toContain(`/MediaBox [0 0 ${pt(420)} ${pt(297)}]`)
   })

@@ -3,6 +3,7 @@ import type { Entity, Layer } from '../document/types'
 import { DocumentModel } from '../document/DocumentModel'
 import { exportPdf } from '../io/pdf'
 import { byLayerOrder, drawOrder, moveLayerTo } from './order'
+import { pdfText } from '../../test/pdfText'
 
 const layer = (id: string, color = '#ffffff'): Layer => ({ id, name: id, color, lineWeight: 0.25, lineType: 'CONTINUOUS', locked: false, visible: true, printable: true })
 const line = (id: string, layerId: string): Entity => ({ id, type: 'LINE', layer: layerId, props: { start: [0, 0, 0], end: [10, 0, 0] } })
@@ -35,7 +36,7 @@ describe('orden de capas', () => {
 
   it('el PDF pinta la capa de arriba al final', () => {
     const ls = [layer('A', '#ff0000'), layer('B', '#0000ff')]
-    const pdf = new TextDecoder('latin1').decode(exportPdf([line('1', 'A'), line('2', 'B')], ls).bytes)
+    const pdf = pdfText(exportPdf([line('1', 'A'), line('2', 'B')], ls).bytes)
     const red = pdf.indexOf('1 0 0 RG')
     const blue = pdf.indexOf('0 0 1 RG')
     expect(red).toBeGreaterThan(-1)

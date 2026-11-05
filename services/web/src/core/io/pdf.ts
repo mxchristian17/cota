@@ -17,6 +17,7 @@ import { entityDashes } from '../linetype/dash'
 import { hatchFrame, hatchRings, hatchStrokesCached, isSolidHatch, to3 } from '../hatch/geometry'
 import { isWide, polylineBand } from '../geom/plineWidth'
 import type { Vec3 } from '../math'
+import { zlibSync } from 'fflate'
 
 /** Puntos PDF por milímetro (1 pulgada = 72 pt = 25.4 mm). */
 export const MM_TO_PT = 72 / 25.4
@@ -124,6 +125,9 @@ export function worldToPage(x: number, y: number, t: PlotTransform): [number, nu
 
 /** Número compacto para el content stream (3 decimales). */
 export const f = (n: number): string => (Math.round(n * 1000) / 1000).toString()
+/** Puntos y tramos de un patrón o de un tipo de línea: a 0,1 pt (0,035 mm), invisible en una textura; un sombreado
+ *  denso tiene cientos de miles. */
+const f1 = (n: number): string => (Math.round(n * 10) / 10).toString()
 
 function hexToRgb01(hex: string): [number, number, number] {
   const h = hex.replace('#', '')
@@ -152,15 +156,37 @@ export function plotColor(hex: string, style: PlotStyle): [number, number, numbe
  * Operadores de color y ancho de una capa (lineweight en mm absolutos del papel). Los tipos de línea no
  * usan el patrón de trazo del PDF: los trazos se generan como geometría, igual que en pantalla.
  */
-export function strokeStyleOps(layer: Layer | undefined, style: PlotStyleOpts = DEFAULT_STYLE, own?: Pick<Entity, 'color' | 'lineWeight' | 'transparency'>): string {
-  // Color y grosor propios del objeto, o los de su capa (ByLayer); con transparencia, mezclado con el papel (blanco).
-  const t = Math.min(1, Math.max(0, own?.transparency ?? 0))
-  const [r, g, b] = plotColor((own?.color?.startsWith('#') ? own.color : undefined) ?? layer?.color ?? '#000000', style.plotStyle).map((c) => c * (1 - t) + t) as [number, number, number]
+export function strokeStyleOps(layer: Layer | undefined, style: PlotStyleOpts = DEFAULT_STYLE, own?: Pick<Entity, 'color' | 'lineWeight'>): string {
+  // Color y grosor propios del objeto, o los de su capa (ByLayer).
+  const [r, g, b] = plotColor((own?.color?.startsWith('#') ? own.color : undefined) ?? layer?.color ?? '#000000', style.plotStyle)
   const lw0 = own?.lineWeight !== undefined && own.lineWeight >= 0 ? own.lineWeight : layer?.lineWeight
   const lwMm = style.lineWeights ? lw0 || DEFAULT_LW_MM : THIN_LW_MM
   const lw = Math.max(0.1, lwMm * MM_TO_PT)
   return `${f(r)} ${f(g)} ${f(b)} RG\n${f(r)} ${f(g)} ${f(b)} rg\n${f(lw)} w\n[] 0 d\n`
 }
+
+/**
+ * Operadores de una entidad con su estilo. Con transparencia, de verdad (lo de abajo se ve a través): un estado
+ * gráfico `/GaNN` con la opacidad en %, que `pdfDocument` declara.
+ */
+export function entityOps(layer: Layer | undefined, style: PlotStyleOpts | undefined, own: Pick<Entity, 'color' | 'lineWeight' | 'transparency'>, body: string): string {
+  if (!body) return ''
+  const opacity = Math.round((1 - Math.min(1, Math.max(0, own.transparency ?? 0))) * 100)
+  const ops = strokeStyleOps(layer, style, own) + body
+  return opacity < 100 ? `q\n/Ga${opacity} gs\n${ops}Q\n` : ops
+}
+
+/**
+ * Orden de pintado, como en pantalla: los rellenos debajo de todas las líneas, las máscaras (WIPEOUT) sobre las
+ * líneas y los textos arriba de todo. Dentro de cada grupo, por el apilado de las capas.
+ */
+export type PaintLayer = 'fill' | 'line' | 'mask' | 'text'
+export function paintLayer(e: Entity): PaintLayer {
+  if (e.type === 'HATCH' && isSolidHatch(e.props)) return e.props.wipeout ? 'mask' : 'fill'
+  if (e.type === 'SHADE') return 'fill'
+  return e.type === 'TEXT' ? 'text' : 'line'
+}
+export const paintOrder = (b: Record<PaintLayer, string>): string => b.fill + b.line + b.mask + b.text
 
 /**
  * Sombreado de una vista: cada triángulo relleno con su color, en el orden en que viene (de atrás
@@ -175,11 +201,6 @@ export function shadeOps(p: ShadeProps, map: (q: Vec3) => [number, number], plot
     s += `${f(r)} ${f(g)} ${f(b)} rg\n` + pts.map(([x, y], j) => `${f(x)} ${f(y)} ${j === 0 ? 'm' : 'l'}\n`).join('') + 'h\nf\n'
   }
   return s
-}
-
-/** Punto (elemento de largo 0 de un tipo de línea): trazo nulo con extremo redondo. */
-export function dotStroke(x: number, y: number): string {
-  return `${f(x)} ${f(y)} m\n${f(x)} ${f(y)} l\nS\n`
 }
 
 /** Relleno par-impar de varios anillos (ya en puntos del PDF). */
@@ -202,14 +223,24 @@ export function specialOps(
   layerOf: (id: string) => Layer | undefined,
   lt: LinetypeContext | undefined,
   map: (p: Vec3) => [number, number],
+  clip?: { minX: number; minY: number; maxX: number; maxY: number },
 ): { ops: string; done: boolean } | null {
+  // Los tramos (de un patrón, de un tipo de línea) van como subtrayectos de un solo trazo; los que caen fuera del
+  // recorte (el contorno de un viewport) no se escriben.
+  const out = (x: number, y: number) => !!clip && (x < clip.minX || x > clip.maxX || y < clip.minY || y > clip.maxY)
   const line = (pts: Vec3[]): string => {
     if (pts.length < 2) return ''
-    return pts.map((q, i) => {
-      const [x, y] = map(q)
-      return `${f(x)} ${f(y)} ${i === 0 ? 'm' : 'l'}\n`
-    }).join('') + 'S\n'
+    const m = pts.map(map)
+    if (clip && (m.every(([x]) => x < clip.minX) || m.every(([x]) => x > clip.maxX) || m.every(([, y]) => y < clip.minY) || m.every(([, y]) => y > clip.maxY))) return ''
+    return m.map(([x, y], i) => `${f1(x)} ${f1(y)} ${i === 0 ? 'm' : 'l'}\n`).join('')
   }
+  const dot = (q: Vec3): string => {
+    const [x, y] = map(q)
+    if (out(x, y)) return ''
+    const p = `${f1(x)} ${f1(y)}`
+    return `${p} m\n${p} l\n`
+  }
+  const stroked = (s: string) => (s ? s + 'S\n' : '')
   if (e.type === 'HATCH') {
     if (isSolidHatch(e.props)) {
       const fr = hatchFrame(e.props)
@@ -220,8 +251,8 @@ export function specialOps(
     const s = hatchStrokesCached(e.props)
     let ops = ''
     for (const [a, b] of s.segs) ops += line([a, b])
-    for (const d of s.dots) ops += dotStroke(...map(d))
-    return { ops, done: true }
+    for (const d of s.dots) ops += dot(d)
+    return { ops: stroked(ops), done: true }
   }
   let ops = ''
   if (e.type === 'POLYLINE' && isWide(e.props)) {
@@ -229,9 +260,10 @@ export function specialOps(
   }
   const dashes = lt ? entityDashes(e, entityPattern(e, layerOf, lt), lt.plinegen) : null
   if (dashes) {
-    for (const d of dashes.dashes) ops += line(d)
-    for (const d of dashes.dots) ops += dotStroke(...map(d))
-    return { ops, done: true }
+    let st = ''
+    for (const d of dashes.dashes) st += line(d)
+    for (const d of dashes.dots) st += dot(d)
+    return { ops: ops + stroked(st), done: true }
   }
   return ops ? { ops, done: false } : null
 }
@@ -278,9 +310,9 @@ function catmullRom(cps: [number, number][], perSeg = 12): [number, number][] {
  * altura **en puntos** (ya incluyen el tamaño), `o` el origen de la línea de base. Un texto visto de
  * canto (ejes colineales) no se dibuja.
  */
-export function textTm(txt: string, o: [number, number], u: [number, number], v: [number, number]): string {
+export function textTm(txt: string, o: [number, number], u: [number, number], v: [number, number], font = '/F1'): string {
   if (Math.abs(u[0] * v[1] - u[1] * v[0]) < 1e-6) return ''
-  return `BT\n/F1 1 Tf\n${f(u[0])} ${f(u[1])} ${f(v[0])} ${f(v[1])} ${f(o[0])} ${f(o[1])} Tm\n(${pdfText(txt)}) Tj\nET\n`
+  return `BT\n${font} 1 Tf\n${f(u[0])} ${f(u[1])} ${f(v[0])} ${f(v[1])} ${f(o[0])} ${f(o[1])} Tm\n(${pdfText(txt)}) Tj\nET\n`
 }
 
 /** Operadores PDF de una polilínea (en mundo), trazada. */
@@ -314,19 +346,21 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
   const layerMap = new Map(layers.map((l) => [l.id, l]))
   const layerOf = (id: string) => layerMap.get(id)
   const toPage = (q: Vec3): [number, number] => worldToPage(q[0], q[1], t)
-  let out = '1 J\n1 j\n' // extremos y uniones redondeados
+  const paint: Record<PaintLayer, string> = { fill: '', line: '', mask: '', text: '' }
   for (const e of entities) {
     const layer = layerMap.get(e.layer)
     if (!layerShown(layer) || (layer && !layer.printable)) continue
-    out += strokeStyleOps(layer, style, e)
-    if (e.type === 'SHADE') {
-      out += shadeOps(e.props, toPage, style?.plotStyle ?? 'color')
-      continue
-    }
+    paint[paintLayer(e)] += entityOps(layer, style, e, entityBody(e))
+  }
+  return '1 J\n1 j\n' + paintOrder(paint) // extremos y uniones redondeados
+
+  function entityBody(e: Entity): string {
+    let out = ''
+    if (e.type === 'SHADE') return shadeOps(e.props, toPage, style?.plotStyle ?? 'color')
     const special = specialOps(e, layerOf, lt, toPage)
     if (special) {
       out += special.ops
-      if (special.done) continue
+      if (special.done) return out
     }
     switch (e.type) {
       case 'LINE':
@@ -390,7 +424,7 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
             const dy = -h * (BASELINE_DROP + i * ls)
             const o = worldToPage(px + offX * c - dy * sn, py + offX * sn + dy * c, t)
             const k = e.props.widthFactor ?? 1 // factor de ancho: a lo largo del renglón
-            out += textTm(ln, o, [c * size * k, sn * size * k], [-sn * size, c * size])
+            out += textTm(ln, o, [c * size * k, sn * size * k], [-sn * size, c * size], pdfFont(e.props))
           })
           break
         }
@@ -400,7 +434,7 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
           const [tx, ty] = worldToPage(top[0] + offX, wy, t)
           // Tz: escala horizontal (factor de ancho del texto, en %).
           const tz = e.props.widthFactor && Math.abs(e.props.widthFactor - 1) > 1e-6 ? `${f(e.props.widthFactor * 100)} Tz\n` : ''
-          out += `BT\n/F1 ${f(size)} Tf\n${tz}${f(tx)} ${f(ty)} Td\n(${pdfText(lines[i])}) Tj\nET\n`
+          out += `BT\n${pdfFont(e.props)} ${f(size)} Tf\n${tz}${f(tx)} ${f(ty)} Td\n(${pdfText(lines[i])}) Tj\nET\n`
         }
         break
       }
@@ -436,8 +470,8 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
         out += polyStroke(imageRing(e.props).map((v) => [v[0], v[1]]), t)
         break
     }
+    return out
   }
-  return out
 }
 
 function latin1Bytes(s: string): Uint8Array {
@@ -459,35 +493,64 @@ export interface PdfPage {
   content: string
 }
 
-/** Documento PDF 1.4 con una o más páginas (Helvetica como única fuente). */
+/** Helvetica, negrita, itálica y negrita itálica (`/F1`…`/F4`). */
+const FONTS = ['Helvetica', 'Helvetica-Bold', 'Helvetica-Oblique', 'Helvetica-BoldOblique']
+export const pdfFont = (t: { bold?: boolean; italic?: boolean }): string => `/F${1 + (t.bold ? 1 : 0) + (t.italic ? 2 : 0)}`
+
+/**
+ * Documento PDF 1.4 con una o más páginas: Helvetica (con sus variantes) como fuente, los contenidos comprimidos
+ * (Flate) y los estados de transparencia que usen (`/GaNN gs`, opacidad en %).
+ */
 export function pdfDocument(pages: PdfPage[]): Uint8Array {
-  // 1 catálogo, 2 árbol de páginas, 3 fuente; luego por página: objeto página + su contenido.
-  const kids = pages.map((_, i) => `${4 + 2 * i} 0 R`).join(' ')
-  const objects = [
+  // 1 catálogo, 2 árbol de páginas, 3–6 fuentes; luego por página: objeto página + su contenido.
+  const first = 3 + FONTS.length
+  const kids = pages.map((_, i) => `${first + 2 * i} 0 R`).join(' ')
+  const objects: Array<string | Uint8Array> = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     `<< /Type /Pages /Kids [${kids}] /Count ${pages.length} >>`,
     // WinAnsi: los textos van en Latin-1 (acentos, ñ, °).
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+    ...FONTS.map((name) => `<< /Type /Font /Subtype /Type1 /BaseFont /${name} /Encoding /WinAnsiEncoding >>`),
   ]
+  const fonts = FONTS.map((_, i) => `/F${i + 1} ${3 + i} 0 R`).join(' ')
   pages.forEach((p, i) => {
-    objects.push(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(p.w)} ${f(p.h)}] /Contents ${5 + 2 * i} 0 R /Resources << /Font << /F1 3 0 R >> >> >>`,
-      `<< /Length ${latin1Bytes(p.content).length} >>\nstream\n${p.content}\nendstream`,
-    )
+    const alphas = [...new Set([...p.content.matchAll(/\/Ga(\d+) gs/g)].map((m) => Number(m[1])))]
+    const gs = alphas.length ? ` /ExtGState << ${alphas.map((a) => `/Ga${a} << /ca ${a / 100} /CA ${a / 100} >>`).join(' ')} >>` : ''
+    const data = zlibSync(latin1Bytes(p.content), { level: 6 })
+    const head = latin1Bytes(`<< /Length ${data.length} /Filter /FlateDecode >>\nstream\n`)
+    const stream = new Uint8Array(head.length + data.length + 10)
+    stream.set(head)
+    stream.set(data, head.length)
+    stream.set(latin1Bytes('\nendstream'), head.length + data.length)
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${f(p.w)} ${f(p.h)}] /Contents ${first + 1 + 2 * i} 0 R /Resources << /Font << ${fonts} >>${gs} >> >>`, stream)
   })
 
-  let pdf = '%PDF-1.4\n'
+  const parts: Uint8Array[] = []
+  let size = 0
+  const put = (b: Uint8Array | string) => {
+    const bytes = typeof b === 'string' ? latin1Bytes(b) : b
+    parts.push(bytes)
+    size += bytes.length
+  }
+  put('%PDF-1.4\n')
   const offsets: number[] = []
   objects.forEach((body, i) => {
-    offsets.push(latin1Bytes(pdf).length)
-    pdf += `${i + 1} 0 obj\n${body}\nendobj\n`
+    offsets.push(size)
+    put(`${i + 1} 0 obj\n`)
+    put(body)
+    put('\nendobj\n')
   })
-  const xrefOffset = latin1Bytes(pdf).length
+  const xrefOffset = size
   const n = objects.length + 1
-  pdf += `xref\n0 ${n}\n0000000000 65535 f \n`
-  for (const off of offsets) pdf += `${off.toString().padStart(10, '0')} 00000 n \n`
-  pdf += `trailer\n<< /Size ${n} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`
-  return latin1Bytes(pdf)
+  let tail = `xref\n0 ${n}\n0000000000 65535 f \n`
+  for (const off of offsets) tail += `${off.toString().padStart(10, '0')} 00000 n \n`
+  put(tail + `trailer\n<< /Size ${n} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`)
+  const pdf = new Uint8Array(size)
+  let at = 0
+  for (const b of parts) {
+    pdf.set(b, at)
+    at += b.length
+  }
+  return pdf
 }
 
 /** Página del ploteo del modelo (para el PDF y su vista previa). */

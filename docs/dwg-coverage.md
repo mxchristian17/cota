@@ -29,7 +29,7 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 | PDF, DWF and DGN UNDERLAY | File name at the insertion point | Text | The content is an external file |
 | OLE2FRAME | Frame | Polyline | |
 | Lineweight display (LWDISPLAY) | Kept: with it on, the model shows lineweights in pixels (LWT in the status bar) | Native | Layouts always show lineweights |
-| Transparency (440) | Applied: the color is mixed with the background (on screen) or the paper (in plots) | Native | Layer transparency is not read |
+| Transparency (440) | Applied: the color is mixed with the background on screen; plots are transparent (what is under shows through) | Native | Layer transparency is not read |
 | WIPEOUT | A mask filled with the background color, over the lines of every layer and under the texts | WIPEOUT | Its frame is not drawn |
 | SHAPE | Point, with a notice | Point | Its drawing is in an external shape file |
 | LIGHT, SUN | Ignored | — | Not drawing content |

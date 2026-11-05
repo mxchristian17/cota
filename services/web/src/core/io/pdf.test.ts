@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { computePlotTransform, exportPdf, MM_TO_PT, PAGE_SIZES, plotContentStream, strokeStyleOps, worldToPage } from './pdf'
 import type { Entity, Layer } from '../document/types'
+import { pdfText } from '../../test/pdfText'
 
 const layers: Layer[] = [
   { id: '0', name: '0', color: '#ffffff', lineWeight: 0.5, lineType: 'CONTINUOUS', locked: false, visible: true, printable: true },
@@ -67,6 +68,35 @@ describe('exportPdf', () => {
     expect(text.trimEnd().endsWith('%%EOF')).toBe(true)
   })
 
+  it('los contenidos van comprimidos (Flate); con transparencia, un estado gráfico declarado en la página', () => {
+    const many = Array.from({ length: 200 }, (_, i): Entity => ({ id: `l${i}`, type: 'LINE', layer: '0', props: { start: [0, i, 0], end: [100, i, 0] } }))
+    const { bytes } = exportPdf([...many, { ...line('t', '0'), transparency: 0.5 }], layers)
+    const raw = new TextDecoder('latin1').decode(bytes)
+    expect(raw).toContain('/Filter /FlateDecode')
+    expect(raw).not.toContain(' l\n') // los operadores no van a la vista
+    const text = pdfText(bytes)
+    expect(text.match(/ m\n[^\n]* l\nS\n/g)!.length).toBe(201)
+    expect(text).toMatch(/q\n\/Ga50 gs\n[^Q]*Q\n/) // transparente de verdad, sólo ese objeto
+    expect(text).toContain('/ExtGState << /Ga50 << /ca 0.5 /CA 0.5 >> >>')
+    expect(bytes.length).toBeLessThan(raw.length + 1) // (los bytes son el archivo)
+  })
+
+  it('pinta como la pantalla: rellenos debajo de las líneas, máscaras encima y textos arriba; negrita con su fuente', () => {
+    const t = computePlotTransform({ minX: 0, minY: 0, maxX: 100, maxY: 100 }, PAGE_SIZES.A4, 28)
+    const sq = { loops: [{ vertices: [[0, 0, 0], [50, 0, 0], [50, 50, 0], [0, 50, 0]] as [number, number, number][] }], pattern: 'SOLID', scale: 1, angle: 0, origin: [0, 0, 0] as [number, number, number], island: 'outer' as const }
+    const ents: Entity[] = [
+      { id: 'tx', type: 'TEXT', layer: '0', props: { position: [0, 0, 0], text: 'TITULO', height: 5, rotation: 0, justify: 'left', normal: [0, 0, 1], bold: true } },
+      { id: 'mask', type: 'HATCH', layer: '0', props: { ...sq, wipeout: true } },
+      line('ln', '0'),
+      { id: 'fill', type: 'HATCH', layer: '0', props: sq },
+    ]
+    const c = plotContentStream(ents, layers, t)
+    const at = (re: RegExp) => c.search(re)
+    expect(at(/f\*\n/)).toBeLessThan(at(/ l\nS\n/)) // el relleno antes que la línea
+    expect(at(/1 1 1 rg/)).toBeGreaterThan(at(/ l\nS\n/)) // la máscara después
+    expect(at(/BT\n\/F2 /)).toBeGreaterThan(at(/1 1 1 rg/)) // el texto al final, en Helvetica-Bold
+  })
+
   it('marca empty cuando no hay geometría imprimible', () => {
     const { empty } = exportPdf([line('b', 'hidden')], layers)
     expect(empty).toBe(true)
@@ -91,9 +121,10 @@ describe('tipos de línea en el PDF', () => {
     const t = { s: 1, ox: 0, oy: 0 }
     const lt = { patterns: new Map([['DASHED', [12.7, -6.35]]]), factor: 1, plinegen: false }
     const ops = plotContentStream([line], [layer('DASHED')], t, undefined, undefined, lt)
-    const strokes = ops.split('S\n').filter((x) => x.includes(' m\n'))
-    // 100 = 12,7 + 4·19,05 + resto: 4 repeticiones → 5 trazos, los extremos alargados por igual.
-    expect(strokes.length).toBe(5)
+    // 100 = 12,7 + 4·19,05 + resto: 4 repeticiones → 5 trazos (subtrayectos de un solo trazo), los extremos
+    // alargados por igual.
+    expect(ops.match(/ m\n/g)).toHaveLength(5)
+    expect(ops.match(/S\n/g)).toHaveLength(1)
     expect(ops.startsWith('1 J')).toBe(true)
     const cont = plotContentStream([line], [layer('CONTINUOUS')], t, undefined, undefined, lt)
     expect(cont.split('S\n').filter((x) => x.includes(' m\n')).length).toBe(1)

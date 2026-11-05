@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { pdfText } from '../../src/test/pdfText'
 
 /** Estado del store de la app (para leer el dibujo sin depender de píxeles). */
 const st = <T,>(page: Page, js: string) => page.evaluate((c) => new Function('s', c)((window as any).__cotaStore.getState()), js) as Promise<T>
@@ -130,7 +131,7 @@ test.describe('Cota: command line like classic CAD', () => {
     const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('plot-ok').click()])
     expect(download.suggestedFilename()).toBe('drawing1.pdf')
     const { readFileSync } = await import('node:fs')
-    const pdf = readFileSync(await download.path(), 'latin1')
+    const pdf = pdfText(readFileSync(await download.path()))
     expect(pdf).toContain('/MediaBox [0 0 595.28 841.89]') // A4 vertical
     expect(pdf).toMatch(/h\nW n\n/) // recortado a la ventana
     expect(await st(page, 'return s.engine.busy')).toBe(false)

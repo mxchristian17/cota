@@ -4,6 +4,19 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.26.0] — 2026-11-04
+
+### Changed
+- **Much lighter PDFs**: plots are compressed, a viewport writes only what falls inside it, and the lines and dots of a
+  hatch pattern go as one path. A sheet with dense hatches in several viewports went from 170 MB to under 5 MB.
+- **Plots paint like the screen**: fills under the lines, masks over them and texts on top, so a fill no longer hides
+  lines that show on screen.
+
+### Fixed
+- **Transparency in PDFs is real**: what is under a transparent fill shows through it, as on screen (it was mixed with
+  the paper and covered what was under it).
+- **Bold and italic texts** plot in bold and italic.
+
 ## [2.25.0] — 2026-11-04
 
 ### Added

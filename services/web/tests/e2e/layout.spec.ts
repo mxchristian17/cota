@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { pdfText } from '../../src/test/pdfText'
 
 async function typeCmd(page: Page, ...steps: string[]) {
   const input = page.getByTestId('command-input')
@@ -239,7 +240,7 @@ test.describe('Cota Layout: hoja y viewports flotantes', () => {
     expect(download.suggestedFilename()).toBe('drawing1-Layout1.pdf')
     const path = await download.path()
     const { readFileSync } = await import('node:fs')
-    const pdf = readFileSync(path, 'latin1')
+    const pdf = pdfText(readFileSync(path))
     expect(pdf).toContain('/MediaBox [0 0 1190.551 841.89]') // 420 × 297 mm
     expect(pdf).toMatch(/h\nW n\n/) // recorte del viewport
     expect(pdf).toContain('0 0 0 RG') // color 7 en negro
@@ -248,7 +249,7 @@ test.describe('Cota Layout: hoja y viewports flotantes', () => {
     await typeCmd(page, 'LO', 'N', 'Cortes')
     const [pub] = await Promise.all([page.waitForEvent('download'), typeCmd(page, 'PUBLISH', '')])
     expect(pub.suggestedFilename()).toBe('drawing1.pdf')
-    const multi = readFileSync(await pub.path(), 'latin1')
+    const multi = pdfText(readFileSync(await pub.path()))
     expect(multi).toContain('/Count 2')
     expect(multi).toContain('SHEET 2 OF 2') // el rótulo de Cortes evalúa su número de hoja
   })

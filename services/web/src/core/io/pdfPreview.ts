@@ -97,6 +97,7 @@ export function drawPdfPage(canvas: HTMLCanvasElement, page: PdfPage, width: num
   g.fillStyle = '#000'
   let path = new Path2D()
   let fontSize = 1
+  let font = 'F1'
   let tm = new DOMMatrix()
   let pendingClip = false
   const ops: Tok[] = []
@@ -178,7 +179,15 @@ export function drawPdfPage(canvas: HTMLCanvasElement, page: PdfPage, width: num
         break
       case 'Tf':
         fontSize = a[0] ?? 1
+        font = ops.find((o): o is { name: string } => typeof o === 'object' && 'name' in o)?.name ?? 'F1'
         break
+      case 'gs': {
+        // Transparencia: `/GaNN` lleva la opacidad en %.
+        const n = ops.find((o): o is { name: string } => typeof o === 'object' && 'name' in o)?.name ?? ''
+        const ga = /^Ga(\d+)$/.exec(n)
+        if (ga) g.globalAlpha = Number(ga[1]) / 100
+        break
+      }
       case 'Td':
         tm = tm.multiply(new DOMMatrix([1, 0, 0, 1, a[0], a[1]]))
         break
@@ -192,7 +201,8 @@ export function drawPdfPage(canvas: HTMLCanvasElement, page: PdfPage, width: num
         // Texto: la matriz del texto con la y otra vez hacia abajo (si no, las letras saldrían espejadas).
         // Se dibuja con un cuerpo de 100 px escalado: con 1 px algunos navegadores redondean mal las letras.
         g.setTransform(base.multiply(tm).multiply(new DOMMatrix([fontSize / 100, 0, 0, -fontSize / 100, 0, 0])))
-        g.font = '100px Helvetica, Arial, sans-serif'
+        // F2 negrita, F3 itálica, F4 las dos (como `pdfFont`).
+        g.font = `${font === 'F3' || font === 'F4' ? 'italic ' : ''}${font === 'F2' || font === 'F4' ? 'bold ' : ''}100px Helvetica, Arial, sans-serif`
         g.fillText(s.str, 0, 0)
         g.restore()
         break

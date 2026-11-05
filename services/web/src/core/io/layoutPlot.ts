@@ -13,9 +13,10 @@ import { dimDisplay, type DimContext } from '../dimension/dimGeometry'
 import { paperSizeMm } from '../layout/paper'
 import { paperPerModel } from '../layout/scale'
 import { viewBasis, viewportRing } from '../layout/viewport'
-import { MM_TO_PT, f, pdfDocument, plotContentStream, polyStroke, specialOps, strokeStyleOps, textTm, type PdfPage, type PlotStyleOpts, type PlotTransform } from './pdf'
+import { MM_TO_PT, entityOps, f, paintLayer, paintOrder, pdfDocument, pdfFont, plotContentStream, polyStroke, specialOps, strokeStyleOps, textTm, type PaintLayer, type PdfPage, type PlotStyleOpts, type PlotTransform } from './pdf'
 import type { LinetypeContext } from '../linetype/linetypes'
 import { byLayerOrder } from '../layers/order'
+import { entityBounds } from '../editing/bounds'
 
 /** Hoja a plotear: el layout con su papel y el modelo que muestran sus viewports (bloques ya expandidos). */
 export interface LayoutPlotInput {
@@ -183,7 +184,17 @@ export function viewportContent(
     return [x * MM_TO_PT, y * MM_TO_PT]
   }
 
-  let out = 'q\n' + polyStroke(ring, PAPER, true).replace(/h\nS\n$/, 'h\nW n\n')
+  // En planta (los ejes de la vista sin Z) la caja XY de un objeto, proyectada, contiene lo que dibuja: lo que cae
+  // fuera del viewport no se escribe.
+  const plan = Math.abs(right[2]) < 1e-9 && Math.abs(up[2]) < 1e-9
+  const outside = (e: Entity): boolean => {
+    if (!plan || e.type === 'DIMENSION') return false
+    const b = entityBounds(e)
+    if (![b.minX, b.minY, b.maxX, b.maxY].every(Number.isFinite)) return false
+    return !overlaps(boxOf([proj([b.minX, b.minY, tz]), proj([b.maxX, b.minY, tz]), proj([b.maxX, b.maxY, tz]), proj([b.minX, b.maxY, tz])]), clip)
+  }
+  const clipPt = { minX: clip.minX * MM_TO_PT, minY: clip.minY * MM_TO_PT, maxX: clip.maxX * MM_TO_PT, maxY: clip.maxY * MM_TO_PT }
+  const paint: Record<PaintLayer, string> = { fill: '', line: '', mask: '', text: '' }
   for (const e of byLayerOrder(model, layers)) {
     const layer = layerMap.get(e.layer)
     if (!layerShown(layer) || (layer && !layer.printable) || frozen.has(e.layer)) continue
@@ -191,8 +202,9 @@ export function viewportContent(
       solids.push(e)
       continue
     }
+    if (outside(e)) continue
     let body = ''
-    const special = specialOps(e, (id) => layerMap.get(id), ltVp, toPt)
+    const special = specialOps(e, (id) => layerMap.get(id), ltVp, toPt, clipPt)
     if (special) body += special.ops
     if (!special?.done) {
       for (const poly of entityStrokes(e, dim)) {
@@ -229,11 +241,12 @@ export function viewportContent(
         const dy = -t.height * (BASELINE_DROP + i * lineSpacingOf(t))
         const o = proj([0, 1, 2].map((j) => top[j] + u[j] * offX + v[j] * dy) as Vec3)
         if (o[0] < clip.minX || o[0] > clip.maxX || o[1] < clip.minY || o[1] > clip.maxY) return
-        body += textTm(ln, [o[0] * MM_TO_PT, o[1] * MM_TO_PT], toPt(u, wf), toPt(v))
+        body += textTm(ln, [o[0] * MM_TO_PT, o[1] * MM_TO_PT], toPt(u, wf), toPt(v), pdfFont(t))
       })
     }
-    if (body) out += strokeStyleOps(layer, style, e) + body
+    paint[paintLayer(e)] += entityOps(layer, style, e, body)
   }
+  let out = 'q\n' + polyStroke(ring, PAPER, true).replace(/h\nS\n$/, 'h\nW n\n') + paintOrder(paint)
   if (solids.length) {
     const t0 = dot(vp.target, right)
     const t1 = dot(vp.target, up)
