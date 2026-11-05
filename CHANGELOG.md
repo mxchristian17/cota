@@ -4,6 +4,12 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.27.1] — 2026-11-04
+
+### Fixed
+- **Symbols in plotted texts**: characters the PDF font lacks (≈, ≤, ≥, the minus sign, ∅…) plot as their closest
+  equivalent (~, <=, >=, -, Ø) instead of "?", and the rest of the Windows character set (‰, Š, Œ…) plots as is.
+
 ## [2.27.0] — 2026-11-04
 
 ### Changed

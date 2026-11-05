@@ -266,15 +266,17 @@ export function specialOps(
 /** Sanea texto a Latin-1 imprimible para Helvetica (reemplaza símbolos no soportados). */
 /** Caracteres de WinAnsi fuera de Latin-1 (0x80–0x9F): rayas, comillas tipográficas, €, …, •. */
 const WIN_ANSI: Record<string, string> = {
-  '€': '\x80', '…': '\x85', '‘': '\x91', '’': '\x92', '“': '\x93', '”': '\x94', '•': '\x95', '–': '\x96', '—': '\x97', '™': '\x99',
+  '€': '\x80', '‚': '\x82', 'ƒ': '\x83', '„': '\x84', '…': '\x85', '†': '\x86', '‡': '\x87', 'ˆ': '\x88', '‰': '\x89', 'Š': '\x8a',
+  '‹': '\x8b', 'Œ': '\x8c', 'Ž': '\x8e', '‘': '\x91', '’': '\x92', '“': '\x93', '”': '\x94', '•': '\x95', '–': '\x96', '—': '\x97',
+  '˜': '\x98', '™': '\x99', 'š': '\x9a', '›': '\x9b', 'œ': '\x9c', 'ž': '\x9e', 'Ÿ': '\x9f',
 }
+/** Símbolos que Helvetica no tiene, con su equivalente más cercano (en lugar de "?"). */
+const NEAR: Record<string, string> = { '≈': '~', '≤': '<=', '≥': '>=', '−': '-', '∅': 'Ø', '⌀': 'Ø', '⌒': '', '→': '->', '←': '<-', '×': '\xd7' }
 
 export function pdfText(s: string): string {
   return s
-    .replace(/⌀/g, 'Ø')
-    .replace(/⌒/g, '')
-    .replace(/[€…‘’“”•–—™]/g, (c) => WIN_ANSI[c])
-    .replace(/[^\x20-\xFF]/g, '?')
+    .replace(/[≈≤≥−∅⌀⌒→←×]/g, (c) => NEAR[c])
+    .replace(/[^\x20-\xFF]/g, (c) => WIN_ANSI[c] ?? '?')
     .replace(/([\\()])/g, '\\$1')
 }
 

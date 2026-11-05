@@ -281,7 +281,6 @@ export interface AppState {
   cancel: () => void
   setCurrentLayer: (id: string) => void
   createLayer: (name: string) => void
-  /** Orden de capas: mueve la capa a la posición `to` de la lista (0 = se dibuja arriba). */
   setLayerColor: (id: string, color: string) => void
   deleteLayer: (id: string) => void
   setLayerLineWeight: (id: string, w: number) => void

@@ -111,6 +111,8 @@ describe('texto en WinAnsi', () => {
     const { pdfText } = await import('./pdf')
     expect(pdfText('Revisó — “ok” 5°')).toBe('Revisó \x97 \x93ok\x94 5°')
     expect(pdfText('emoji 😀')).toBe('emoji ??')
+    // Los símbolos que Helvetica no tiene salen con su equivalente, no como "?".
+    expect(pdfText('≈+2.50 IGN ≤ 3 − 1 ∅20 ‰')).toBe('~+2.50 IGN <= 3 - 1 Ø20 \x89')
   })
 })
 

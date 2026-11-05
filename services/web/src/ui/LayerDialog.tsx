@@ -69,7 +69,6 @@ export function LayerDialog() {
 
   const [name, setName] = useState('')
   const [filter, setFilter] = useState('')
-  // Arrastre de filas para el orden de dibujo: id de la fila arrastrada y fila de destino.
 
   if (!open) return null
 
