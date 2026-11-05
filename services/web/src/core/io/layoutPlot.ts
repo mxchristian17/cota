@@ -15,7 +15,6 @@ import { paperPerModel } from '../layout/scale'
 import { viewBasis, viewportRing } from '../layout/viewport'
 import { MM_TO_PT, entityOps, f, paintLayer, paintOrder, pdfDocument, pdfFont, plotContentStream, polyStroke, specialOps, strokeStyleOps, textTm, type PaintLayer, type PdfPage, type PlotStyleOpts, type PlotTransform } from './pdf'
 import type { LinetypeContext } from '../linetype/linetypes'
-import { byLayerOrder } from '../layers/order'
 import { entityBounds } from '../editing/bounds'
 
 /** Hoja a plotear: el layout con su papel y el modelo que muestran sus viewports (bloques ya expandidos). */
@@ -194,8 +193,8 @@ export function viewportContent(
     return !overlaps(boxOf([proj([b.minX, b.minY, tz]), proj([b.maxX, b.minY, tz]), proj([b.maxX, b.maxY, tz]), proj([b.minX, b.maxY, tz])]), clip)
   }
   const clipPt = { minX: clip.minX * MM_TO_PT, minY: clip.minY * MM_TO_PT, maxX: clip.maxX * MM_TO_PT, maxY: clip.maxY * MM_TO_PT }
-  const paint: Record<PaintLayer, string> = { fill: '', line: '', mask: '', text: '' }
-  for (const e of byLayerOrder(model, layers)) {
+  const paint: Record<PaintLayer, string> = { draw: '', text: '' }
+  for (const e of model) {
     const layer = layerMap.get(e.layer)
     if (!layerShown(layer) || (layer && !layer.printable) || frozen.has(e.layer)) continue
     if (hidden && is3d(e)) {
@@ -268,7 +267,7 @@ export function layoutPage(input: LayoutPlotInput): PdfPage {
   }
   // "Hide paperspace objects": los sólidos del papel también con líneas ocultas (vista en planta).
   const hidePaper = ps.hidePaperspaceObjects && !!input.meshOf && input.paper.some(is3d)
-  const paperOrdered = byLayerOrder(input.paper, layers) // apilado de capas
+  const paperOrdered = input.paper // en su orden de dibujo
   let paper = plotContentStream(hidePaper ? paperOrdered.filter((e) => !is3d(e)) : paperOrdered, layers, PAPER, style, { annoScale: 1 }, input.linetypes)
   if (hidePaper) {
     const layerMap = new Map(layers.map((l) => [l.id, l]))

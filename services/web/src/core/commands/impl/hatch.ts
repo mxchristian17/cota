@@ -170,7 +170,12 @@ function runHatch(cli: boolean) {
       if (cur?.type === 'HATCH') {
         cur.props = p
         ctx.doc.forgetHatch(cur.id)
-      } else hatchId = ctx.doc.addEntity({ type: 'HATCH', layer: ctx.currentLayerId(), props: p }).id
+      } else {
+        hatchId = ctx.doc.addEntity({ type: 'HATCH', layer: ctx.currentLayerId(), props: p }).id
+        // Detrás de su contorno, como el CAD clásico por defecto (HPDRAWORDER: Send behind boundary).
+        const ids = [...new Set(picks.flatMap((q) => q.ids))]
+        if (ids.length) ctx.doc.reorder([hatchId], { below: ids })
+      }
       ctx.doc.touch()
       if (!cli) ctx.app.hatchPanel?.({ mode: 'create', ids: hatchId ? [hatchId] : [] })
       return true

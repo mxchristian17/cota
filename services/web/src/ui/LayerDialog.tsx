@@ -62,7 +62,6 @@ export function LayerDialog() {
   const deleteLayer = useStore((s) => s.deleteLayer)
   const setVpFrozen = useStore((s) => s.setLayerVpFrozen)
   const setNewVpFreeze = useStore((s) => s.setLayerNewVpFreeze)
-  const moveLayer = useStore((s) => s.moveLayer)
   // VP Freeze aplica al viewport de MSPACE (como el CAD clásico, la columna aparece con un viewport activo).
   const doc = useStore((s) => s.doc)
   const msVp = doc.msViewportId ? doc.getEntity(doc.msViewportId) : undefined
@@ -71,13 +70,11 @@ export function LayerDialog() {
   const [name, setName] = useState('')
   const [filter, setFilter] = useState('')
   // Arrastre de filas para el orden de dibujo: id de la fila arrastrada y fila de destino.
-  const [drag, setDrag] = useState<{ id: string; over: string | null } | null>(null)
 
   if (!open) return null
 
   const all = layerSvc.list()
   const layers = all.filter((l) => l.name.toLowerCase().includes(filter.trim().toLowerCase()))
-  const indexOf = (id: string) => all.findIndex((l) => l.id === id)
 
   const onAdd = () => {
     const n = name.trim()
@@ -123,8 +120,6 @@ export function LayerDialog() {
           />
         </div>
 
-        <p className="muted layer-hint">Layers higher in the list draw on top and win when picking: drag a row or use ▲▼.</p>
-
         {selection.length > 0 && (
           <p className="muted layer-hint">
             {selection.length} objeto(s) seleccionado(s): al fijar una capa se mueven a ella.
@@ -135,7 +130,6 @@ export function LayerDialog() {
           <table className="layer-table" data-testid="layer-table">
             <thead>
               <tr>
-                <th title="Draw order: the top row is drawn on top">Order</th>
                 <th title="Current layer">Cur</th>
                 <th>Name</th>
                 <th title="On / off">On</th>
@@ -154,56 +148,9 @@ export function LayerDialog() {
               {layers.map((l) => (
                 <tr
                   key={l.id}
-                  className={[l.id === currentLayerId ? 'current' : '', drag?.over === l.id && drag.id !== l.id ? 'drop-target' : '']
-                    .filter(Boolean)
-                    .join(' ') || undefined}
-                  onDragOver={(e) => {
-                    if (!drag) return
-                    e.preventDefault()
-                    if (drag.over !== l.id) setDrag({ ...drag, over: l.id })
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault()
-                    if (drag) moveLayer(drag.id, indexOf(l.id))
-                    setDrag(null)
-                  }}
+                  className={l.id === currentLayerId ? 'current' : undefined}
                   data-testid={`layer-row-${l.name}`}
                 >
-                  <td className="layer-order">
-                    {/* Sólo la manija arrastra: así seleccionar texto en el nombre no mueve la fila. */}
-                    <span
-                      className="drag-handle"
-                      title="Drag to reorder"
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.effectAllowed = 'move'
-                        e.dataTransfer.setData('text/plain', l.id)
-                        setDrag({ id: l.id, over: null })
-                      }}
-                      onDragEnd={() => setDrag(null)}
-                      data-testid={`layer-drag-${l.name}`}
-                    >
-                      ⋮⋮
-                    </span>
-                    <button
-                      className="icon-btn"
-                      title="Move up (drawn above)"
-                      disabled={indexOf(l.id) === 0}
-                      onClick={() => moveLayer(l.id, indexOf(l.id) - 1)}
-                      data-testid={`layer-up-${l.name}`}
-                    >
-                      ▲
-                    </button>
-                    <button
-                      className="icon-btn"
-                      title="Move down (drawn below)"
-                      disabled={indexOf(l.id) === all.length - 1}
-                      onClick={() => moveLayer(l.id, indexOf(l.id) + 1)}
-                      data-testid={`layer-down-${l.name}`}
-                    >
-                      ▼
-                    </button>
-                  </td>
                   <td>
                     <button
                       className="icon-btn"

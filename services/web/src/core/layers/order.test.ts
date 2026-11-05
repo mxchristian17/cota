@@ -34,13 +34,12 @@ describe('orden de capas', () => {
     expect(doc.layers.map((l) => l.id)).toEqual(['0', 'L1', 'L2'])
   })
 
-  it('el PDF pinta la capa de arriba al final', () => {
+  it('el PDF pinta en el orden de dibujo de los objetos, no por capa', () => {
     const ls = [layer('A', '#ff0000'), layer('B', '#0000ff')]
     const pdf = pdfText(exportPdf([line('1', 'A'), line('2', 'B')], ls).bytes)
     const red = pdf.indexOf('1 0 0 RG')
     const blue = pdf.indexOf('0 0 1 RG')
     expect(red).toBeGreaterThan(-1)
-    expect(blue).toBeGreaterThan(-1)
-    expect(blue).toBeLessThan(red) // B (abajo) primero, A (arriba) encima
+    expect(blue).toBeGreaterThan(red) // el segundo objeto encima, aunque su capa esté más abajo en la lista
   })
 })

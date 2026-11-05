@@ -981,6 +981,35 @@ export class DocumentModel {
     this._rev++
   }
 
+  /**
+   * Orden de dibujo (DRAWORDER): lo último de cada lista se dibuja encima. Mueve los objetos `ids` al frente, al fondo,
+   * justo encima del más alto de `above` o justo debajo del más bajo de `below` (referencias de la misma lista); los
+   * movidos conservan su orden entre ellos. Devuelve cuántos se movieron.
+   */
+  reorder(ids: string[], to: 'front' | 'back' | { above: string[] } | { below: string[] }): number {
+    const move = new Set(ids)
+    let moved = 0
+    for (const list of new Set(ids.map((id) => this.locate(id)?.list).filter((l): l is Entity[] => !!l))) {
+      const picked = list.filter((e) => move.has(e.id))
+      const rest = list.filter((e) => !move.has(e.id))
+      let at: number
+      if (to === 'front') at = rest.length
+      else if (to === 'back') at = 0
+      else {
+        const refs = new Set('above' in to ? to.above : to.below)
+        const idx = rest.flatMap((e, i) => (refs.has(e.id) ? [i] : []))
+        if (!idx.length) continue
+        at = 'above' in to ? Math.max(...idx) + 1 : Math.min(...idx)
+      }
+      const next = [...rest.slice(0, at), ...picked, ...rest.slice(at)]
+      if (next.every((e, i) => e === list[i])) continue
+      next.forEach((e, i) => (list[i] = e))
+      moved += picked.length
+    }
+    if (moved) this._rev++
+    return moved
+  }
+
   removeEntity(id: string): void {
     const at = this.locate(id)
     if (!at) return

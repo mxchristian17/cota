@@ -127,6 +127,8 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | `AREA` | `AA` | Area and perimeter of points or of an object [Object/Add area/Subtract area]; Add/Subtract keep a running total |
 | `LIST` | `LI`, `LS` | List the properties of the selected objects: type, layer, points, lengths, areas, volumes |
 | `MASSPROP` | — | Mass properties of solids: volume (mass with density 1), surface area, bounding box and centroid |
+| `DRAWORDER` | `DR` | Change the draw order of objects [Above objects/Under objects/Front/Back] |
+| `TEXTTOFRONT` | — | Bring texts and/or dimensions in front of the other objects [Text/Dimensions/Both] |
 | `GROUP` | `G` | Group the selected objects so they are selected together [Name/Description]; UNGROUP breaks a group |
 | `UNGROUP` | — | Break up the group of a picked object [Name] |
 | `ISOLATEOBJECTS` | `ISOLATE` | Temporarily hide everything except the selected objects (UNISOLATEOBJECTS shows them again) |

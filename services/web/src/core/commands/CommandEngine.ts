@@ -876,7 +876,9 @@ export class CommandEngine {
       case 'ALL':
         return this.applySel(sel, ents().map((e) => e.id), !!sel.remove)
       case 'Last': {
-        const last = ents().at(-1)
+        // El último creado (el de id más alto), no el último del orden de dibujo.
+        const seq = (id: string) => (/^e\d+$/.test(id) ? Number(id.slice(1)) : -1)
+        const last = ents().reduce<Entity | undefined>((m, e) => (!m || seq(e.id) >= seq(m.id) ? e : m), undefined)
         return this.applySel(sel, last ? [last.id] : [], !!sel.remove)
       }
       case 'Previous': {

@@ -455,6 +455,34 @@ interface BlockItem {
   spec?: DxfEntitySpec
   insert?: Rec
   viewport?: Rec
+  /** Handle del objeto (orden de dibujo). */
+  h?: string
+}
+
+/** Dueño de un objeto (código 330 fuera de los grupos 102, p. ej. el bloque de un espacio). */
+function ownerOf(rec: Rec): string | undefined {
+  let inGroup = false
+  for (const [k, v] of rec.codes) {
+    if (k === 102) inGroup = v.trim().startsWith('{')
+    else if (k === 330 && !inGroup) return v.trim().toUpperCase()
+  }
+  return undefined
+}
+
+/**
+ * Orden de dibujo del CAD clásico: los objetos de un espacio o bloque se dibujan en el orden del archivo, salvo que su
+ * SORTENTSTABLE les dé otro handle de orden; entonces van por handle de orden (el suyo propio si no está en la tabla).
+ */
+function byDrawOrder<T>(list: T[], table: Map<string, string> | undefined, handleOf: (x: T) => string | undefined): T[] {
+  if (!table?.size) return list
+  let last = 0n
+  const keyed = list.map((x, i) => {
+    const h = handleOf(x)
+    const s = h ? (table.get(h) ?? h) : undefined
+    if (s && /^[0-9A-F]+$/.test(s)) last = BigInt('0x' + s)
+    return { x, i, k: last }
+  })
+  return keyed.sort((a, b) => (a.k < b.k ? -1 : a.k > b.k ? 1 : a.i - b.i)).map((q) => q.x)
 }
 
 interface Rec {
@@ -640,6 +668,14 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
   }
   const layoutRecs: Rec[] = []
   const inserts: Rec[] = []
+  // Orden de dibujo: el dueño de cada lista (bloque o espacio) y sus tablas SORTENTSTABLE (handle → handle de orden).
+  const sortTables = new Map<string, Map<string, string>>()
+  const listOwner = new Map<BlockItem[], string>()
+  let modelOwner: string | undefined
+  /** Del modelo: posición en el archivo y handle de cada objeto (lo expandido de un INSERT toma los del INSERT). */
+  const drawTag = new Map<object, { fi: number; h?: string }>()
+  let fileIndex = 0
+  let lastInsertTag: { fi: number; h?: string } | undefined
   const simplified: Record<string, number> = {}
   let wireSolids = 0
   /** Modelos ACIS binarios de un DXF 2013+: por el handle de su entidad. */
@@ -896,6 +932,7 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
     }
 
     if (section === 'BLOCKS') {
+      const n0 = block?.items.length ?? 0
       if (rec.type === 'BLOCK') {
         const name = str(rec.codes, 2) ?? ''
         block = { base: [num(rec.codes, 10), num(rec.codes, 20), num(rec.codes, 30)], items: [] }
@@ -904,6 +941,8 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
         if (!name.startsWith('*') || /^\*[UTD]/i.test(name)) blocks.set(name.toUpperCase(), block)
         // Cada espacio papel (salvo el activo, que suele venir en ENTITIES) guarda su contenido en su bloque.
         if (/^\*PAPER_SPACE/i.test(name)) block.items = paperItems(name)
+        const own = ownerOf(rec)
+        if (own) listOwner.set(block.items, own)
       } else if (rec.type === 'ENDBLK') block = null
       else if (block && rec.type === 'INSERT') block.items.push({ insert: rec })
       else if (block && rec.type === 'VIEWPORT') block.items.push({ viewport: rec })
@@ -915,14 +954,33 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
           if (d) block.items.push({ spec: d })
         } else for (const spec of specsOf(rec) ?? []) block.items.push({ spec })
       }
+      if (block && rec.type !== 'BLOCK') for (let k = n0; k < block.items.length; k++) block.items[k].h = str(rec.codes, 5)?.toUpperCase()
       continue
     }
     if (section === 'OBJECTS' && rec.type === 'LAYOUT') layoutRecs.push(rec)
+    if (section === 'OBJECTS' && rec.type === 'SORTENTSTABLE') {
+      // Dueño: el 330 que sigue a AcDbSortentsTable; luego pares 331 (objeto) → 5 (handle de orden).
+      const at = rec.codes.findIndex(([k, v]) => k === 100 && v.trim() === 'AcDbSortentsTable')
+      const own = rec.codes.slice(at + 1).find(([k]) => k === 330)?.[1].trim().toUpperCase()
+      const table = new Map<string, string>()
+      let ent: string | undefined
+      for (const [k, v] of rec.codes.slice(at + 1)) {
+        if (k === 331) ent = v.trim().toUpperCase()
+        else if (k === 5 && ent) {
+          table.set(ent, v.trim().toUpperCase())
+          ent = undefined
+        }
+      }
+      if (own && at >= 0) sortTables.set(own, table)
+    }
     if (section !== 'ENTITIES') continue
 
     // Lo que está en el espacio papel no es parte del modelo: va a su hoja.
     if (num(rec.codes, 67, 0) === 1) {
       const items = paperItems('*Paper_Space')
+      const n0 = items.length
+      const own = ownerOf(rec)
+      if (own) listOwner.set(items, own)
       if (rec.type === 'VIEWPORT') items.push({ viewport: rec })
       else if (rec.type === 'INSERT') items.push({ insert: rec })
       else if (rec.type === 'DIMENSION') {
@@ -935,35 +993,33 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
         if (specs) for (const spec of specs) items.push({ spec })
         else if (!['SEQEND', 'VERTEX'].includes(rec.type)) unsupported.add(rec.type)
       }
+      for (let k = n0; k < items.length; k++) items[k].h = str(rec.codes, 5)?.toUpperCase()
       continue
     }
-    if (rec.type === 'INSERT') {
-      inserts.push(rec)
+    modelOwner ??= ownerOf(rec)
+    const tag = { fi: fileIndex++, h: str(rec.codes, 5)?.toUpperCase() }
+    const insertRec = rec.type === 'INSERT' ? rec : (blockDim(rec) ?? (rec.type === 'ACAD_TABLE' ? tableInsert(rec) : null))
+    if (insertRec) {
+      inserts.push(insertRec)
+      drawTag.set(insertRec, tag)
+      lastInsertTag = tag
       continue
     }
-    const dimInsert = blockDim(rec)
-    if (dimInsert) {
-      inserts.push(dimInsert)
-      continue
-    }
-    if (rec.type === 'ACAD_TABLE') {
-      inserts.push(tableInsert(rec))
-      continue
-    }
+    const n0 = entities.length
     if (rec.type === 'ATTRIB') {
-      // Valores de los atributos de la inserción anterior: ya vienen en coordenadas del dibujo, como textos.
+      // Valores de los atributos de la inserción anterior: ya vienen en coordenadas del dibujo, como textos (y en su
+      // lugar del orden de dibujo).
       for (const spec of specsOf(rec) ?? []) entities.push(spec)
-      continue
-    }
-    if (rec.type === 'DIMENSION') {
+    } else if (rec.type === 'DIMENSION') {
       const dim = dimSpec(rec)
       if (dim) entities.push(dim)
       else unsupported.add('DIMENSION (type)')
-      continue
+    } else {
+      const specs = specsOf(rec)
+      if (specs) entities.push(...specs)
+      else if (!['SEQEND', 'VERTEX'].includes(rec.type)) unsupported.add(rec.type)
     }
-    const specs = specsOf(rec)
-    if (specs) entities.push(...specs)
-    else if (!['SEQEND', 'VERTEX'].includes(rec.type)) unsupported.add(rec.type)
+    for (let k = n0; k < entities.length; k++) drawTag.set(entities[k], rec.type === 'ATTRIB' ? (lastInsertTag ?? tag) : tag)
   }
 
   for (const r of dimStyleRecs) dimStyles.push(parseDimStyle(r.codes, blockNames))
@@ -1021,6 +1077,8 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
   // Capas congeladas: en el CAD clásico una inserción en una capa congelada se oculta entera, aunque su contenido esté
   // en otras capas. Como acá el bloque se desarma, todo lo que hay debajo de esa inserción pasa a su capa congelada.
   const frozenNames = new Set(layers.filter((l) => l.frozen).map((l) => l.name.toUpperCase()))
+  for (const b of blocks.values()) b.items = byDrawOrder(b.items, sortTables.get(listOwner.get(b.items) ?? ''), (it) => it.h)
+  for (const [k, items] of paper) paper.set(k, byDrawOrder(items, sortTables.get(listOwner.get(items) ?? ''), (it) => it.h))
   const expand = (rec: Rec, after: InsertProps[], layer: string, depth: number, frozenAs: string | null = null, out: DxfEntitySpec[] = entities): void => {
     const def = blocks.get((str(rec.codes, 2) ?? '').toUpperCase())
     if (!def || depth > 8) {
@@ -1065,7 +1123,16 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
       out.push({ ...it.spec, type: e.type, props: e.props as EntityProps, layerName })
     }
   }
-  for (const rec of inserts) expand(rec, [], str(rec.codes, 8) ?? '0', 0)
+  for (const rec of inserts) {
+    const from = entities.length
+    expand(rec, [], str(rec.codes, 8) ?? '0', 0)
+    for (let k = from; k < entities.length; k++) drawTag.set(entities[k], drawTag.get(rec)!)
+  }
+  // El modelo en su orden de dibujo: el del archivo (las inserciones en su lugar) y, si hay, el de su SORTENTSTABLE.
+  const tagOf = (e: DxfEntitySpec) => drawTag.get(e) ?? { fi: Infinity }
+  const inFileOrder = entities.map((e, i) => ({ e, i })).sort((a, b) => tagOf(a.e).fi - tagOf(b.e).fi || a.i - b.i).map((q) => q.e)
+  const drawn = byDrawOrder(inFileOrder, sortTables.get(modelOwner ?? ''), (e) => tagOf(e).h)
+  drawn.forEach((e, i) => (entities[i] = e))
 
   const layouts = buildLayouts(paper, layoutRecs, blockNames, (it, toPaper, out) => {
     if (it.insert) expand(it.insert, [toPaper], str(it.insert.codes, 8) ?? '0', 0, null, out)

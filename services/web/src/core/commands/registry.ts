@@ -71,6 +71,7 @@ import { threadCommand } from './impl/thread'
 import { scriptCommand } from './impl/script'
 import { agentCommand, compactCommand } from './impl/agent'
 import { colorCommand, lwdisplayCommand, lweightCommand } from './impl/objectprops'
+import { draworderCommand, texttofrontCommand } from './impl/draworder'
 import { areaCommand, idCommand, listCommand, masspropCommand, polarAngCommand } from './impl/inquiry'
 import { exportCommand, importCommand } from './impl/io'
 import { imageCmdlineCommand, imageCommand } from './impl/image'
@@ -170,6 +171,8 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   engine.register(colorCommand)
   engine.register(lweightCommand)
   registerVariable(engine, lwdisplayCommand)
+  engine.register(draworderCommand)
+  engine.register(texttofrontCommand)
   engine.register(blockCommand)
   engine.register(insertCommand)
   engine.register(explodeCommand)

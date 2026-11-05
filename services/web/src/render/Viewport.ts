@@ -34,7 +34,7 @@ import { BASELINE_DROP, attdefText, cssFontStack, fontMetrics, lineSpacingOf, te
 import { entityGrips, type Grip } from '../core/editing/grips'
 import { viewportRing } from '../core/layout/viewport'
 import { evaluateFields, fieldSegments, hasFields, type FieldContext } from '../core/fields/fields'
-import { drawOrder } from '../core/layers/order'
+import { RANK_ATTR, rankArray, rankStep, ranked } from './drawRank'
 import { entityPattern, type LinetypeContext } from '../core/linetype/linetypes'
 import { entityDashes, linetypePaths, type DashResult } from '../core/linetype/dash'
 import { hatchFrame, hatchRegions, hatchRings, hatchStrokesCached, isSolidHatch, to3, type Ring } from '../core/hatch/geometry'
@@ -208,8 +208,7 @@ const FACE_ON_PAPER = '#b8b8b8'
 /** Acumuladores de geometría fusionada por material (batching para modelos pesados). */
 interface MeshBatch { pos: number[]; nor: number[]; ranges: { s: number; id: string }[]; n: number }
 interface LineBatch { pos: number[]; ranges: { s: number; id: string }[]; n: number }
-/** Orden de dibujo de las máscaras (WIPEOUT) y de los textos de trazo: encima de todas las capas (0 = la de arriba). */
-const MASK_ORDER = 0.5
+/** Orden de los textos de trazo: encima de todo el dibujo. */
 const TEXT_ORDER = 0.75
 /**
  * Lote de caras sombreadas: las piezas se juntan recién al crear la geometría, en arreglos del tamaño justo (antes se
@@ -240,7 +239,7 @@ function underlayGrid(g: THREE.GridHelper): THREE.GridHelper {
 }
 
 /** Puntos de los tipos de línea y patrones (elementos de largo 0). */
-interface PointBatch { pos: number[] }
+interface PointBatch { pos: number[]; rank: number[] }
 
 /**
  * Regiones de relleno de un sombreado en triángulos de mundo (regla par-impar con sus agujeros).
@@ -350,6 +349,9 @@ export class Viewport {
   private lodBucket = ''
   /** Por entidad: orden de dibujo de su capa (mayor = más arriba) y su posición en la lista. */
   private pickOrder = new Map<string, { o: number; i: number }>()
+  /** Orden de dibujo de cada objeto (ver drawRank.ts) y el paso de profundidad por rango. */
+  private rankOf: (id: string) => number = () => 0
+  private rankK = rankStep(1)
   /** Esferas envolventes (mundo) por entidad expandida, para el culling espacial del snap. */
   private snapSpheres: { c: THREE.Vector3; r: number }[] | null = null
   private raf = 0
@@ -2358,20 +2360,25 @@ export class Viewport {
     this.clearDimLabels()
     this.clearTextLabels()
     const layerMap = new Map(layers.map((l) => [l.id, l]))
-    // Orden de capas: `renderOrder` por capa (0 = la de arriba, negativos debajo) y lo
-    // seleccionado encima de todo. Con depthFunc LessEqual, lo coplanar dibujado después gana; la
-    // profundidad real sigue mandando en 3D.
-    const order = drawOrder(layers)
-    const bottom = -layers.length
-    const orderOf = (e: Entity): number => order.get(e.layer) ?? bottom
-    this.pickOrder = new Map(entities.map((e, i) => [e.id, { o: orderOf(e), i }]))
+    // Orden de dibujo, como el CAD clásico: el de la lista (lo que va después, encima). Cada vértice lleva el rango de
+    // su objeto y el shader lo acerca a la cámara (drawRank.ts), así el orden no depende del lote. Los textos van
+    // encima de todo (como los de fuente, que son HTML) y lo seleccionado arriba de todo. En 3D manda la profundidad.
+    const n = entities.length
+    const rank = new Map(entities.map((e, i) => [e.id, (e.type === 'TEXT' || e.type === 'ATTDEF' ? n : 0) + i + 1]))
+    const top = 2 * n + 2
+    this.rankOf = (id) => rank.get(id) ?? 0
+    this.rankK = rankStep(top)
+    this.pickOrder = new Map(entities.map((e, i) => [e.id, { o: rank.get(e.id)!, i }]))
     /** Asigna el orden a lo que `buildEntity` acaba de agregar. */
     const individual = (e: Entity): void => {
       const from = this.entityGroup.children.length
       this.buildEntity(e, layerMap, selection)
-      const ro = selection.has(e.id) ? 1 : orderOf(e)
-      // Los píxeles de una imagen van siempre debajo de todo el dibujo (seleccionada, se resalta su marco).
-      for (const c of this.entityGroup.children.slice(from)) c.traverse((o) => (o.renderOrder = o.userData.raster ? bottom - 1 : ro))
+      const sel = selection.has(e.id)
+      for (const c of this.entityGroup.children.slice(from))
+        c.traverse((o) => {
+          o.renderOrder = sel ? 1 : 0
+          this.rankObject(o, sel && !o.userData.raster ? top : this.rankOf(e.id))
+        })
     }
     const style = this.visualStyle
     const showMesh = style === 'shaded' || style === 'shadedEdges' || style === 'hidden'
@@ -2397,7 +2404,7 @@ export class Viewport {
     const getMesh = (k: string): FaceBatch => { let b = meshB.get(k); if (!b) { b = { parts: [], ranges: [], n: 0, verts: 0 }; meshB.set(k, b) } return b }
     const getEdges = (k: string): EdgeBatch => { let b = edgeB.get(k); if (!b) { b = { parts: [], ranges: [], n: 0 }; edgeB.set(k, b) } return b }
     const getLine = (m: Map<string, LineBatch>, k: string): LineBatch => { let b = m.get(k); if (!b) { b = { pos: [], ranges: [], n: 0 }; m.set(k, b) } return b }
-    const getPoints = (m: Map<string, PointBatch>, k: string): PointBatch => { let b = m.get(k); if (!b) { b = { pos: [] }; m.set(k, b) } return b }
+    const getPoints = (m: Map<string, PointBatch>, k: string): PointBatch => { let b = m.get(k); if (!b) { b = { pos: [], rank: [] }; m.set(k, b) } return b }
     const bgHex = '#' + this.bgColor.getHexString()
     // Grosor de capa (mm; 0 = Default, 0.25 mm) en los layouts y, con LWDISPLAY, en el modelo.
     const lwShown = !!(this.data?.lwUnitsPerMm || this.data?.lwPxPerMm)
@@ -2414,7 +2421,7 @@ export class Viewport {
 
         if (!selected && (e.type === 'TEXT' || e.type === 'ATTDEF')) {
           // Su caja de selección va a un lote invisible (una sola malla para miles de textos).
-          const k = `${orderOf(e)}|${colorHex}|pick`
+          const k = `0|${colorHex}|pick`
           let b = textPickB.get(k)
           if (!b) textPickB.set(k, (b = { pos: [], nor: [], ranges: [], n: 0 }))
           const t = e.type === 'TEXT' ? e : { id: e.id, type: 'TEXT' as const, layer: e.layer, props: attdefText(e.props) }
@@ -2436,10 +2443,10 @@ export class Viewport {
           // Debajo de todo lo de su capa (las líneas de la vista quedan encima).
           const from = this.entityGroup.children.length
           this.buildEntity(e, layerMap, selection)
-          for (const c of this.entityGroup.children.slice(from)) c.renderOrder = orderOf(e) - 0.75
+          for (const c of this.entityGroup.children.slice(from)) c.traverse((o) => this.rankObject(o, this.rankOf(e.id)))
           continue
         }
-        const ro = orderOf(e)
+        const ro = 0
         if (e.type === 'POINT') {
           const k = `${ro}|${colorHex}`
           let b = markB.get(k)
@@ -2511,9 +2518,8 @@ export class Viewport {
           continue
         }
         if (e.type === 'HATCH') {
-          // Detrás del contorno (HPDRAWORDER = 3): medio escalón por debajo de su capa. Una máscara (WIPEOUT), encima de
-          // todas las capas: tapa lo de abajo, y los textos quedan encima de ella.
-          const hro = e.props.wipeout ? MASK_ORDER : ro - 0.5
+          // En su lugar del orden de dibujo. Una máscara (WIPEOUT) tapa lo que va antes; los textos quedan encima.
+          const hro = ro
           const strokes = hatchStrokesCached(e.props)
           if (strokes.segs.length) {
             const b = getLine(lineB, `${hro}|${colorHex}`)
@@ -2521,7 +2527,11 @@ export class Viewport {
             for (const [a, c] of strokes.segs) b.pos.push(a[0], a[1], a[2], c[0], c[1], c[2])
             b.n += strokes.segs.length * 2
           }
-          for (const d of strokes.dots) getPoints(pointB, `${hro}|${colorHex}`).pos.push(d[0], d[1], d[2])
+          for (const d of strokes.dots) {
+            const pb = getPoints(pointB, `${hro}|${colorHex}`)
+            pb.pos.push(d[0], d[1], d[2])
+            pb.rank.push(this.rankOf(e.id))
+          }
           const tris = hatchTriangles(e)
           if (tris.length) {
             // Una máscara (WIPEOUT) se rellena con el color del fondo: tapa lo de las capas de abajo.
@@ -2547,7 +2557,11 @@ export class Viewport {
             b.pos.push(d[i][0], d[i][1], d[i][2], d[i + 1][0], d[i + 1][1], d[i + 1][2])
             b.n += 2
           }
-          for (const d of dashes.dots) getPoints(pointB, `${ro}|${colorHex}`).pos.push(d[0], d[1], d[2])
+          for (const d of dashes.dots) {
+            const pb = getPoints(pointB, `${ro}|${colorHex}`)
+            pb.pos.push(d[0], d[1], d[2])
+            pb.rank.push(this.rankOf(e.id))
+          }
           const pk = getLine(pickB, `${ro}|${colorHex}`)
           pk.ranges.push({ s: pk.n, id: e.id })
           for (const path of linetypePaths(e, ltCtx?.plinegen) ?? []) for (let i = 0; i + 1 < path.length; i++) {
@@ -2588,7 +2602,8 @@ export class Viewport {
     const [ro, colorHex] = key.split('|')
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', this.local(b.pos))
-    const mat = new THREE.PointsMaterial({ color: new THREE.Color(colorHex), size: this.pointMarkPx(), sizeAttenuation: false, map: pointMarkTexture(sysvars.PDMODE), transparent: true, alphaTest: 0.35 })
+    g.setAttribute(RANK_ATTR, new THREE.BufferAttribute(Float32Array.from(b.ids, (id) => this.rankOf(id)), 1))
+    const mat = ranked(new THREE.PointsMaterial({ color: new THREE.Color(colorHex), size: this.pointMarkPx(), sizeAttenuation: false, map: pointMarkTexture(sysvars.PDMODE), transparent: true, alphaTest: 0.35 }), this.rankK)
     const pts = new THREE.Points(g, mat)
     pts.renderOrder = Number(ro)
     pts.userData.pointIds = b.ids
@@ -2609,7 +2624,8 @@ export class Viewport {
     const [ro, colorHex] = key.split('|')
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', this.local(b.pos))
-    const pts = new THREE.Points(g, new THREE.PointsMaterial({ color: new THREE.Color(colorHex), size: 3, sizeAttenuation: false }))
+    g.setAttribute(RANK_ATTR, new THREE.BufferAttribute(Float32Array.from(b.ids, (id) => this.rankOf(id)), 1))
+    const pts = new THREE.Points(g, ranked(new THREE.PointsMaterial({ color: new THREE.Color(colorHex), size: 3, sizeAttenuation: false }), this.rankK))
     pts.renderOrder = Number(ro)
     pts.userData.pointIds = b.ids
     this.entityGroup.add(pts)
@@ -2625,13 +2641,30 @@ export class Viewport {
     return `${z}|${Math.round(p.x / step)},${Math.round(p.y / step)},${Math.round(p.z / step)}`
   }
 
+  /** Rango de dibujo constante para un objeto armado aparte (seleccionado, cota, imagen…). */
+  private rankObject(o: THREE.Object3D, r: number): void {
+    const m = o as THREE.Mesh
+    if (!m.geometry || !m.material || Array.isArray(m.material)) return
+    if (o instanceof LineSegments2) {
+      const n = (m.geometry as THREE.InstancedBufferGeometry).instanceCount
+      if (Number.isFinite(n) && n > 0) m.geometry.setAttribute('instanceRank', new THREE.InstancedBufferAttribute(new Float32Array(n).fill(r), 1))
+      ranked(m.material, this.rankK, true)
+      return
+    }
+    const count = m.geometry.getAttribute('position')?.count ?? 0
+    if (!count) return
+    m.geometry.setAttribute(RANK_ATTR, new THREE.BufferAttribute(new Float32Array(count).fill(r), 1))
+    ranked(m.material, this.rankK)
+  }
+
   /** Puntos de los tipos de línea/patrones: 2 px fijos (como el punto del CAD clásico), no seleccionables. */
   private addPointBatch(b: PointBatch, key: string): void {
     if (!b.pos.length) return
     const [ro, colorHex] = key.split('|')
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', this.local(b.pos))
-    const pts = new THREE.Points(g, new THREE.PointsMaterial({ color: new THREE.Color(colorHex), size: 2, sizeAttenuation: false }))
+    g.setAttribute(RANK_ATTR, new THREE.BufferAttribute(Float32Array.from(b.rank), 1))
+    const pts = new THREE.Points(g, ranked(new THREE.PointsMaterial({ color: new THREE.Color(colorHex), size: 2, sizeAttenuation: false }), this.rankK))
     pts.renderOrder = Number(ro)
     pts.raycast = () => {} // el pick lo resuelve el recorrido invisible
     this.entityGroup.add(pts)
@@ -2646,10 +2679,10 @@ export class Viewport {
     const [ro, colorHex, kind] = key.split('|')
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', this.local(b.pos))
+    g.setAttribute(RANK_ATTR, new THREE.BufferAttribute(rankArray(b.pos.length / 3, b.ranges, this.rankOf), 1))
     const visible = kind === 'solid' || kind === 'mask'
-    // Una máscara tapa lo que se dibujó antes, aunque esté en el mismo plano: sin prueba de profundidad.
-    const mat = kind === 'mask' ? { depthTest: false } : FACE_OFFSET
-    const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex), side: THREE.DoubleSide, visible, ...mat }))
+    // Un relleno o una máscara tapa lo que va antes en el orden de dibujo, aunque esté en el mismo plano.
+    const mesh = new THREE.Mesh(g, ranked(new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex), side: THREE.DoubleSide, visible }), this.rankK))
     mesh.userData.ranges = b.ranges
     mesh.userData.rangeKind = 'mesh'
     if (lowPick) mesh.userData.lowPick = true
@@ -2665,12 +2698,16 @@ export class Viewport {
     const pos = new Float32Array(b.verts * 3)
     const nor = new Float32Array(b.verts * 3)
     const idx = new Uint32Array(b.n)
+    const rk = new Float32Array(b.verts)
     let v = 0
     let w = 0
+    let r = 0
     for (const p of b.parts) {
       pos.set(p.pos, v * 3)
       nor.set(p.nor, v * 3)
       const count = p.pos.length / 3
+      while (r + 1 < b.ranges.length && b.ranges[r + 1].s <= w) r++
+      rk.fill(b.ranges[r] ? this.rankOf(b.ranges[r].id) : 0, v, v + count)
       if (p.idx) for (let i = 0; i < p.idx.length; i++) idx[w++] = p.idx[i] + v
       else for (let i = 0; i < count; i++) idx[w++] = v + i
       v += count
@@ -2678,13 +2715,17 @@ export class Viewport {
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
     g.setAttribute('normal', new THREE.BufferAttribute(nor, 3))
+    g.setAttribute(RANK_ATTR, new THREE.BufferAttribute(rk, 1))
     g.setIndex(new THREE.BufferAttribute(idx, 1))
     const mesh = new THREE.Mesh(
       g,
       // De las dos caras: una cara de una malla leída que quedara al revés se ve igual, con la luz del lado que se mira.
-      flat
-        ? new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex), side: THREE.DoubleSide, ...FACE_OFFSET }) // estilo hidden: sin luz
-        : new THREE.MeshStandardMaterial({ color: new THREE.Color(colorHex), metalness: 0.1, roughness: 0.75, side: THREE.DoubleSide, ...FACE_OFFSET }),
+      ranked(
+        flat
+          ? new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex), side: THREE.DoubleSide, ...FACE_OFFSET }) // estilo hidden: sin luz
+          : new THREE.MeshStandardMaterial({ color: new THREE.Color(colorHex), metalness: 0.1, roughness: 0.75, side: THREE.DoubleSide, ...FACE_OFFSET }),
+        this.rankK,
+      ),
     )
     mesh.userData.ranges = b.ranges
     mesh.userData.rangeKind = 'mesh'
@@ -2701,7 +2742,9 @@ export class Viewport {
     const pos = b.pos instanceof Float32Array ? b.pos : this.shifted(b.pos)
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
-    const seg = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: new THREE.Color(colorHex), visible: !pickOnly }))
+    const rk = rankArray(pos.length / 3, b.ranges, this.rankOf)
+    g.setAttribute(RANK_ATTR, new THREE.BufferAttribute(rk, 1))
+    const seg = new THREE.LineSegments(g, ranked(new THREE.LineBasicMaterial({ color: new THREE.Color(colorHex), visible: !pickOnly }), this.rankK))
     seg.userData.ranges = b.ranges
     seg.userData.rangeKind = 'line'
     seg.renderOrder = Number(ro)
@@ -2709,7 +2752,8 @@ export class Viewport {
     if (lw && !pickOnly && (this.data?.lwUnitsPerMm || this.data?.lwPxPerMm)) {
       // Línea con grosor (en píxeles según el zoom): se ve en lugar de la fina, que queda para el pick.
       const wg = new LineSegmentsGeometry().setPositions(pos)
-      const mat = new LineMaterial({ color: new THREE.Color(colorHex).getHex(), linewidth: 1 })
+      wg.setAttribute('instanceRank', new THREE.InstancedBufferAttribute(Float32Array.from({ length: rk.length / 2 }, (_, i) => rk[2 * i]), 1))
+      const mat = ranked(new LineMaterial({ color: new THREE.Color(colorHex).getHex(), linewidth: 1 }), this.rankK, true)
       mat.resolution.set(this.width, this.height)
       const wide = new LineSegments2(wg, mat)
       wide.renderOrder = Number(ro)

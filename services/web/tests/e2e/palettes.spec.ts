@@ -144,7 +144,7 @@ test.describe('Cota paletas: LAYER modal + Properties', () => {
     await expect(page.getByTestId('properties')).toContainText('CIRCLE')
   })
 
-  test('orden de capas: ▲▼ y arrastre; el clic sobre líneas superpuestas elige la capa de arriba', async ({ page }) => {
+  test('orden de dibujo: el clic sobre líneas superpuestas elige la de arriba (la última); DRAWORDER lo cambia', async ({ page }) => {
     const selectedLayer = () =>
       page.evaluate(() => {
         const w = window as unknown as {
@@ -154,17 +154,12 @@ test.describe('Cota paletas: LAYER modal + Properties', () => {
         const e = s.selection.length === 1 ? s.doc.getEntity(s.selection[0]) : undefined
         return s.doc.layers.find((l) => l.id === e?.layer)?.name ?? null
       })
-    const layerNames = () =>
-      page.evaluate(() => {
-        const w = window as unknown as { __cotaStore: { getState: () => { doc: { layers: { name: string }[] } } } }
-        return w.__cotaStore.getState().doc.layers.map((l) => l.name)
-      })
     await typeCmd(page, 'LA')
     for (const n of ['Abajo', 'Arriba']) {
       await page.getByTestId('new-layer-input').fill(n)
       await page.getByTestId('add-layer').click()
     }
-    // La misma línea en las dos capas (Abajo primero en la lista → se dibuja encima).
+    // La misma línea en las dos capas: primero en Abajo, después en Arriba.
     for (const n of ['Abajo', 'Arriba']) {
       await page.getByTestId(`layer-${n}`).click()
       await page.locator('.modal-backdrop').click({ position: { x: 5, y: 5 } })
@@ -179,25 +174,17 @@ test.describe('Cota paletas: LAYER modal + Properties', () => {
       await page.mouse.click(box.x + box.width / 2 + 20, box.y + box.height / 2)
     }
     await click()
-    await expect.poll(selectedLayer).toBe('Abajo')
 
-    // ▲ dos veces: Arriba pasa a la primera fila → ahora gana el clic.
-    await typeCmd(page, 'LA')
-    await page.getByTestId('layer-up-Arriba').click()
-    await page.getByTestId('layer-up-Arriba').click()
-    expect(await layerNames()).toEqual(['Arriba', '0', 'Abajo'])
-    await expect(page.getByTestId('layer-up-Arriba')).toBeDisabled()
-    // Arrastre: Abajo a la primera fila.
-    await page.getByTestId('layer-drag-Abajo').dragTo(page.getByTestId('layer-row-Arriba'))
-    expect(await layerNames()).toEqual(['Abajo', 'Arriba', '0'])
-    await page.getByTestId('layer-down-Abajo').click()
-    expect(await layerNames()).toEqual(['Arriba', 'Abajo', '0'])
-    await page.locator('.modal-backdrop').click({ position: { x: 5, y: 5 } })
+    // El orden de dibujo es el de los objetos (como el CAD clásico), no el de las capas: gana la última línea dibujada.
+    await expect.poll(selectedLayer).toBe('Arriba')
+    // DRAWORDER ▸ Back la manda al fondo: ahora el clic elige la otra.
+    await typeCmd(page, 'DRAWORDER', 'B')
+    await click()
+    await expect.poll(selectedLayer).toBe('Abajo')
+    // UNDO deshace el cambio de orden.
+    await typeCmd(page, 'UNDO')
     await click()
     await expect.poll(selectedLayer).toBe('Arriba')
-    // Un Ctrl+Z deshace el último movimiento.
-    await typeCmd(page, 'UNDO')
-    expect(await layerNames()).toEqual(['Abajo', 'Arriba', '0'])
   })
 
   test('Freeze: la capa congelada se oculta (como en el CAD clásico) y no se selecciona; la actual no se congela', async ({ page }) => {

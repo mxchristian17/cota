@@ -97,7 +97,6 @@ import { parseStl } from '../core/io/stl'
 import { requestViewGen } from '../ui/ViewGenDialog'
 import { DRAWING_TEMPLATE_EXT, drawingFromTemplate, makeTemplate, parseTemplate as parseDrawingTemplate, readDefaultTemplate, writeDefaultTemplate, type DrawingTemplate } from '../core/io/drawingTemplate'
 import { ApiError, api, type DocumentSummary } from '../core/io/apiClient'
-import { moveLayerTo } from '../core/layers/order'
 
 /** Plantilla de layout disponible (incluida, en la carpeta de trabajo o en la biblioteca del navegador). */
 /** Ajustes del panel de sombreado. */
@@ -283,7 +282,6 @@ export interface AppState {
   setCurrentLayer: (id: string) => void
   createLayer: (name: string) => void
   /** Orden de capas: mueve la capa a la posición `to` de la lista (0 = se dibuja arriba). */
-  moveLayer: (id: string, to: number) => void
   setLayerColor: (id: string, color: string) => void
   deleteLayer: (id: string) => void
   setLayerLineWeight: (id: string, w: number) => void
@@ -2083,15 +2081,6 @@ export const useStore = create<AppState>((set, get) => {
       for (const e of movable) e.layer = id
       doc.touch()
       print(`${movable.length} object(s) moved to layer "${target.name}".`)
-      bump()
-    },
-    moveLayer: (id, to) => {
-      pushSnapshot('layer order')
-      if (!moveLayerTo(doc.layers, id, to)) {
-        undoStack.pop()
-        return
-      }
-      doc.touch()
       bump()
     },
     createLayer: (name) => {

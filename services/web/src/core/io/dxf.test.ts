@@ -538,6 +538,27 @@ describe('importDxf ▸ SOLID, 3DFACE y LEADER', () => {
   })
 })
 
+describe('importDxf ▸ orden de dibujo (como el CAD clásico)', () => {
+  const dxf = (pairs: Array<[number, string | number]>) => pairs.map(([c, v]) => `${c}\n${v}`).join('\n') + '\n'
+  const line = (h: string, y: number): Array<[number, string | number]> => [[0, 'LINE'], [5, h], [330, '1F'], [8, '0'], [10, 0], [20, y], [30, 0], [11, 10], [21, y], [31, 0]]
+  const blocks: Array<[number, string | number]> = [[0, 'SECTION'], [2, 'BLOCKS'], [0, 'BLOCK'], [5, 'B1'], [330, 'B0'], [2, 'P'], [10, 0], [20, 0], [30, 0], [0, 'CIRCLE'], [5, 'B2'], [330, 'B0'], [8, '0'], [10, 0], [20, 0], [30, 0], [40, 1], [0, 'ENDBLK'], [0, 'ENDSEC']]
+  const ents: Array<[number, string | number]> = [[0, 'SECTION'], [2, 'ENTITIES'], ...line('A1', 1), [0, 'INSERT'], [5, 'A2'], [330, '1F'], [8, '0'], [2, 'P'], [10, 5], [20, 5], [30, 0], ...line('A3', 3), [0, 'ENDSEC']]
+  const order = (text: string) => importDxf(text).entities.map((e) => (e.type === 'LINE' ? `L${(e.props as { start: number[] }).start[1]}` : e.type))
+
+  it('las inserciones se dibujan en su lugar del archivo, no al final', () => {
+    expect(order(dxf([...blocks, ...ents, [0, 'EOF']]))).toEqual(['L1', 'CIRCLE', 'L3'])
+  })
+
+  it('la SORTENTSTABLE del espacio reordena por handle de orden (el propio si no está en la tabla)', () => {
+    const sortents: Array<[number, string | number]> = [[0, 'SECTION'], [2, 'OBJECTS'], [0, 'SORTENTSTABLE'], [5, 'C1'], [330, 'C0'], [100, 'AcDbSortentsTable'], [330, '1F'], [331, 'A3'], [5, '10'], [331, 'A1'], [5, 'A5'], [0, 'ENDSEC']]
+    // A3 → 10 (atrás de todo); A1 → A5 (después del INSERT A2).
+    expect(order(dxf([...blocks, ...ents, ...sortents, [0, 'EOF']]))).toEqual(['L3', 'CIRCLE', 'L1'])
+    // La de otro dueño no afecta al modelo.
+    const other = sortents.map(([c, v]): [number, string | number] => (c === 330 && v === '1F' ? [330, '99'] : [c, v]))
+    expect(order(dxf([...blocks, ...ents, ...other, [0, 'EOF']]))).toEqual(['L1', 'CIRCLE', 'L3'])
+  })
+})
+
 describe('importDxf ▸ capas congeladas (como en el CAD clásico)', () => {
   it('lo que hay dentro de una inserción en una capa congelada queda en esa capa (se oculta entero)', () => {
     const pairs: Array<[number, string | number]> = [

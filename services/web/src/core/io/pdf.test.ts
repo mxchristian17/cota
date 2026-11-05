@@ -81,20 +81,23 @@ describe('exportPdf', () => {
     expect(bytes.length).toBeLessThan(raw.length + 1) // (los bytes son el archivo)
   })
 
-  it('pinta como la pantalla: rellenos debajo de las líneas, máscaras encima y textos arriba; negrita con su fuente', () => {
+  it('pinta en el orden de dibujo (lo último encima), con los textos al final; negrita con su fuente', () => {
     const t = computePlotTransform({ minX: 0, minY: 0, maxX: 100, maxY: 100 }, PAGE_SIZES.A4, 28)
     const sq = { loops: [{ vertices: [[0, 0, 0], [50, 0, 0], [50, 50, 0], [0, 50, 0]] as [number, number, number][] }], pattern: 'SOLID', scale: 1, angle: 0, origin: [0, 0, 0] as [number, number, number], island: 'outer' as const }
     const ents: Entity[] = [
       { id: 'tx', type: 'TEXT', layer: '0', props: { position: [0, 0, 0], text: 'TITULO', height: 5, rotation: 0, justify: 'left', normal: [0, 0, 1], bold: true } },
-      { id: 'mask', type: 'HATCH', layer: '0', props: { ...sq, wipeout: true } },
-      line('ln', '0'),
       { id: 'fill', type: 'HATCH', layer: '0', props: sq },
+      line('ln', '0'),
+      { id: 'mask', type: 'HATCH', layer: '0', props: { ...sq, wipeout: true } },
     ]
     const c = plotContentStream(ents, layers, t)
     const at = (re: RegExp) => c.search(re)
-    expect(at(/f\*\n/)).toBeLessThan(at(/ l\nS\n/)) // el relleno antes que la línea
-    expect(at(/1 1 1 rg/)).toBeGreaterThan(at(/ l\nS\n/)) // la máscara después
+    expect(at(/f\*\n/)).toBeLessThan(at(/ l\nS\n/)) // el relleno debajo de la línea que va después
+    expect(at(/1 1 1 rg/)).toBeGreaterThan(at(/ l\nS\n/)) // la máscara tapa la línea anterior
     expect(at(/BT\n\/F2 /)).toBeGreaterThan(at(/1 1 1 rg/)) // el texto al final, en Helvetica-Bold
+    // Al revés: un relleno después de la línea la tapa.
+    const back = plotContentStream([line('ln', '0'), { id: 'fill', type: 'HATCH', layer: '0', props: sq }], layers, t)
+    expect(back.search(/f\*\n/)).toBeGreaterThan(back.search(/ l\nS\n/))
   })
 
   it('marca empty cuando no hay geometría imprimible', () => {

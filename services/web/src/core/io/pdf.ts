@@ -11,7 +11,6 @@ import { polylinePoints } from '../geom/polyline'
 import { BASELINE_DROP, fontMetrics, lineSpacingOf, textSize, textTop, textStrokePolylines } from '../geom/text'
 import { dimDisplay, type DimContext } from '../dimension/dimGeometry'
 import { viewportRing } from '../layout/viewport'
-import { byLayerOrder } from '../layers/order'
 import { entityPattern, type LinetypeContext } from '../linetype/linetypes'
 import { entityDashes } from '../linetype/dash'
 import { hatchFrame, hatchRings, hatchStrokesCached, isSolidHatch, to3 } from '../hatch/geometry'
@@ -177,16 +176,12 @@ export function entityOps(layer: Layer | undefined, style: PlotStyleOpts | undef
 }
 
 /**
- * Orden de pintado, como en pantalla: los rellenos debajo de todas las líneas, las máscaras (WIPEOUT) sobre las
- * líneas y los textos arriba de todo. Dentro de cada grupo, por el apilado de las capas.
+ * Orden de pintado: el orden de dibujo de los objetos (lo último encima, como el CAD clásico), con los textos al final
+ * como en pantalla (donde van sobre el dibujo).
  */
-export type PaintLayer = 'fill' | 'line' | 'mask' | 'text'
-export function paintLayer(e: Entity): PaintLayer {
-  if (e.type === 'HATCH' && isSolidHatch(e.props)) return e.props.wipeout ? 'mask' : 'fill'
-  if (e.type === 'SHADE') return 'fill'
-  return e.type === 'TEXT' ? 'text' : 'line'
-}
-export const paintOrder = (b: Record<PaintLayer, string>): string => b.fill + b.line + b.mask + b.text
+export type PaintLayer = 'draw' | 'text'
+export const paintLayer = (e: Entity): PaintLayer => (e.type === 'TEXT' ? 'text' : 'draw')
+export const paintOrder = (b: Record<PaintLayer, string>): string => b.draw + b.text
 
 /**
  * Sombreado de una vista: cada triángulo relleno con su color, en el orden en que viene (de atrás
@@ -346,7 +341,7 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
   const layerMap = new Map(layers.map((l) => [l.id, l]))
   const layerOf = (id: string) => layerMap.get(id)
   const toPage = (q: Vec3): [number, number] => worldToPage(q[0], q[1], t)
-  const paint: Record<PaintLayer, string> = { fill: '', line: '', mask: '', text: '' }
+  const paint: Record<PaintLayer, string> = { draw: '', text: '' }
   for (const e of entities) {
     const layer = layerMap.get(e.layer)
     if (!layerShown(layer) || (layer && !layer.printable)) continue
@@ -558,8 +553,8 @@ export function modelPlotPage(entities: Entity[], layers: Layer[], opts: PlotOpt
   const page = opts.page ?? PAGE_SIZES.A4
   const margin = opts.marginPt ?? 28 // ~1 cm
   const layerMap = new Map(layers.map((l) => [l.id, l]))
-  // De la capa de más abajo a la de más arriba: lo último que se pinta queda encima.
-  const printable = byLayerOrder(entities, layers).filter((e) => {
+  // En su orden de dibujo: lo último que se pinta queda encima.
+  const printable = entities.filter((e) => {
     const l = layerMap.get(e.layer)
     return !l || (layerShown(l) && l.printable)
   })

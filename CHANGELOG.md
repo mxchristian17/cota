@@ -4,6 +4,20 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.27.0] — 2026-11-04
+
+### Changed
+- **Draw order as in classic CAD**: what covers what follows the order of the objects (the last one on top), on screen
+  and in plots, instead of the order of the layers. Fills and masks cover what was drawn before them. The arrows and
+  dragging that ordered layers in the Layer Properties dialog are gone.
+- DWG and DXF files open **in their own draw order** (the order of the file and its draw order table); block
+  insertions keep their place instead of going on top.
+- `Last` in Select objects picks the last object created.
+
+### Added
+- **`DRAWORDER`** (`DR`: Above objects / Under objects / Front / Back) and **`TEXTTOFRONT`**, also in Tools ▸ Draw
+  Order. A new hatch goes behind its boundary.
+
 ## [2.26.0] — 2026-11-04
 
 ### Changed

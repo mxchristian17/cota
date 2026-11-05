@@ -28,6 +28,7 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 | IMAGE | The picture in its place (clip and fade included) once its file is loaded; until then, its frame and file name | IMAGE (DXF; the file path, not the pixels) | The drawing stores only the file path: open the image together with the drawing, drop it on Cota or load it with `IMAGE`; from the working folder it loads on its own |
 | PDF, DWF and DGN UNDERLAY | File name at the insertion point | Text | The content is an external file |
 | OLE2FRAME | Frame | Polyline | |
+| Draw order (SORTENTSTABLE) | Applied: objects draw in the order of the file and its draw order table, blocks included | Objects written in their order | Texts are always shown on top |
 | Lineweight display (LWDISPLAY) | Kept: with it on, the model shows lineweights in pixels (LWT in the status bar) | Native | Layouts always show lineweights |
 | Transparency (440) | Applied: the color is mixed with the background on screen; plots are transparent (what is under shows through) | Native | Layer transparency is not read |
 | WIPEOUT | A mask filled with the background color, over the lines of every layer and under the texts | WIPEOUT | Its frame is not drawn |
@@ -45,5 +46,4 @@ about half the triangles (18 segments per full turn instead of 36), and texts sm
 
 1. NURBS faces of ACIS solids following their surface (today, over their best-fit plane).
 2. Blocks and layouts on export (today blocks are expanded and layouts stay out of the file).
-3. WIPEOUT masks, which need a draw order for the fills.
-4. Proxy entities in DWG files (the reader drops them).
+3. Proxy entities in DWG files (the reader drops them).

@@ -717,24 +717,6 @@ body {
   margin: 3px 0;
 }
 
-/* --- Orden de capas en el administrador --- */
-.layer-table td.layer-order {
-  white-space: nowrap;
-}
-.layer-table .drag-handle {
-  cursor: grab;
-  color: var(--muted);
-  padding: 0 4px;
-  user-select: none;
-}
-.layer-table .layer-order .icon-btn {
-  padding: 0 2px;
-  font-size: 10px;
-}
-.layer-table tr.drop-target td {
-  border-top: 2px solid var(--accent);
-}
-
 /* --- Layers panel --- */
 .panel {
   padding: 8px;

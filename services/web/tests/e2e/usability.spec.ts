@@ -510,13 +510,14 @@ test.describe('Planos georreferenciados (coordenadas de millones)', () => {
 
 
 test.describe('Imágenes de fondo', () => {
-  // Un plano que usa una imagen (el DXF guarda sólo la ruta) y la imagen: 4 × 2 píxeles rojos.
+  // Un plano que usa una imagen (el DXF guarda sólo la ruta) y la imagen: 4 × 2 píxeles rojos. La imagen va primero
+  // (de fondo): en el orden de dibujo queda debajo de la línea.
   const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAEklEQVR4nGO8IyfHAANMDEgAABtMARynZZQCAAAAAElFTkSuQmCC'
   const rec = (type: string, ...codes: Array<[number, string | number]>) => `0\n${type}\n${codes.map(([c, v]) => `${c}\n${v}\n`).join('')}`
   const DXF =
     '0\nSECTION\n2\nENTITIES\n' +
-    rec('LINE', [8, '0'], [10, 990], [20, 2001], [30, 0], [11, 1010], [21, 2001], [31, 0]) +
     rec('IMAGE', [8, 'MAPA'], [10, 1000], [20, 2000], [30, 0], [11, 2], [21, 0], [31, 0], [12, 0], [22, 2], [32, 0], [13, 4], [23, 2], [340, 'AB']) +
+    rec('LINE', [8, '0'], [10, 990], [20, 2001], [30, 0], [11, 1010], [21, 2001], [31, 0]) +
     '0\nENDSEC\n0\nSECTION\n2\nOBJECTS\n' +
     rec('IMAGEDEF', [5, 'AB'], [1, 'C:\\planos\\mapa.png'], [10, 4], [20, 2]) +
     '0\nENDSEC\n0\nEOF\n'
@@ -541,8 +542,9 @@ test.describe('Imágenes de fondo', () => {
       `let box = [], ro = 0, line = 0
        s.activeViewport.entityGroup.updateMatrixWorld(true)
        s.activeViewport.entityGroup.traverse((o) => {
-         if (o.userData.raster) { o.geometry.computeBoundingBox(); const b = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld); box = [b.min.x, b.min.y, b.max.x, b.max.y]; ro = o.renderOrder }
-         else if (o.isLine || o.isLineSegments) line = Math.max(line, o.renderOrder)
+         const rk = o.geometry?.getAttribute('drawRank') ? Math.max(...o.geometry.getAttribute('drawRank').array) : -1
+         if (o.userData.raster) { o.geometry.computeBoundingBox(); const b = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld); box = [b.min.x, b.min.y, b.max.x, b.max.y]; ro = rk }
+         else if ((o.isLine || o.isLineSegments) && o.material.visible) line = Math.max(line, rk)
        })
        return { box, below: ro < line }`,
     )
@@ -580,7 +582,7 @@ test.describe('Imágenes de fondo', () => {
     await expect(page.getByTestId('prop-action-_attached')).toHaveCount(0)
     // Seleccionada, sigue debajo de las líneas (se resalta su marco).
     await expect
-      .poll(() => st<boolean>(page, `let ro = null, line = -Infinity; s.activeViewport.entityGroup.traverse((o) => { if (o.userData.raster) ro = o.renderOrder; else if (o.isLine || o.isLineSegments) line = Math.max(line, o.renderOrder) }); return ro !== null && ro < line`))
+      .poll(() => st<boolean>(page, `let ro = null, line = -Infinity; const rk = (o) => (o.geometry?.getAttribute('drawRank') ? Math.max(...o.geometry.getAttribute('drawRank').array) : -1); s.activeViewport.entityGroup.traverse((o) => { if (o.userData.raster) ro = rk(o); else if ((o.isLine || o.isLineSegments) && o.material.visible) line = Math.max(line, rk(o)) }); return ro !== null && ro < line`))
       .toBe(true)
     expect(await st<number>(page, 'return s.selection.length')).toBe(1)
     // Deshacer la deja sin cargar; soltar el archivo sobre la ventana la vuelve a cargar.
@@ -600,7 +602,7 @@ test.describe('Imágenes de fondo', () => {
 })
 
 test.describe('Máscaras (WIPEOUT)', () => {
-  test('una máscara tapa las líneas de abajo, de cualquier capa, y el texto queda encima', async ({ page }) => {
+  test('una máscara tapa las líneas que van antes en el orden de dibujo, de cualquier capa, y el texto queda encima', async ({ page }) => {
     const rec = (type: string, ...codes: Array<[number, string | number]>) => `0\n${type}\n${codes.map(([c, v]) => `${c}\n${v}\n`).join('')}`
     const DXF =
       '0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLAYER\n' + rec('LAYER', [2, 'LINEAS'], [62, 1], [70, 0]) + rec('LAYER', [2, 'ROTULOS'], [62, 7], [70, 0]) + '0\nENDTAB\n0\nENDSEC\n' +
@@ -621,12 +623,13 @@ test.describe('Máscaras (WIPEOUT)', () => {
       `let order = null, lines = -Infinity, bg = false
        const vp = s.activeViewport
        vp.entityGroup.traverse((o) => {
-         if (o.isMesh && o.material.depthTest === false && o.material.visible) { order = o.renderOrder; bg = o.material.color.getHexString() === vp.bgColor.getHexString() }
-         else if (o.isLineSegments || o.isLine) lines = Math.max(lines, o.renderOrder)
+         const rk = o.geometry?.getAttribute('drawRank') ? Math.max(...o.geometry.getAttribute('drawRank').array) : -1
+         if (o.isMesh && o.material.visible && o.material.color?.getHexString() === vp.bgColor.getHexString()) { order = rk; bg = true }
+         else if ((o.isLineSegments || o.isLine) && o.material.visible) lines = Math.max(lines, rk)
        })
        return { order, lines, bg }`,
     )
     expect(m.bg).toBe(true) // del color del fondo
-    expect(m.order).toBeGreaterThan(m.lines) // encima de las líneas, aunque su capa esté abajo
+    expect(m.order).toBeGreaterThan(m.lines) // encima de la línea (que va antes), aunque su capa esté abajo
   })
 })
