@@ -29,7 +29,7 @@ export function entityPreviewShapes(e: Entity, dx: number, dy: number, dz = 0): 
     case 'LINE':
       return [{ kind: 'line', a: shift(lineSpan(e.props)[0]), b: shift(lineSpan(e.props)[1]) }]
     case 'CIRCLE':
-      return [{ kind: 'circle', center: shift(e.props.center), radius: e.props.radius }]
+      return [{ kind: 'circle', center: shift(e.props.center), radius: e.props.radius, normal: e.props.normal }]
     case 'ARC':
       return [{ kind: 'polyline', points: tessellateArc(e.props).map(shift) }]
     case 'ELLIPSE':

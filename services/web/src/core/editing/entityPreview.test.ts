@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { entityPreviewShapes } from './entityPreview'
-import type { LineEntity, RectangleEntity } from '../document/types'
+import type { CircleEntity, LineEntity, RectangleEntity } from '../document/types'
 
 describe('entityPreviewShapes', () => {
   it('desplaza una línea', () => {
@@ -26,5 +26,10 @@ describe('entityPreviewShapes', () => {
       expect(s.points[2]).toEqual({ x: 21, y: 11, z: 0 })
       expect(s.points[4]).toEqual(s.points[0])
     }
+  })
+
+  it('un círculo dibujado en otra vista conserva su plano (no se ve de canto como una línea)', () => {
+    const e: CircleEntity = { id: 'c1', type: 'CIRCLE', layer: '0', props: { center: [0, 0, 0], radius: 5, normal: [1, 0, 0] } }
+    expect(entityPreviewShapes(e, 0, 2, 3)).toEqual([{ kind: 'circle', center: { x: 0, y: 2, z: 3 }, radius: 5, normal: [1, 0, 0] }])
   })
 })

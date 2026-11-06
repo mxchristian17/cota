@@ -4,6 +4,12 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.28.3] — 2026-11-06
+
+### Fixed
+- **Move/copy preview of circles in other views**: a circle drawn in a side view (e.g. RIGHT) showed as a line while
+  moving or copying it, as if it lay in the XY plane. The preview now keeps its plane; the result was already right.
+
 ## [2.28.2] — 2026-11-06
 
 ### Fixed
