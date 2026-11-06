@@ -210,6 +210,12 @@ interface MeshBatch { pos: number[]; nor: number[]; ranges: { s: number; id: str
 interface LineBatch { pos: number[]; ranges: { s: number; id: string }[]; n: number }
 /** Orden de los textos de trazo: encima de todo el dibujo. */
 const TEXT_ORDER = 0.75
+
+/** Material de un lote: `#rrggbb`, o `#rrggbbaa` si es transparente (se mezcla de verdad con lo de abajo). */
+function paint(hex: string): { color: THREE.Color; transparent?: boolean; opacity?: number } {
+  const color = new THREE.Color(hex.slice(0, 7))
+  return hex.length > 7 ? { color, transparent: true, opacity: parseInt(hex.slice(7, 9), 16) / 255 } : { color }
+}
 /**
  * Lote de caras sombreadas: las piezas se juntan recién al crear la geometría, en arreglos del tamaño justo (antes se
  * copiaban número por número a listas que ocupaban el doble). `n` cuenta índices (tres por triángulo).
@@ -2410,6 +2416,14 @@ export class Viewport {
     const lwShown = !!(this.data?.lwUnitsPerMm || this.data?.lwPxPerMm)
     const lwKey = (l: Layer | undefined, own?: number): string => (lwShown ? `|${(own !== undefined && own >= 0 ? own : l?.lineWeight) || 0.25}` : '')
     this.wideLines = []
+    // Transparentes: un lote por tramo seguido del mismo color, en el orden de dibujo; se pintan después de lo opaco y
+    // la profundidad (rango) decide qué queda encima.
+    let seeSeq = 0
+    let seeLast = ''
+    const seeOrder = (k: string): string => {
+      if (k !== seeLast) [seeSeq, seeLast] = [seeSeq + 1, k]
+      return String(seeSeq * 1e-6)
+    }
 
     this.unpickable = new Set(entities.filter((e) => !layerEditable(layerMap.get(e.layer))).map((e) => e.id))
     for (const e of entities) {
@@ -2519,23 +2533,26 @@ export class Viewport {
         }
         if (e.type === 'HATCH') {
           // En su lugar del orden de dibujo. Una máscara (WIPEOUT) tapa lo que va antes; los textos quedan encima.
-          const hro = ro
+          // Con transparencia se mezcla de verdad con lo de abajo, como el CAD clásico: va en su propio lote.
+          const see = (e.transparency ?? 0) > 0 && !e.props.wipeout
+          const hex = see ? this.layerHex(layer, e.color) + Math.round((1 - Math.min(1, e.transparency!)) * 255).toString(16).padStart(2, '0') : colorHex
+          const hro = (part: string): string | number => (see ? seeOrder(`${part}|${hex}`) : ro)
           const strokes = hatchStrokesCached(e.props)
           if (strokes.segs.length) {
-            const b = getLine(lineB, `${hro}|${colorHex}`)
+            const b = getLine(lineB, `${hro('l')}|${hex}`)
             b.ranges.push({ s: b.n, id: e.id })
             for (const [a, c] of strokes.segs) b.pos.push(a[0], a[1], a[2], c[0], c[1], c[2])
             b.n += strokes.segs.length * 2
           }
           for (const d of strokes.dots) {
-            const pb = getPoints(pointB, `${hro}|${colorHex}`)
+            const pb = getPoints(pointB, `${hro('p')}|${hex}`)
             pb.pos.push(d[0], d[1], d[2])
             pb.rank.push(this.rankOf(e.id))
           }
           const tris = hatchTriangles(e)
           if (tris.length) {
             // Una máscara (WIPEOUT) se rellena con el color del fondo: tapa lo de las capas de abajo.
-            const k = e.props.wipeout ? `${hro}|${bgHex}|mask` : `${hro}|${colorHex}|${isSolidHatch(e.props) ? 'solid' : 'pick'}`
+            const k = e.props.wipeout ? `${ro}|${bgHex}|mask` : isSolidHatch(e.props) ? `${hro('f')}|${hex}|solid` : `${ro}|${colorHex}|pick`
             let b = fillB.get(k)
             if (!b) fillB.set(k, (b = { pos: [], nor: [], ranges: [], n: 0 }))
             b.ranges.push({ s: b.n, id: e.id })
@@ -2664,7 +2681,7 @@ export class Viewport {
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', this.local(b.pos))
     g.setAttribute(RANK_ATTR, new THREE.BufferAttribute(Float32Array.from(b.rank), 1))
-    const pts = new THREE.Points(g, ranked(new THREE.PointsMaterial({ color: new THREE.Color(colorHex), size: 1, sizeAttenuation: false }), this.rankK))
+    const pts = new THREE.Points(g, ranked(new THREE.PointsMaterial({ ...paint(colorHex), size: 1, sizeAttenuation: false }), this.rankK))
     pts.renderOrder = Number(ro)
     pts.raycast = () => {} // el pick lo resuelve el recorrido invisible
     this.entityGroup.add(pts)
@@ -2682,7 +2699,7 @@ export class Viewport {
     g.setAttribute(RANK_ATTR, new THREE.BufferAttribute(rankArray(b.pos.length / 3, b.ranges, this.rankOf), 1))
     const visible = kind === 'solid' || kind === 'mask'
     // Un relleno o una máscara tapa lo que va antes en el orden de dibujo, aunque esté en el mismo plano.
-    const mesh = new THREE.Mesh(g, ranked(new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex), side: THREE.DoubleSide, visible }), this.rankK))
+    const mesh = new THREE.Mesh(g, ranked(new THREE.MeshBasicMaterial({ ...paint(colorHex), side: THREE.DoubleSide, visible }), this.rankK))
     mesh.userData.ranges = b.ranges
     mesh.userData.rangeKind = 'mesh'
     if (lowPick) mesh.userData.lowPick = true
@@ -2744,7 +2761,7 @@ export class Viewport {
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
     const rk = rankArray(pos.length / 3, b.ranges, this.rankOf)
     g.setAttribute(RANK_ATTR, new THREE.BufferAttribute(rk, 1))
-    const seg = new THREE.LineSegments(g, ranked(new THREE.LineBasicMaterial({ color: new THREE.Color(colorHex), visible: !pickOnly }), this.rankK))
+    const seg = new THREE.LineSegments(g, ranked(new THREE.LineBasicMaterial({ ...paint(colorHex), visible: !pickOnly }), this.rankK))
     seg.userData.ranges = b.ranges
     seg.userData.rangeKind = 'line'
     seg.renderOrder = Number(ro)
@@ -2753,7 +2770,7 @@ export class Viewport {
       // Línea con grosor (en píxeles según el zoom): se ve en lugar de la fina, que queda para el pick.
       const wg = new LineSegmentsGeometry().setPositions(pos)
       wg.setAttribute('instanceRank', new THREE.InstancedBufferAttribute(Float32Array.from({ length: rk.length / 2 }, (_, i) => rk[2 * i]), 1))
-      const mat = ranked(new LineMaterial({ color: new THREE.Color(colorHex).getHex(), linewidth: 1 }), this.rankK, true)
+      const mat = ranked(new LineMaterial({ ...paint(colorHex), color: new THREE.Color(colorHex.slice(0, 7)).getHex(), linewidth: 1 }), this.rankK, true)
       mat.resolution.set(this.width, this.height)
       const wide = new LineSegments2(wg, mat)
       wide.renderOrder = Number(ro)

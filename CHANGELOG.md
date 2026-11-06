@@ -4,6 +4,13 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.28.2] — 2026-11-06
+
+### Fixed
+- **Transparent hatches on screen**: a hatch with transparency now blends with what is under it, as on paper and in
+  classic CAD: overlapping transparent hatches add up and the patterns below show through (until now each one was
+  mixed only with the background and covered what was under it).
+
 ## [2.28.1] — 2026-11-06
 
 ### Fixed
