@@ -4,6 +4,13 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.28.1] — 2026-11-06
+
+### Fixed
+- **Large pattern hatches**: a pattern hatch over a large area (e.g. a gravel pattern over a whole site, more than
+  200,000 strokes) was not drawn at all, on screen or in the PDF. The limit is now 1,000,000 strokes per hatch, like
+  classic CAD, so the drawing and its layouts look the same as there.
+
 ## [2.28.0] — 2026-11-04
 
 ### Added

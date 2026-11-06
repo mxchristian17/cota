@@ -135,7 +135,8 @@ export function patternLinesOf(p: HatchProps): PatternLine[] {
 
 /** Límites de generación (en el CAD clásico: "Hatch spacing too dense, or dash size too small"). */
 export const MAX_HATCH_LINES = 20000
-export const MAX_HATCH_SEGMENTS = 200000
+/** Tramos por sombreado: como el CAD clásico (HPMAXLINES, 1.000.000); un patrón sobre un terreno entero pasa de 300.000. */
+export const MAX_HATCH_SEGMENTS = 1_000_000
 
 export interface HatchStrokes {
   segs: Array<[Vec3, Vec3]>

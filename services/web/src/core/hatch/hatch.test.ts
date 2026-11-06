@@ -99,6 +99,11 @@ describe('líneas del patrón', () => {
     expect(u.segs.length).toBe(20) // 10 horizontales + 10 verticales
     expect(hatchStrokes(hatch(sq, { pattern: 'SOLID' })).segs.length).toBe(0)
     expect(hatchStrokes(hatch(sq, { scale: 0.0001 })).tooDense).toBe(true)
+    // Un patrón sobre un terreno entero (300.000 trazos) se dibuja, como en el CAD clásico (hasta 1.000.000).
+    const land: HatchProps['loops'] = [{ vertices: [[0, 0, 0], [100, 0, 0], [100, 300, 0], [0, 300, 0]] }]
+    const big = hatchStrokes(hatch(land, { custom: [{ angle: 0, origin: [0, 0], delta: [0, 0.1], dashes: [0.5, -0.5] }] }))
+    expect(big.tooDense).toBeFalsy()
+    expect(big.segs.length).toBeGreaterThan(250_000)
     const reg = hatchRegions(hatchRings(hatch(sq)))
     expect(reg.length).toBe(1)
   })
