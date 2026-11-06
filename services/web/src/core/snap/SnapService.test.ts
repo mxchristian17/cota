@@ -146,6 +146,15 @@ describe('computeSnap — object snaps configurables', () => {
     near(r.point, 0, 10)
   })
 
+  it('un círculo dibujado en la vista RIGHT no se "cruza" consigo mismo en cada tramo', () => {
+    const c: Entity = { id: 'c', type: 'CIRCLE', layer: '0', props: { center: [0, 0, 0], radius: 10, normal: [1, 0, 0] } }
+    const types = [0.3, 1.1, 2.5, 4].map((a) => {
+      const cur = pt(0, 10 * Math.cos(a), 10 * Math.sin(a))
+      return computeSnap(cur, [c], only(cur, { intersection: true, apparentIntersection: true })).type
+    })
+    expect(types).toEqual([null, null, null, null])
+  })
+
   it('INTERSECTION de dos líneas que se cruzan', () => {
     const r = computeSnap(pt(1, 1, 0), [seg(-10, 0, 10, 0, 'h'), seg(0, -10, 0, 10, 'v')], only(pt(1, 1, 0), { intersection: true }))
     expect(r.type).toBe('intersection')

@@ -4,6 +4,13 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.28.4] — 2026-11-06
+
+### Fixed
+- **Intersection snap on circles drawn in other views**: on a circle drawn in a side view (e.g. RIGHT), the
+  intersection object snap showed all around it, as if the circle crossed itself. Now it only snaps where it really
+  crosses another object.
+
 ## [2.28.3] — 2026-11-06
 
 ### Fixed
