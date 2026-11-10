@@ -116,9 +116,9 @@ export function pageUrl(from: string, to: string): string {
 
 const ALERTS: Record<string, string> = { NOTE: 'Note', TIP: 'Tip', IMPORTANT: 'Important', WARNING: 'Warning', CAUTION: 'Caution' }
 
-/** Las tablas cuya primera columna es un nombre en código (comandos, variables) dan una fila con ancla. */
+/** Las tablas cuya primera columna es un nombre en código (comandos, variables), enlazado o no, dan una fila con ancla. */
 function codeRows(t: Tokens.Table): string[] | null {
-  const names = t.rows.map((r) => /^`([^`\s]+)`$/.exec(r[0]?.text.trim() ?? '')?.[1] ?? '')
+  const names = t.rows.map((r) => /^\[?`([^`\s]+)`(?:\]\([^)\s]*\))?$/.exec(r[0]?.text.trim() ?? '')?.[1] ?? '')
   return names.length && names.every(Boolean) ? names : null
 }
 

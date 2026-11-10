@@ -347,7 +347,7 @@ TEXT 10,70 5 0 "Base plate %%c40" ""
 
 **Notes**
 
-- Edit a text with a double click, or change its height, style and justification in **Properties**.
+- A double click on a text selects it and opens **Properties**, where its properties can be changed.
 - See also [MTEXT](#mtext).
 
 ## MTEXT

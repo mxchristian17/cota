@@ -37,7 +37,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | `SELECT` | `SE` | Select objects |
 | `SELECTSIMILAR` | — | Select every object of the same type and layer as the selected ones |
 | `QSELECT` | — | Quick Select: select objects by type and property (layer, linetype, length, radius, area, text…) in a dialog |
-| `ERASE` | `E` | Erase selected objects |
+| [`ERASE`](reference/modify.md#erase) | `E` | Erase selected objects |
 
 ## View menu
 
@@ -213,36 +213,36 @@ Every command can be typed in the command line (aliases too) or picked from the 
 
 | Command | Aliases | What it does |
 | --- | --- | --- |
-| `PROPERTIES` | `PR`, `CH`, `MO`, `DDMODIFY`, `PROPS`, `SIDEBAR`, `HIDESIDEBAR` | Show/hide the Properties palette (movable, dockable) |
-| `MATCHPROP` | `MA`, `PAINTER` | Copy properties (layer, linetype, linetype scale, text, dimension, hatch, polyline) from one object to others |
-| `PEDIT` | `PE` | Edit polylines: join (with fuzz), width, vertices, fit/spline curves, decurve, linetype generation, reverse |
-| `HATCHEDIT` | `HE` | Edit a hatch: pattern, scale, angle, island style, origin, associativity, boundary |
-| `ATTEDIT` | `ATE`, `-ATTEDIT` | Edit the attribute values of a block reference (command line) |
-| `EATTEDIT` | — | Enhanced Attribute Editor: edit the attributes of a block reference in a dialog |
-| `COPY` | `CO`, `CP` | Copy selected objects (repeats until Esc) |
-| `MIRROR` | `MI` | Mirror selected objects about an axis defined by two points |
-| `OFFSET` | `O` | Create concentric circles, parallel lines and parallel curves |
-| `ARRAY` | `AR` | Array selected objects [Rectangular/Polar] |
-| `MOVE` | `M` | Move selected objects |
-| `ROTATE` | `RO` | Rotate selected objects about a base point (Copy/Reference) |
-| `SCALE` | `SC` | Scale selected objects about a base point (factor or Reference) |
-| `STRETCH` | `S` | Stretch objects crossed by a window (vertices inside the window move) |
-| `LENGTHEN` | `LEN` | Change the length of objects and the included angle of arcs |
-| `TRIM` | `TR` | Trim objects to meet the edges of other objects (shift-select extends) |
-| `EXTEND` | `EX` | Extend objects to meet the edges of other objects (shift-select trims) |
-| `BREAKATPOINT` | — | Break the selected object at a single point |
-| `BREAK` | `BR` | Break the selected object between two points |
-| `JOIN` | `J` | Join lines, arcs, polylines and splines into a single object |
-| `CHAMFER` | `CHA` | Bevel the edges of objects |
-| `FILLET` | `F` | Round and fillet the edges of objects |
-| `ALIGN` | `AL` | Align objects with other objects using source/destination point pairs |
-| `UNION` | `UNI` | Boolean union of solids |
-| `SUBTRACT` | `SU` | Boolean subtraction of solids |
-| `INTERSECT` | `IN` | Boolean intersection of solids |
-| `SLICE` | `SL` | Slice solids with a plane, keeping one side or both |
-| `FILLETEDGE` | — | Round and fillet the edges of solid objects |
-| `CHAMFEREDGE` | — | Bevel the edges of solid objects |
-| `EXPLODE` | `X` | Explode block references, polylines and hatches into their component objects |
+| [`PROPERTIES`](reference/modify.md#properties) | `PR`, `CH`, `MO`, `DDMODIFY`, `PROPS`, `SIDEBAR`, `HIDESIDEBAR` | Show/hide the Properties palette (movable, dockable) |
+| [`MATCHPROP`](reference/modify.md#matchprop) | `MA`, `PAINTER` | Copy properties (layer, linetype, linetype scale, text, dimension, hatch, polyline) from one object to others |
+| [`PEDIT`](reference/modify.md#pedit) | `PE` | Edit polylines: join (with fuzz), width, vertices, fit/spline curves, decurve, linetype generation, reverse |
+| [`HATCHEDIT`](reference/modify.md#hatchedit) | `HE` | Edit a hatch: pattern, scale, angle, island style, origin, associativity, boundary |
+| [`ATTEDIT`](reference/modify.md#attedit) | `ATE`, `-ATTEDIT` | Edit the attribute values of a block reference (command line) |
+| [`EATTEDIT`](reference/modify.md#eattedit) | — | Enhanced Attribute Editor: edit the attributes of a block reference in a dialog |
+| [`COPY`](reference/modify.md#copy) | `CO`, `CP` | Copy selected objects (repeats until Esc) |
+| [`MIRROR`](reference/modify.md#mirror) | `MI` | Mirror selected objects about an axis defined by two points |
+| [`OFFSET`](reference/modify.md#offset) | `O` | Create concentric circles, parallel lines and parallel curves |
+| [`ARRAY`](reference/modify.md#array) | `AR` | Array selected objects [Rectangular/Polar] |
+| [`MOVE`](reference/modify.md#move) | `M` | Move selected objects |
+| [`ROTATE`](reference/modify.md#rotate) | `RO` | Rotate selected objects about a base point (Copy/Reference) |
+| [`SCALE`](reference/modify.md#scale) | `SC` | Scale selected objects about a base point (factor or Reference) |
+| [`STRETCH`](reference/modify.md#stretch) | `S` | Stretch objects crossed by a window (vertices inside the window move) |
+| [`LENGTHEN`](reference/modify.md#lengthen) | `LEN` | Change the length of objects and the included angle of arcs |
+| [`TRIM`](reference/modify.md#trim) | `TR` | Trim objects to meet the edges of other objects (shift-select extends) |
+| [`EXTEND`](reference/modify.md#extend) | `EX` | Extend objects to meet the edges of other objects (shift-select trims) |
+| [`BREAKATPOINT`](reference/modify.md#breakatpoint) | — | Break the selected object at a single point |
+| [`BREAK`](reference/modify.md#break) | `BR` | Break the selected object between two points |
+| [`JOIN`](reference/modify.md#join) | `J` | Join lines, arcs, polylines and splines into a single object |
+| [`CHAMFER`](reference/modify.md#chamfer) | `CHA` | Bevel the edges of objects |
+| [`FILLET`](reference/modify.md#fillet) | `F` | Round and fillet the edges of objects |
+| [`ALIGN`](reference/modify.md#align) | `AL` | Align objects with other objects using source/destination point pairs |
+| [`UNION`](reference/modify.md#union) | `UNI` | Boolean union of solids |
+| [`SUBTRACT`](reference/modify.md#subtract) | `SU` | Boolean subtraction of solids |
+| [`INTERSECT`](reference/modify.md#intersect) | `IN` | Boolean intersection of solids |
+| [`SLICE`](reference/modify.md#slice) | `SL` | Slice solids with a plane, keeping one side or both |
+| [`FILLETEDGE`](reference/modify.md#filletedge) | — | Round and fillet the edges of solid objects |
+| [`CHAMFEREDGE`](reference/modify.md#chamferedge) | — | Bevel the edges of solid objects |
+| [`EXPLODE`](reference/modify.md#explode) | `X` | Explode block references, polylines and hatches into their component objects |
 
 ## Help menu
 

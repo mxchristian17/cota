@@ -4,6 +4,17 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.33.2] — 2026-11-10
+
+### Documentation
+- **Modify command reference**: all 31 commands of the Modify menu (move, copy, rotate, scale, mirror, offset,
+  array, stretch, lengthen, trim, extend, break, join, fillet, chamfer, align, booleans, slice, edge fillets and
+  chamfers, explode, properties, match properties, polyline, hatch and attribute editing), each with its prompts,
+  options, a working example and notes.
+
+### Fixed
+- Documentation search: commands linked to their reference section are found again as their own result.
+
 ## [2.33.1] — 2026-11-09
 
 ### Documentation

@@ -54,7 +54,7 @@ describe('sitio de documentación', () => {
   })
 
   it('cada fila de comando o variable tiene ancla y resultado propio en el buscador', () => {
-    const md = '# Command reference\n\n## Draw menu\n\n| Command | Aliases | What it does |\n| --- | --- | --- |\n| `LINE` | `L` | Draw lines |\n| `-LAYER` | — | Layers |\n'
+    const md = '# Command reference\n\n## Draw menu\n\n| Command | Aliases | What it does |\n| --- | --- | --- |\n| [`LINE`](reference/draw.md#line) | `L` | Draw lines |\n| `-LAYER` | — | Layers |\n'
     const r = renderPage(md, page('docs/commands.md', 'Commands', 'Reference'), new Map(), REPO)
     expect(r.html).toContain('<tr id="line">')
     expect(r.html).toContain('<tr id="-layer">')
@@ -68,7 +68,7 @@ describe('sitio de documentación', () => {
     const names = [...site.files.keys()]
     expect(names).toEqual(expect.arrayContaining(['index.html', 'getting-started/index.html', 'commands/index.html', 'changelog/index.html', 'docs.css', 'docs.js', 'search.json']))
     const search = JSON.parse(site.files.get('search.json') as string) as { h: string; u: string }[]
-    expect(search.find((e) => e.h === 'FILLET')?.u).toBe('commands#fillet')
+    expect(search.some((e) => e.h === 'FILLET' && e.u === 'commands#fillet')).toBe(true)
     // Ningún enlace relativo apunta a una página o archivo que no existe en el sitio.
     const broken: string[] = []
     for (const [name, body] of site.files) {
