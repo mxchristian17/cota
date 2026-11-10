@@ -84,15 +84,17 @@ volumes.
 
 ## MASSPROP
 
-Mass properties of 3D solids: volume, mass (with density 1), surface area, bounding box and centroid.
+Mass properties of 3D solids (volume, mass with density 1, surface area, bounding box and centroid) and section
+properties of regions (area, perimeter, centroid, moments and product of inertia, radii of gyration and principal
+moments).
 
 **Aliases** none · **Menu** Tools › Inquiry
 
 **Steps**
 
-1. `Select objects:` the solids.
+1. `Select objects:` the solids and regions.
 
-Cota prints:
+For solids, Cota prints:
 
 ```text
 ----------------   SOLIDS   ----------------
@@ -112,9 +114,47 @@ BOX 0,0,0 @20,30 20
 MASSPROP L ""
 ```
 
+For each region, in the current UCS (a 100 × 50 rectangle):
+
+```text
+----------------   REGIONS   ----------------
+Area:                 5000.0000
+Perimeter:            300.0000
+Bounding box:         X: 0.0000 -- 100.0000
+                      Y: 0.0000 -- 50.0000
+Centroid:             X: 50.0000
+                      Y: 25.0000
+Moments of inertia:   X: 4166666.6667
+                      Y: 16666666.6667
+Product of inertia:   XY: 6250000.0000
+Radii of gyration:    X: 28.8675
+                      Y: 57.7350
+Principal moments and X-Y directions about centroid:
+                      I: 1041666.6667 along [1.0000 0.0000]
+                      J: 4166666.6667 along [0.0000 1.0000]
+```
+
+- **Moments of inertia** are about the X and Y axes of the UCS (∫y² dA and ∫x² dA); the **product of inertia** is
+  ∫xy dA. **Radii of gyration** are √(I/A).
+- **Principal moments** are about the centroid: the smallest (I) and the largest (J), with the direction of each axis.
+  They are the second moments of area of the section, the values used to check a beam's bending.
+- Holes subtract, and arcs are exact.
+
+**Example**: the section of a 100 × 50 plate with a hole of radius 10.
+
+```text
+RECTANG 0,0 100,50
+CIRCLE 50,25 10
+REGION ALL ""
+SUBTRACT 1,1 "" 60,25 ""
+MASSPROP ALL ""
+```
+
 **Notes**
 
 - Multiply the volume by the density of the material to get the real mass.
+- A region that is not parallel to the XY plane of the current UCS shows only its area and perimeter: set the UCS on
+  its plane (for example with `UCS` › `Object`) to get the full section properties.
 
 ## GROUP
 

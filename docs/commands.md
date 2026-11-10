@@ -126,7 +126,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | [`ID`](reference/tools.md#id) | — | Display the coordinates of a point in the current UCS |
 | [`AREA`](reference/tools.md#area) | `AA` | Area and perimeter of points or of an object [Object/Add area/Subtract area]; Add/Subtract keep a running total |
 | [`LIST`](reference/tools.md#list) | `LI`, `LS` | List the properties of the selected objects: type, layer, points, lengths, areas, volumes |
-| [`MASSPROP`](reference/tools.md#massprop) | — | Mass properties of solids: volume (mass with density 1), surface area, bounding box and centroid |
+| [`MASSPROP`](reference/tools.md#massprop) | — | Mass properties of solids (volume, surface area, centroid) and regions (area, centroid, moments of inertia) |
 | [`DRAWORDER`](reference/tools.md#draworder) | `DR` | Change the draw order of objects [Above objects/Under objects/Front/Back] |
 | [`TEXTTOFRONT`](reference/tools.md#texttofront) | — | Bring texts and/or dimensions in front of the other objects [Text/Dimensions/Both] |
 | [`GROUP`](reference/tools.md#group) | `G` | Group the selected objects so they are selected together [Name/Description]; UNGROUP breaks a group |

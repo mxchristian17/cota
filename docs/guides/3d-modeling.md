@@ -1,6 +1,6 @@
 # 3D modeling
 
-Solids from primitives and profiles, booleans, edge fillets, moving in 3D and looking at the model.
+Solids from primitives and profiles, regions, booleans, edge fillets, moving in 3D and looking at the model.
 
 ## Creating solids
 
@@ -18,6 +18,30 @@ Primitives and extrusions stay parametric: select one and change its dimensions 
 
 Object snaps work on the real edges of solids: endpoints at the corners, midpoints of the edges, and the center
 and quadrants of round edges, also after booleans and fillets. Profiles with arcs keep them when extruded.
+
+## Regions
+
+A region is a flat area with an outline and holes. It is the 2D counterpart of a solid:
+
+1. `REGION` turns closed objects into regions: each closed polyline, circle or rectangle, and each chain of lines
+   and arcs that closes. `BOUNDARY` can also create regions (Advanced options › Object type › Region).
+2. `UNION`, `SUBTRACT` and `INTERSECT` combine regions in the same plane, with exact arcs: a plate minus its holes
+   is one region.
+3. `EXTRUDE` or `REVOLVE` the region: the solid comes out with the holes through it.
+
+`MASSPROP` gives the section properties of a region (area, centroid, moments of inertia, principal moments), the
+numbers used to check a profile's stiffness. `AREA` › Object and `LIST` give its area and perimeter, `EXPLODE`
+turns it back into lines and arcs, and `HATCH` › Select objects hatches it with its holes.
+
+```text
+RECTANG 0,0 100,50
+CIRCLE 25,25 8
+CIRCLE 75,25 8
+REGION ALL ""
+SUBTRACT 0,0 "" 33,25 83,25 ""
+MASSPROP L ""
+EXTRUDE L "" 10
+```
 
 ## Moving in 3D
 

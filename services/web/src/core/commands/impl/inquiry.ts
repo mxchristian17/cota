@@ -1,6 +1,7 @@
 import type { Command, CommandContext } from '../types'
 import { regionArea, regionPerimeter } from '../../region/region'
-import type { Entity, MeshProps } from '../../document/types'
+import { sectionProperties } from '../../region/massprop'
+import type { Entity, MeshProps, RegionEntity } from '../../document/types'
 import type { Pt, Vec3 } from '../../math'
 import { curveOf } from '../../geom/curve'
 import { curveArea } from '../../geom/area'
@@ -248,17 +249,51 @@ export const listCommand: Command = {
   },
 }
 
-/** MASSPROP: volumen, superficie, caja y centroide de sólidos (densidad 1, como el CAD clásico). */
+/** MASSPROP de una región: propiedades de sección en la UCS, con el formato del CAD clásico. */
+function regionMassprop(ctx: CommandContext, e: RegionEntity): void {
+  const q = sectionProperties(e.props, (v) => {
+    const p = local(ctx, v)
+    return [p.x, p.y, p.z]
+  })
+  const pad = (label: string): string => label.padEnd(22)
+  ctx.print('----------------   REGIONS   ----------------')
+  if (!q) {
+    ctx.print(`${pad('Area:')}${n4(regionArea(e.props))}`)
+    ctx.print(`${pad('Perimeter:')}${n4(regionPerimeter(e.props))}`)
+    ctx.print('The region is not parallel to the XY plane of the current UCS: only its area and perimeter are shown.')
+    return
+  }
+  const dir = (d: [number, number]): string => `[${n4(d[0])} ${n4(d[1])}]`
+  ctx.print(`${pad('Area:')}${n4(q.area)}`)
+  ctx.print(`${pad('Perimeter:')}${n4(q.perimeter)}`)
+  ctx.print(`${pad('Bounding box:')}X: ${n4(q.min[0])} -- ${n4(q.max[0])}`)
+  ctx.print(`${pad('')}Y: ${n4(q.min[1])} -- ${n4(q.max[1])}`)
+  ctx.print(`${pad('Centroid:')}X: ${n4(q.centroid[0])}`)
+  ctx.print(`${pad('')}Y: ${n4(q.centroid[1])}`)
+  ctx.print(`${pad('Moments of inertia:')}X: ${n4(q.ix)}`)
+  ctx.print(`${pad('')}Y: ${n4(q.iy)}`)
+  ctx.print(`${pad('Product of inertia:')}XY: ${n4(q.ixy)}`)
+  ctx.print(`${pad('Radii of gyration:')}X: ${n4(q.rx)}`)
+  ctx.print(`${pad('')}Y: ${n4(q.ry)}`)
+  ctx.print('Principal moments and X-Y directions about centroid:')
+  ctx.print(`${pad('')}I: ${n4(q.principal[0].moment)} along ${dir(q.principal[0].dir)}`)
+  ctx.print(`${pad('')}J: ${n4(q.principal[1].moment)} along ${dir(q.principal[1].dir)}`)
+}
+
+/** MASSPROP: volumen, superficie, caja y centroide de sólidos (densidad 1, como el CAD clásico); regiones: sección. */
 export const masspropCommand: Command = {
   name: 'MASSPROP',
   aliases: [],
-  description: 'Mass properties of solids: volume (mass with density 1), surface area, bounding box and centroid',
+  description: 'Mass properties of solids (volume, surface area, centroid) and regions (area, centroid, moments of inertia)',
   async run(ctx) {
     const ids = await ctx.getSelection('Select objects: ')
     if (!ids?.length) return
-    const solids = ids.map((id) => ctx.doc.getEntity(id)).filter((e): e is Entity => !!e && (e.type === 'SOLID3D' || e.type === 'MESH3D'))
+    const ents = ids.map((id) => ctx.doc.getEntity(id)).filter((e): e is Entity => !!e)
+    const regions = ents.filter((e): e is RegionEntity => e.type === 'REGION')
+    for (const r of regions) regionMassprop(ctx, r)
+    const solids = ents.filter((e) => e.type === 'SOLID3D' || e.type === 'MESH3D')
     if (!solids.length) {
-      ctx.print('No solids selected.')
+      if (!regions.length) ctx.print('No solids or regions selected.')
       return
     }
     let vol = 0

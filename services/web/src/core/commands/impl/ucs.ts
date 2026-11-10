@@ -93,6 +93,12 @@ function objectUcs(ctx: CommandContext, e: Entity, pick: Pt): Ucs | null {
     }
     case 'RECTANGLE':
       return fromNormal(e.props.corner, [0, 0, 1], [1, 0, 0])
+    case 'REGION': {
+      // Como una polilínea: origen en el primer vértice del contorno, X por su primer tramo, Z por la normal.
+      const v = e.props.loops[0]?.vertices ?? []
+      if (v.length < 2) return null
+      return fromNormal(v[0], e.props.normal ?? [0, 0, 1], vsub(v[1], v[0]))
+    }
     case 'DIMENSION': {
       const n = e.props.normal ?? [0, 0, 1]
       return fromNormal(e.props.textPos, n, e.props.dimType === 'LINEAR' || e.props.dimType === 'ALIGNED' ? linearDir(e.props) : arcBasis(n).u)
