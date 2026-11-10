@@ -4,6 +4,12 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.33.6] — 2026-11-10
+
+### Fixed
+- The 2.33.5 build did not pass its type check (a test of the documentation site), so the online version was not
+  updated. Same content as 2.33.5.
+
 ## [2.33.5] — 2026-11-10
 
 ### Documentation

@@ -67,7 +67,7 @@ describe('sitio de documentación', () => {
     expect(site).not.toBeNull()
     const names = [...site.files.keys()]
     expect(names).toEqual(expect.arrayContaining(['index.html', 'getting-started/index.html', 'commands/index.html', 'changelog/index.html', 'docs.css', 'docs.js', 'search.json']))
-    const search = JSON.parse(site.files.get('search.json') as string) as { h: string; u: string }[]
+    const search = JSON.parse(site.files.get('search.json') as string) as { h: string; u: string; k?: string }[]
     // FILLET tiene sección en la referencia: el resultado es la sección, con los alias de la tabla.
     expect(search.filter((e) => e.h === 'FILLET').map((e) => [e.u, e.k])).toEqual([['reference/modify#fillet', 'F']])
     // Ningún enlace relativo apunta a una página o archivo que no existe en el sitio.
