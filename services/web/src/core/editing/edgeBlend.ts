@@ -24,8 +24,6 @@ export type BlendSpec = { kind: 'fillet'; r: number } | { kind: 'chamfer'; d1: n
 export interface BlendTool {
   soup: number[]
   add: boolean
-  /** Si está, la herramienta es la intersección de `soup` con estas otras sopas (la esquina entre dos empalmes). */
-  clip?: number[][]
   /** Sopas que se le quitan a la herramienta: lo que queda detrás de la cara que frena un extremo. */
   cut?: number[][]
 }
@@ -120,23 +118,148 @@ export function sweepEdge(e: TopoEdge, spec: BlendSpec, ext0 = 0, ext1 = 0): num
     else rings.push(at(grow(ext1) ? e.pts[i] : after))
     if (i === last && grow(ext1)) rings.push(...(arcRings(e, 1, at(e.pts[i]), ext1) ?? [at(after)]))
   }
+  return ringSoup(rings, e.closed)
+}
+
+/** Malla cerrada entre anillos de perfil consecutivos; las tapas de una abierta, en abanico desde el último punto. */
+function ringSoup(rings: Vec3[][], closed: boolean): number[] {
   const tris: Vec3[][] = []
   const k = rings[0].length
   const nr = rings.length
-  for (let i = 0; i < (e.closed ? nr : nr - 1); i++) {
+  for (let i = 0; i < (closed ? nr : nr - 1); i++) {
     const [r0, r1] = [rings[i], rings[(i + 1) % nr]]
     for (let j = 0; j < k; j++) {
       const jn = (j + 1) % k
       tris.push([r0[j], r1[j], r1[jn]], [r0[j], r1[jn], r0[jn]])
     }
   }
-  if (!e.closed) {
+  if (!closed) {
     const [first, last] = [rings[0], rings[nr - 1]]
     for (let j = 0; j < k - 2; j++) {
       tris.push([first[k - 1], first[j], first[j + 1]], [last[k - 1], last[j + 1], last[j]])
     }
   }
   return orientedSoup(tris)
+}
+
+/** Paso angular de los anillos a lo largo de una arista circular exacta. */
+const RING_STEP = (5 * Math.PI) / 180
+
+type P2 = [number, number]
+const add2 = (a: P2, b: P2): P2 => [a[0] + b[0], a[1] + b[1]]
+const sub2 = (a: P2, b: P2): P2 => [a[0] - b[0], a[1] - b[1]]
+const scale2 = (a: P2, k: number): P2 => [a[0] * k, a[1] * k]
+const dot2 = (a: P2, b: P2): number => a[0] * b[0] + a[1] * b[1]
+const norm2 = (a: P2): P2 => scale2(a, 1 / Math.hypot(a[0], a[1]))
+
+/** Interpolación angular entre dos unitarios del plano, por el arco corto. */
+function slerp2(u: P2, v: P2, f: number): P2 {
+  const a0 = Math.atan2(u[1], u[0])
+  let da = Math.atan2(v[1], v[0]) - a0
+  if (da > Math.PI) da -= 2 * Math.PI
+  if (da < -Math.PI) da += 2 * Math.PI
+  return [Math.cos(a0 + da * f), Math.sin(a0 + da * f)]
+}
+
+/**
+ * Perfil exacto en el plano meridiano de una arista plano–esfera, en coordenadas (a, b): `a` medida desde el eje (la
+ * normal al plano por el centro de la esfera) y `b` sobre la normal del plano, desde él. La arista está en (`rho`, 0) y el
+ * centro de la esfera en (0, `h`); la bola rueda sobre el plano y sobre la esfera de radio `R`. Mismo orden que
+ * `blendProfile`: contacto con la primera cara prolongado hacia afuera, el arco (o la recta del chaflán), contacto con la
+ * segunda prolongado y, al final, la esquina exterior. `null` si no hay bola que toque las dos.
+ */
+function meridianProfile(rho: number, h: number, R: number, kappa: number, convex: boolean, planeFirst: boolean, spec: BlendSpec): P2[] | null {
+  const s = convex ? 1 : -1
+  const O: P2 = [0, h]
+  const E: P2 = [rho, 0]
+  const nP: P2 = [0, 1]
+  const radial = norm2(sub2(E, O))
+  const nE = scale2(radial, kappa)
+  const c = dot2(nP, nE)
+  if (1 + c < 1e-6 || 1 - c < 1e-6) return null
+  const size = spec.kind === 'fillet' ? spec.r : Math.max(spec.d1, spec.d2)
+  const m = 0.5 * size
+  let path: P2[]
+  if (spec.kind === 'fillet') {
+    const r = spec.r
+    const C: P2 = [0, -s * r]
+    const D = R - kappa * s * r
+    const a2 = D * D - (C[1] - h) ** 2
+    if (D <= 0 || a2 <= 0) return null
+    C[0] = Math.sqrt(a2)
+    const onPlane: P2 = [C[0], 0]
+    const onSphere = add2(O, scale2(sub2(C, O), R / D))
+    const [u1, u2] = [norm2(sub2(onPlane, C)), norm2(sub2(onSphere, C))]
+    const k = Math.max(2, Math.ceil(Math.acos(clamp1(dot2(u1, u2))) / ARC_STEP))
+    path = Array.from({ length: k + 1 }, (_, i) => add2(C, scale2(slerp2(u1, u2, i / k), r)))
+  } else {
+    const [dP, dS] = planeFirst ? [spec.d1, spec.d2] : [spec.d2, spec.d1]
+    const alongP = norm2(scale2(sub2(nE, scale2(nP, c)), -s))
+    const alongS = norm2(scale2(sub2(nP, scale2(nE, c)), -s))
+    const phi = 2 * Math.asin(Math.min(1, dS / (2 * Math.hypot(E[0] - O[0], E[1] - O[1]))))
+    path = [add2(E, scale2(alongP, dP)), add2(O, scale2(add2(scale2(radial, Math.cos(phi)), scale2(alongS, Math.sin(phi))), R))]
+  }
+  const end = path[path.length - 1]
+  // Lejos de la arista: la bola no es la de este borde.
+  if (Math.hypot(path[0][0] - E[0], path[0][1] - E[1]) > 4 * size || Math.hypot(end[0] - E[0], end[1] - E[1]) > 4 * size) return null
+  const nS = scale2(norm2(sub2(end, O)), kappa)
+  const inner = planeFirst ? path : [...path].reverse()
+  const [n1, n2] = planeFirst ? [nP, nS] : [nS, nP]
+  const bis = scale2(add2(nP, nE), 1 / (1 + c))
+  return [add2(inner[0], scale2(n1, s * m)), ...inner, add2(inner[inner.length - 1], scale2(n2, s * m)), add2(E, scale2(bis, s * m))]
+}
+
+/**
+ * Barrido exacto de una arista entre un plano y una esfera (p. ej. la boca de una caja restada a una esfera): la arista
+ * es un círculo y el empalme, un toro con el mismo eje, así que el perfil se calcula una vez en el plano meridiano y se
+ * gira con anillos parejos. La bola rueda sobre una esfera apenas más allá de las facetas, del lado en que está ella
+ * (la inscripta si está adentro, la de los vértices si está afuera): así el empalme queda entero de ese lado de la malla
+ * y la línea de tangencia sale limpia, en vez de cruzar las facetas en puntos que varían. `null` si la arista no es de
+ * ese tipo.
+ */
+function planeSphereSweep(topo: Topology, e: TopoEdge, spec: BlendSpec, ext0: number, ext1: number): number[] | null {
+  const [f0, f1] = [topo.shapes?.[e.faces[0]], topo.shapes?.[e.faces[1]]]
+  if (!f0 || !f1) return null
+  const planeFirst = f0.kind === 'plane'
+  const [pl, sp] = planeFirst ? [f0, f1] : [f1, f0]
+  if (pl.kind !== 'plane' || sp.kind !== 'sphere') return null
+  const n = pl.n
+  const h = vdot(n, sp.c) - pl.d
+  if (sp.r * sp.r - h * h <= 0) return null
+  const rho = Math.sqrt(sp.r * sp.r - h * h)
+  const cc = vsub(sp.c, vscale(n, h))
+  const tol = Math.max(topo.diag * 1e-3, 1e-6)
+  if (e.pts.some((p) => Math.abs(vdot(n, p) - pl.d) > tol || Math.abs(vlen(vsub(p, cc)) - rho) > tol + 0.02 * rho)) return null
+  const nS = planeFirst ? e.n2[0] : e.n1[0]
+  const kappa = vdot(nS, vsub(e.pts[0], sp.c)) >= 0 ? 1 : -1
+  // La bola apoya del lado de las facetas en que está (en el material si se resta, en el vacío si se suma): la cara de
+  // salida del perfil corta las facetas de frente y no casi tangente.
+  const margin = Math.max(0.25 * (sp.r - sp.rin), topo.diag * 1e-4)
+  const ballInside = kappa > 0 === e.convex
+  const prof = meridianProfile(rho, h, ballInside ? sp.rin - margin : sp.r + margin, kappa, e.convex, planeFirst, spec)
+  if (!prof) return null
+  const rel0 = vsub(e.pts[0], cc)
+  const e1 = vnorm(vsub(rel0, vscale(n, vdot(n, rel0))))
+  const e2 = vcross(n, e1)
+  const ang = (p: Vec3): number => Math.atan2(vdot(vsub(p, cc), e2), vdot(vsub(p, cc), e1))
+  const pts = e.closed ? [...e.pts, e.pts[0]] : e.pts
+  let total = 0
+  for (let i = 1; i < pts.length; i++) {
+    let d = ang(pts[i]) - ang(pts[i - 1])
+    if (d > Math.PI) d -= 2 * Math.PI
+    if (d <= -Math.PI) d += 2 * Math.PI
+    total += d
+  }
+  const dir = Math.sign(total) || 1
+  const reach = (ext: number): number => dir * Math.min(ext / rho, Math.PI / 2)
+  const [t0, t1] = e.closed ? [0, 2 * Math.PI * dir] : [-reach(ext0), total + reach(ext1)]
+  const count = Math.max(1, Math.ceil(Math.abs(t1 - t0) / RING_STEP))
+  const ringAt = (t: number): Vec3[] => {
+    const u = vadd(vscale(e1, Math.cos(t)), vscale(e2, Math.sin(t)))
+    return prof.map(([a, b]) => vadd(cc, vadd(vscale(u, a), vscale(n, b))))
+  }
+  const rings = Array.from({ length: e.closed ? count : count + 1 }, (_, j) => ringAt(t0 + ((t1 - t0) * j) / count))
+  return ringSoup(rings, e.closed)
 }
 
 /**
@@ -226,10 +349,11 @@ function backBox(v: Vec3, n: Vec3, off: number, d: number): number[] {
   })
 }
 
-/** Barrido de una arista convexa abierta, con sus extremos frenados (para armar las esquinas). */
-interface Swept {
+/** Arista resuelta, con sus extremos frenados. */
+interface Item {
   e: TopoEdge
-  soup: number[]
+  spec: BlendSpec
+  size: number
   stops: [EndStop | null, EndStop | null]
 }
 
@@ -244,8 +368,7 @@ export interface ResolvedBlend {
 export function blendTools(topo: Topology, node: EdgeBlendProps): ResolvedBlend {
   const tol = Math.max(topo.diag * 1e-3, 1e-6)
   const seen = new Set<number>()
-  const tools: BlendTool[] = []
-  const swept: Swept[] = []
+  const items: Item[] = []
   let skipped = 0
   for (const ref of node.edges) {
     const hit = nearestEdge(topo, ref.at, tol)
@@ -258,47 +381,71 @@ export function blendTools(topo: Topology, node: EdgeBlendProps): ResolvedBlend 
     const e = topo.edges[hit.edge]
     const spec = edgeSpec(topo, e, node, ref.base)
     const size = spec.kind === 'fillet' ? spec.r : Math.max(spec.d1, spec.d2)
-    const stops: Swept['stops'] = e.closed || !e.convex ? [null, null] : [endStop(topo, e, 0, size), endStop(topo, e, 1, size)]
+    const stops: Item['stops'] = e.closed || !e.convex ? [null, null] : [endStop(topo, e, 0, size), endStop(topo, e, 1, size)]
+    items.push({ e, spec, size, stops })
+  }
+  const mitres = mitreCuts(items)
+  const tools: BlendTool[] = []
+  items.forEach(({ e, spec, size, stops }, i) => {
     const ext = e.closed ? [0, 0] : ([0, 1] as const).map((end) => stops[end]?.ext ?? endExtension(topo, e, end, size))
-    const soup = sweepEdge(e, spec, ext[0], ext[1])
+    const soup = planeSphereSweep(topo, e, spec, ext[0], ext[1]) ?? sweepEdge(e, spec, ext[0], ext[1])
     if (!soup) {
       skipped++
-      continue
+      return
     }
-    const cut = stops.flatMap((s) => (s ? [backBox(s.v, s.n, -s.eps, s.d)] : []))
+    const cut = ([0, 1] as const).flatMap((end) => {
+      const s = stops[end]
+      // Frenado por una sola cara: el corte va en su plano; lo que queda del barrido detrás es la prolongación de esa cara.
+      return s ? [mitres.get(`${i}:${end}`) ?? backBox(s.v, s.n, 0, s.d)] : []
+    })
     tools.push(cut.length ? { soup, add: !e.convex, cut } : { soup, add: !e.convex })
-    if (!e.closed && e.convex) swept.push({ e, soup, stops })
-  }
+  })
   if (node.op === 'FILLETEDGE') tools.push(...vertexPatches(topo, [...seen], node.radius))
-  tools.push(...cornerTools(swept))
   return { tools, skipped }
 }
 
 /**
  * Esquina entre dos aristas convexas tratadas que se juntan en un vértice con quiebre, cada una frenada por la cara
- * de la otra (p. ej. los bordes de una esfera a la que se le restó una caja). Como en el CAD clásico, las dos
- * superficies se prolongan hasta cortarse: detrás de los dos planos que frenan los empalmes se resta lo que comparten
- * los dos barridos prolongados. Sólo actúa donde ningún empalme dejó superficie (si no, la CSG se confunde).
+ * de la otra (p. ej. los bordes de una esfera a la que se le restó una caja). Como en el CAD clásico, los dos empalmes se
+ * prolongan hasta cortarse: cada barrido se recorta con el plano bisector de las dos caras que los frenan (pasa por la
+ * arista cóncava entre ellas) en vez de con la cara de la otra. Devuelve la caja que se le quita a cada extremo.
  */
-function cornerTools(swept: Swept[]): BlendTool[] {
-  const ends = new Map<number, Array<{ s: Swept; end: 0 | 1 }>>()
-  for (const s of swept) {
+/** Giro relativo de los planos de inglete (solape de los dos empalmes de una esquina). */
+const MITRE_OVERLAP = 2e-4
+
+function mitreCuts(items: Item[]): Map<string, number[]> {
+  const ends = new Map<number, Array<{ i: number; end: 0 | 1 }>>()
+  items.forEach(({ e, stops }, i) => {
     for (const end of [0, 1] as const) {
-      const vid = s.e.vids[end === 0 ? 0 : s.e.vids.length - 1]
-      ends.set(vid, [...(ends.get(vid) ?? []), { s, end }])
+      if (!stops[end]) continue
+      const vid = e.vids[end === 0 ? 0 : e.vids.length - 1]
+      ends.set(vid, [...(ends.get(vid) ?? []), { i, end }])
     }
+  })
+  const out = new Map<string, number[]>()
+  /** Normales de las caras de la arista en su extremo. */
+  const faceNormals = (e: TopoEdge, end: 0 | 1): Vec3[] => {
+    const k = end === 0 ? 0 : e.n1.length - 1
+    return [e.n1[k], e.n2[k]]
   }
-  const tools: BlendTool[] = []
   for (const list of ends.values()) {
-    if (list.length !== 2 || list[0].s === list[1].s) continue
+    if (list.length !== 2 || list[0].i === list[1].i) continue
     const [a, b] = list
-    const [sa, sb] = [a.s.stops[a.end], b.s.stops[b.end]]
-    // Un extremo libre ya se prolonga atravesando la cara: no queda hueco que llenar.
+    const [sa, sb] = [items[a.i].stops[a.end], items[b.i].stops[b.end]]
     if (!sa || !sb) continue
-    const behind = (st: EndStop): number[] => backBox(st.v, st.n, st.eps, st.d)
-    tools.push({ soup: a.s.soup, add: false, clip: [behind(sa), behind(sb), b.s.soup] })
+    // Cada uno frenado por una cara del otro: si no, la esquina no es la de dos empalmes que se encuentran.
+    const facesOf = (n: Vec3, e: TopoEdge, end: 0 | 1): boolean => faceNormals(e, end).some((m) => vdot(m, n) > 0.999)
+    if (!facesOf(sa.n, items[b.i].e, b.end) || !facesOf(sb.n, items[a.i].e, a.end)) continue
+    if (vlen(vsub(sa.n, sb.n)) < 1e-3) continue
+    const d = Math.max(sa.d, sb.d)
+    // Cada plano se gira apenas alrededor de la arista cóncava hacia el lado del otro: los barridos se solapan una
+    // cuña finísima (con el corte justo en el bisector, las dos caras coincidían y la CSG dejaba muescas) y ninguno
+    // entra en la pared del otro, porque los dos planos siguen pasando por esa arista.
+    const keep = (own: Vec3, other: Vec3): Vec3 => vnorm(vsub(own, vscale(other, 1 + MITRE_OVERLAP)))
+    out.set(`${a.i}:${a.end}`, backBox(sa.v, keep(sa.n, sb.n), 0, d))
+    out.set(`${b.i}:${b.end}`, backBox(sa.v, keep(sb.n, sa.n), 0, d))
   }
-  return tools
+  return out
 }
 
 /** Aplana triángulos a una sopa orientada hacia afuera (volumen con signo positivo). */

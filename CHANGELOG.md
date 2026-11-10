@@ -4,6 +4,25 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.35.1] — 2026-11-10
+
+### Fixed
+- **FILLETEDGE/CHAMFEREDGE between a flat face and a sphere** (a sphere with a box subtracted) now follow the exact
+  geometry, as in classic CAD.
+  - The profile is the exact rolling ball between the plane and the sphere, taken from the sphere primitive itself
+    instead of the tangent plane at the edge. The blend is swept around the circle of the edge with even rings.
+  - The tangent line with the sphere is now a clean curve. The ball rolls on the sphere inscribed in its facets, so
+    the blend no longer crosses the facets at random points and leaves a jagged line.
+  - Where two blends meet at a corner, each one is cut along the bisector of the two walls that stop them: the
+    surfaces meet in a single crease with no small flat face, and the separate corner tool is gone.
+  - A blend stopped by one wall alone is cut flush with that wall, which no longer shows a faint line.
+  - A blend that adds material (a sphere joined to a box) rolls on the outer side of the facets, so its tangent
+    line is clean too.
+  - Edges between two different surfaces that meet almost tangentially (two blends reaching the sphere) are no
+    longer merged into one face, so the crease between them is drawn and stray strokes are gone.
+  - Pieces of the same flat face that touch only at a vertex (next to the pole of a sphere) are one face again: the
+    edge around a spherical hole in a box was split in two there, and its blend stopped short of the corner.
+
 ## [2.35.0] — 2026-11-10
 
 ### Added

@@ -227,6 +227,61 @@ describe('esquina entre dos empalmes (esfera menos caja)', () => {
     for (const z of [7.5, 7.7, 7.9]) expect(hitAt(c, 0, 0.3, z)).toBeGreaterThan(-0.02)
   })
 
+  it('la topología conoce la esfera exacta de la primitiva y las facetas quedan entre rin y r', () => {
+    const t = solidTopology(cut3)
+    const shapes = t?.shapes ?? []
+    expect(shapes.filter((s) => s?.kind === 'plane')).toHaveLength(3)
+    const sp = shapes.find((s) => s?.kind === 'sphere')
+    expect(sp).toMatchObject({ kind: 'sphere', c: [0, 0, 0], r: 10 })
+    if (sp?.kind === 'sphere') expect(sp.rin).toBeGreaterThan(9.9)
+  })
+
+  it('perfil exacto plano–esfera: la bola toca la pared en su círculo y la esfera en una línea limpia', () => {
+    const f: SolidProps = { op: 'FILLETEDGE', solid: cut3, edges: edges3, radius: 2 }
+    // Bola de radio 2 con centro a x = 1 y a 10 − 2 del centro (la esfera inscripta en las facetas, ~9,95):
+    // toca la pared x = 3 a ~7,88 del eje x. Adentro de ese círculo la pared sigue entera.
+    const onDiag = (rad: number): number => hitAt(f, 0, rad * Math.SQRT1_2, rad * Math.SQRT1_2)
+    expect(onDiag(7.6)).toBeCloseTo(3, 3)
+    // Más afuera, el arco de la bola: a 9 del eje baja a ~2,66 (con el plano tangente quedaba otra curva).
+    expect(onDiag(9)).toBeCloseTo(2.66, 1)
+    // La tangencia con la esfera es una arista pareja a x ≈ 1,25 a lo largo de todo el arco (antes, dentada).
+    const t = solidTopology(f)
+    const len = (e: { pts: Vec3[] }): number => e.pts.slice(1).reduce((acc, p, i) => acc + Math.hypot(p[0] - e.pts[i][0], p[1] - e.pts[i][1], p[2] - e.pts[i][2]), 0)
+    const step = t?.edges.filter((e) => e.pts.every((p) => Math.abs(p[0] - 1.25) < 0.03)) ?? []
+    expect(Math.max(...step.map(len))).toBeGreaterThan(10)
+  })
+
+  it('dos empalmes que se juntan se cortan en el bisector: superficie continua, sin cara plana y con su arista', () => {
+    const f: SolidProps = { op: 'FILLETEDGE', solid: cut3, edges: edges3, radius: 2 }
+    // Simétricos respecto del plano x = y: la altura es la misma a ambos lados y sobre él.
+    expect(topAt(f, 2.0, 2.1)).toBeCloseTo(topAt(f, 2.1, 2.0), 2)
+    expect(topAt(f, 2.05, 2.05)).toBeCloseTo(topAt(f, 2.0, 2.1), 1)
+    const t = solidTopology(f)
+    // Fuera de las tres paredes no queda ninguna cara plana de tamaño visible (antes, una chica en la esquina).
+    const area = new Map<number, number>()
+    t?.tris.forEach((tri, i) => {
+      const [a, b, c] = tri.map((v) => t.verts[v])
+      const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+      const w = [c[0] - a[0], c[1] - a[1], c[2] - a[2]]
+      area.set(t.triFace[i], (area.get(t.triFace[i]) ?? 0) + Math.hypot(u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]) / 2)
+    })
+    const planes = (t?.shapes ?? []).flatMap((s, i) => (s?.kind === 'plane' && (area.get(i) ?? 0) > 0.01 ? [s] : []))
+    expect(planes).toHaveLength(3)
+    // La arista del pliegue sigue el bisector desde la pared hasta la esfera, sin cortes (las facetas casi tangentes
+    // de los dos empalmes quedaban en una misma cara y el pliegue no se dibujaba).
+    const zs = (t?.edges ?? []).flatMap((e) =>
+      e.pts.slice(1).flatMap((p, i) => {
+        const q = e.pts[i]
+        return Math.abs(p[0] - p[1]) < 0.01 && Math.abs(q[0] - q[1]) < 0.01 && p[0] < 2.95 ? [[Math.min(p[2], q[2]), Math.max(p[2], q[2])]] : []
+      }),
+    )
+    zs.sort((a, b) => a[0] - b[0])
+    let reach = zs[0]?.[0] ?? Infinity
+    for (const [z0, z1] of zs) if (z0 <= reach + 0.05) reach = Math.max(reach, z1)
+    expect(zs[0]?.[0]).toBeLessThan(7.8)
+    expect(reach).toBeGreaterThan(9.7)
+  })
+
   it('caja corrida (3,3,3), R3: la pared y=3 queda intacta donde el anillo final, inclinado, la mordía', () => {
     const f: SolidProps = { op: 'FILLETEDGE', solid: cut3, edges: edges3, radius: 3 }
     // Apenas sobre la tangencia del empalme con la pared (sin frenar el barrido en la pared quedaba 2,40).
@@ -234,9 +289,10 @@ describe('esquina entre dos empalmes (esfera menos caja)', () => {
     expect(hitAt(f, 1, 6.5, 3.2)).toBeGreaterThan(2.98)
     // La esquina sigue cortada: junto al vértice (3, 3, 9,06) el empalme baja.
     expect(topAt(f, 2.7, 2.7)).toBeLessThan(8.6)
-    // Chaflán: la cara inclinada llega más abajo; sobre ella, sin el freno quedaba 2,54 y 2,25.
+    // Chaflán: sobre la cara inclinada, la recta exacta entre el punto a 3 de la arista en la pared (radio 6,54) y el
+    // de la esfera a 3 de la arista da 2,77 y 2,39 (sin el freno quedaba 2,54 y 2,25).
     const c: SolidProps = { op: 'CHAMFEREDGE', solid: cut3, edges: edges3, d1: 3, d2: 3 }
-    expect(hitAt(c, 1, 6, 3.2)).toBeGreaterThan(2.7)
-    expect(hitAt(c, 1, 6.5, 3.2)).toBeGreaterThan(2.4)
+    expect(hitAt(c, 1, 6, 3.2)).toBeCloseTo(2.77, 1)
+    expect(hitAt(c, 1, 6.5, 3.2)).toBeCloseTo(2.39, 1)
   })
 })

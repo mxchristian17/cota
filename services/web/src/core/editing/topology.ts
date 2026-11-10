@@ -26,7 +26,18 @@ export interface TopoEdge {
   kind: 'line' | 'circle' | 'curve'
 }
 
+/** Superficie analítica de una primitiva, por id de `surf` (la registra el mallador). */
+export type SurfShape = { kind: 'sphere'; c: Vec3; r: number }
+
+/**
+ * Superficie exacta de una cara: plano (`n` hacia afuera, `n·p = d`) o esfera de la primitiva. En la esfera, `rin`
+ * es la distancia mínima del centro a las facetas: la malla queda entre `rin` y `r`.
+ */
+export type FaceShape = { kind: 'plane'; n: Vec3; d: number } | { kind: 'sphere'; c: Vec3; r: number; rin: number }
+
 export interface Topology {
+  /** Superficie exacta de cada cara, si se conoce. */
+  shapes?: (FaceShape | null)[]
   verts: Vec3[]
   tris: [number, number, number][]
   /** Normal (del grupo plano) de cada triángulo. */
@@ -215,6 +226,7 @@ function planarGroups(
   adj: number[][],
   verts: Vec3[],
   tolPlane: number,
+  triSurf: number[],
 ): { group: number[]; groupN: Vec3[] } {
   const group = new Array<number>(tris.length).fill(-1)
   const groupN: Vec3[] = []
@@ -234,6 +246,9 @@ function planarGroups(
         if (group[nb] >= 0) continue
         const onPlane = tris[nb].every((v) => Math.abs(vdot(n0, verts[v]) - d0) <= tolPlane)
         if (!onPlane || (area[nb] > tiny && vdot(triN[nb], n0) <= 0)) continue
+        // De otra superficie, sólo si es el mismo plano (dos caras al ras): dos empalmes que llegan tangentes a una
+        // esfera tienen facetas casi coplanares y quedaban en una misma cara, sin la arista entre ellos.
+        if (triSurf[nb] !== triSurf[seed] && area[nb] > tiny && vdot(triN[nb], n0) < 1 - 1e-6) continue
         group[nb] = g
         stack.push(nb)
       }
@@ -421,7 +436,11 @@ function edgeKind(pts: Vec3[], closed: boolean, tol: number): TopoEdge['kind'] {
  * `surf` (opcional): superficie de origen de cada triángulo. Dos facetas vecinas casi paralelas sólo forman la
  * misma cara si vienen de la misma superficie: la arista entre una cara plana y un empalme tangente se conserva.
  */
-export function buildTopology(positions: ArrayLike<number>, surf?: ArrayLike<number> | null): Topology {
+export function buildTopology(
+  positions: ArrayLike<number>,
+  surf?: ArrayLike<number> | null,
+  surfShapes?: ReadonlyMap<number, SurfShape>,
+): Topology {
   let lo: Vec3 = [Infinity, Infinity, Infinity]
   let hi: Vec3 = [-Infinity, -Infinity, -Infinity]
   for (let i = 0; i + 2 < positions.length; i += 3) {
@@ -464,7 +483,7 @@ export function buildTopology(positions: ArrayLike<number>, surf?: ArrayLike<num
     adj[h.t].push(g.t)
     adj[g.t].push(h.t)
   }
-  const { group, groupN } = planarGroups(tris, triN, area, adj, verts, Math.max(diag * 1e-4, 1e-9))
+  const { group, groupN } = planarGroups(tris, triN, area, adj, verts, Math.max(diag * 1e-4, 1e-9), triSurf)
 
   const groupSurf: number[] = []
   tris.forEach((_, t) => {
@@ -475,6 +494,19 @@ export function buildTopology(positions: ArrayLike<number>, surf?: ArrayLike<num
     const [ga, gb] = [group[h.t], group[g.t]]
     if (ga !== gb && groupSurf[ga] === groupSurf[gb] && vdot(groupN[ga], groupN[gb]) > SMOOTH_COS) uf.join(ga, gb)
   }
+  // Pedazos del mismo plano que sólo se tocan en un vértice (en el polo de una esfera la CSG deja astillas y la pared
+  // plana quedaba partida): son la misma cara, si no la arista que la bordea se corta en dos.
+  const atVertex = new Map<number, number[]>()
+  tris.forEach((tri, t) => {
+    for (const v of tri) {
+      const list = atVertex.get(v) ?? []
+      for (const g of list) {
+        if (g !== group[t] && groupSurf[g] === groupSurf[group[t]] && vdot(groupN[g], groupN[group[t]]) > 1 - 1e-9) uf.join(g, group[t])
+      }
+      if (!list.includes(group[t])) list.push(group[t])
+      atVertex.set(v, list)
+    }
+  })
   const faceOfRoot = new Map<number, number>()
   const groupFace = groupN.map((_, g) => {
     const r = uf.find(g)
@@ -524,7 +556,54 @@ export function buildTopology(positions: ArrayLike<number>, surf?: ArrayLike<num
   const vertTris: number[][] = verts.map(() => [])
   tris.forEach((t, i) => t.forEach((v) => vertTris[v].push(i)))
   const links = pairs.map(([h, g]): [number, number, number, number] => [h.t, g.t, h.a, h.b])
-  return { verts, tris, normals, triFace, faceCount: faceOfRoot.size, edges, vertTris, diag, links }
+  const shapes = faceShapes(verts, tris, normals, triFace, faceOfRoot.size, triSurf, surfShapes, tol * 10)
+  return { verts, tris, normals, triFace, faceCount: faceOfRoot.size, edges, vertTris, diag, links, shapes }
+}
+
+/**
+ * Superficie exacta de cada cara: plano si todas sus facetas son paralelas; esfera si viene de una esfera registrada
+ * y sus vértices la siguen (un vaciado escala una copia de la malla con los mismos ids y ya no es esa esfera).
+ */
+function faceShapes(
+  verts: Vec3[],
+  tris: [number, number, number][],
+  normals: Vec3[],
+  triFace: number[],
+  faceCount: number,
+  triSurf: number[],
+  surfShapes: ReadonlyMap<number, SurfShape> | undefined,
+  tol: number,
+): (FaceShape | null)[] {
+  const first: number[] = new Array(faceCount).fill(-1)
+  const planar: boolean[] = new Array(faceCount).fill(true)
+  tris.forEach((_, t) => {
+    const f = triFace[t]
+    if (first[f] < 0) first[f] = t
+    else if (vdot(normals[first[f]], normals[t]) < 1 - 1e-9) planar[f] = false
+  })
+  const spheres = new Map<number, { s: SurfShape; dmin: number; dmax: number; rin: number }>()
+  if (surfShapes?.size) {
+    tris.forEach((tri, t) => {
+      const f = triFace[t]
+      const s = planar[f] ? undefined : surfShapes.get(triSurf[t])
+      if (!s) return
+      const acc = spheres.get(f) ?? { s, dmin: Infinity, dmax: 0, rin: Infinity }
+      for (const v of tri) {
+        const d = vdist(verts[v], s.c)
+        acc.dmin = Math.min(acc.dmin, d)
+        acc.dmax = Math.max(acc.dmax, d)
+      }
+      acc.rin = Math.min(acc.rin, Math.abs(vdot(normals[t], vsub(verts[tri[0]], s.c))))
+      spheres.set(f, acc)
+    })
+  }
+  return first.map((t, f) => {
+    if (t < 0) return null
+    if (planar[f]) return { kind: 'plane', n: normals[t], d: vdot(normals[t], verts[tris[t][0]]) }
+    const sp = spheres.get(f)
+    if (!sp || Math.abs(sp.dmax - sp.s.r) > Math.max(tol, sp.s.r * 1e-4) || sp.dmin < sp.s.r * 0.95) return null
+    return { kind: 'sphere', c: sp.s.c, r: sp.s.r, rin: Math.min(sp.rin, sp.dmin) }
+  })
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -872,7 +951,9 @@ function pointTriangleDistance(p: Vec3, a: Vec3, b: Vec3, c: Vec3): number {
 // Mallador inyectado (render/csg) + caché
 // ---------------------------------------------------------------------------------------------
 
-type Mesher = (p: SolidProps) => ArrayLike<number> | { positions: ArrayLike<number>; surf?: ArrayLike<number> | null }
+type Mesher = (
+  p: SolidProps,
+) => ArrayLike<number> | { positions: ArrayLike<number>; surf?: ArrayLike<number> | null; shapes?: ReadonlyMap<number, SurfShape> }
 let mesher: Mesher | null = null
 const cache = new Map<string, Topology>()
 
@@ -889,7 +970,7 @@ export function solidTopology(p: SolidProps): Topology | null {
   const hit = cache.get(key)
   if (hit) return hit
   const m = mesher(p)
-  const topo = 'positions' in m ? buildTopology(m.positions, m.surf) : buildTopology(m)
+  const topo = 'positions' in m ? buildTopology(m.positions, m.surf, m.shapes) : buildTopology(m)
   if (cache.size > 50) cache.clear()
   cache.set(key, topo)
   return topo

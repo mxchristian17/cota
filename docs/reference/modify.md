@@ -640,6 +640,9 @@ Rounds edges of 3D solids with a radius.
 **Notes**
 
 - All the edges of one operation must belong to the same solid. Corners where two filleted edges meet are blended.
+- Between a flat face and a sphere (for example a sphere with a box subtracted), the fillet uses the exact rolling
+  ball between the two surfaces. Two fillets that meet at an inner corner are trimmed along the bisector of the walls
+  between them, so they join in a single crease.
 - The fillet is part of the solid's history: object snaps work on its real edges (CEN on the round edges).
 
 ## CHAMFEREDGE

@@ -4,7 +4,7 @@ import type { Vec3 } from '../core/math'
 import type { EdgeBlendProps, MeshProps, RevolveProps, SolidBasis, SolidProps } from '../core/document/types'
 import { revolveMesh } from '../core/editing/revolve'
 import { sweepStartRef } from '../core/editing/solid'
-import { registerSolidMesher, solidTopology } from '../core/editing/topology'
+import { registerSolidMesher, solidTopology, type SurfShape } from '../core/editing/topology'
 import { blendTools } from '../core/editing/edgeBlend'
 import { dropStrayTriangles, type BoolOp } from './csgClean'
 import { closeTJunctions } from './tjunctions'
@@ -24,7 +24,9 @@ evaluator.attributes = ['position', 'uv', 'normal', 'surf']
  * empalme) como en el CAD clásico, sin mostrar el facetado de las paredes curvas.
  */
 let nextSurf = 1
-function tagSurfaces(g: THREE.BufferGeometry): THREE.BufferGeometry {
+/** Superficie analítica de los ids de `surf` que la tienen (esferas): los empalmes la usan para un perfil exacto. */
+const surfShapes = new Map<number, SurfShape>()
+function tagSurfaces(g: THREE.BufferGeometry, shape?: SurfShape): THREE.BufferGeometry {
   if (g.getAttribute('surf')) return g
   const count = g.getAttribute('position')?.count ?? 0
   const index = g.getIndex()
@@ -35,6 +37,7 @@ function tagSurfaces(g: THREE.BufferGeometry): THREE.BufferGeometry {
     for (let i = gr.start; i < Math.min(gr.start + gr.count, index ? index.count : count); i++) arr[index ? index.getX(i) : i] = base + k
   })
   nextSurf = base + groups.length
+  if (shape && groups.length === 1) surfShapes.set(base, shape)
   g.setAttribute('surf', new THREE.Float32BufferAttribute(arr, 1))
   return g
 }
@@ -537,7 +540,6 @@ function blendGeometry(props: EdgeBlendProps): THREE.BufferGeometry {
     try {
       // El cortador es una sopa de triángulos: sólo se confía en la clasificación contra el sólido.
       let brush = soupBrush(tool.soup)
-      for (const clip of tool.clip ?? []) brush = booleanOp(brush, soupBrush(clip), 'intersect', false)
       for (const cut of tool.cut ?? []) brush = booleanOp(brush, soupBrush(cut), 'subtract', false)
       acc = booleanOp(acc, brush, tool.add ? 'union' : 'subtract', false)
     } catch (err) {
@@ -555,7 +557,7 @@ const treeCache = new Map<string, THREE.BufferGeometry>()
 
 function evalTree(props: SolidProps): THREE.BufferGeometry {
   const leaf = leafGeometry(props)
-  if (leaf) return tagSurfaces(leaf)
+  if (leaf) return tagSurfaces(leaf, props.op === 'SPHERE' ? { kind: 'sphere', c: props.center, r: props.radius } : undefined)
   const key = JSON.stringify(props)
   const hit = treeCache.get(key)
   if (hit) return hit.clone() // quien la usa la prepara (atributos, BVH): la del caché queda intacta
@@ -752,5 +754,5 @@ function triangleSurfaces(g: THREE.BufferGeometry): Float32Array | null {
 
 registerSolidMesher((p) => {
   const g = solidGeometry(p)
-  return { positions: triangleSoup(g), surf: triangleSurfaces(g) }
+  return { positions: triangleSoup(g), surf: triangleSurfaces(g), shapes: surfShapes }
 })
