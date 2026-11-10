@@ -160,6 +160,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | `BLOCK` | `B` | Create a block definition from selected objects (and insert a reference) |
 | `ATTDEF` | `ATT`, `-ATTDEF` | Define a block attribute (tag, prompt, default value, Invisible/Constant/Preset) |
 | `HATCH` | `H`, `BH`, `BHATCH` | Fill an enclosed area with a hatch pattern, solid fill or user lines |
+| `BOUNDARY` | `BO`, `BPOLY`, `-BOUNDARY` | Create closed polylines from the area around a picked point [Advanced options: boundary set, islands, gap tolerance] |
 | `TEXT` | `DT`, `DTEXT` | Create single-line text on its baseline (Justify: Left/Center/Right); each Enter starts a new line, an empty line finishes. %%c = Ø, %%d = °, %%p = ± |
 | `MTEXT` | `MT`, `T` | Create multiline text from its top-left corner (enter lines; empty line finishes). %%c = Ø, %%d = °, %%p = ± |
 | `BOX` | — | Create a parametric box (two base corners + height) |
@@ -359,6 +360,7 @@ Type the name to see or change the value.
 | `HPANG` | Default hatch pattern angle (degrees) |
 | `HPSPACE` | Line spacing of user defined hatches |
 | `HPASSOC` | New hatches are associative (0/1) |
+| `HPGAPTOL` | Gap tolerance of hatch and BOUNDARY boundaries: gaps up to this size are closed (0 = closed only) |
 | `HPDOUBLE` | User defined hatches are double hatched (0/1) |
 | `HPISLANDDETECTION` | Island detection of new hatches: 0 Normal, 1 Outer, 2 Ignore |
 | `PEDITACCEPT` | PEDIT converts lines and arcs to polylines without asking (0/1) |

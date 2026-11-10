@@ -354,11 +354,66 @@ export interface BoundaryIndex {
   tol: number
 }
 
-export function boundaryIndex(entities: Entity[], z = 0): BoundaryIndex {
+export function boundaryIndex(entities: Entity[], z = 0, gap = 0): BoundaryIndex {
   const { segs, srcs } = collect(entities, z, 1e-6 * Math.max(1, Math.abs(z)))
   const tol = tolOf(segs)
-  const graph = prune(arrangement(segs, tol))
+  let graph = arrangement(segs, tol)
+  if (gap > tol) {
+    const extra = bridges(graph, gap, srcs.length)
+    if (extra.length) {
+      srcs.push({ id: '', kind: 'S' })
+      graph = arrangement([...segs, ...extra], tol)
+    }
+  }
+  graph = prune(graph)
   return { graph, srcs, cycles: faceCycles(graph), z, tol }
+}
+
+/**
+ * Tolerancia de huecos (HPGAPTOL del CAD clásico): cada punta suelta se une con una recta a la punta suelta más cercana
+ * a menos de `gap` o, si no hay, al punto más cercano de otro tramo (un hueco en T). Así un contorno que no cierra
+ * "por poquito" se toma como cerrado.
+ */
+function bridges(g: Graph, gap: number, src: number): Seg[] {
+  const deg = new Map<number, number>()
+  for (const [u, v] of g.edges) {
+    deg.set(u, (deg.get(u) ?? 0) + 1)
+    deg.set(v, (deg.get(v) ?? 0) + 1)
+  }
+  const loose = [...deg].filter(([, d]) => d === 1).map(([n]) => n)
+  const used = new Set<number>()
+  const out: Seg[] = []
+  for (const d of loose) {
+    if (used.has(d)) continue
+    const p = g.pts[d]
+    let best: { n: number; dist: number } | null = null
+    for (const o of loose) {
+      if (o === d || used.has(o)) continue
+      const dist = len(sub(g.pts[o], p))
+      if (dist <= gap && (!best || dist < best.dist)) best = { n: o, dist }
+    }
+    if (best) {
+      out.push({ a: p, b: g.pts[best.n], src })
+      used.add(d).add(best.n)
+      continue
+    }
+    let near: { q: P2; dist: number } | null = null
+    for (const [u, v] of g.edges) {
+      if (u === d || v === d) continue
+      const [a, b] = [g.pts[u], g.pts[v]]
+      const ab = sub(b, a)
+      const L2 = ab[0] * ab[0] + ab[1] * ab[1]
+      const t = L2 > 0 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1]) / L2)) : 0
+      const q: P2 = [a[0] + ab[0] * t, a[1] + ab[1] * t]
+      const dist = len(sub(q, p))
+      if (dist > 0 && dist <= gap && (!near || dist < near.dist)) near = { q, dist }
+    }
+    if (near) {
+      out.push({ a: p, b: near.q, src })
+      used.add(d)
+    }
+  }
+  return out
 }
 
 /**
@@ -380,7 +435,7 @@ export function boundaryAt(index: BoundaryIndex, p: P2, island: HatchIsland): Bo
     }
   }
   const ids = new Set<string>()
-  for (const c of chosen) for (const s of c.srcs) ids.add(srcs[s].id)
+  for (const c of chosen) for (const s of c.srcs) if (srcs[s].id) ids.add(srcs[s].id) // los puentes de los huecos no son objetos
   return { loops: chosen.map((c) => loopOf(c, graph, srcs, z, tol)), ids: [...ids] }
 }
 

@@ -887,6 +887,8 @@ export interface DrawingVars {
   HPANG?: number
   HPASSOC?: 0 | 1
   HPISLANDDETECTION?: 0 | 1 | 2
+  /** Huecos menores que esto (unidades de dibujo) se cierran al buscar un contorno (HATCH, BOUNDARY). 0 = cerrado. */
+  HPGAPTOL?: number
   HPSPACE?: number
   HPDOUBLE?: 0 | 1
   HPORIGIN?: [number, number]

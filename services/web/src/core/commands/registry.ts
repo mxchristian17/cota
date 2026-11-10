@@ -35,6 +35,7 @@ import { layerToolCommands } from './impl/layertools'
 import { dashLinetypeCommand, linetypeCommand, linetypeVarCommands } from './impl/linetype'
 import { peditCommand, peditVarCommands } from './impl/pedit'
 import { dashHatchCommand, dashHatchEditCommand, hatchCommand, hatchEditCommand, hatchVarCommands } from './impl/hatch'
+import { boundaryCommand } from './impl/boundary'
 import { centerlineCommand, mleaderAlignCommand, mleaderCommand, mleaderEditCommand, mleaderStyleCommand, qleaderCommand } from './impl/mleader'
 import { revolveCommand } from './impl/revolve'
 import { intersectCommand, subtractCommand, unionCommand } from './impl/csg'
@@ -273,6 +274,7 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   for (const c of linetypeVarCommands) registerVariable(engine, c)
   // Sombreados
   engine.register(hatchCommand)
+  engine.register(boundaryCommand)
   engine.register(dashHatchCommand)
   engine.register(hatchEditCommand)
   engine.register(dashHatchEditCommand)

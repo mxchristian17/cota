@@ -38,7 +38,7 @@ function settings(ctx: CommandContext) {
 }
 
 /** Entidades que pueden formar contornos: visibles, no congeladas, con los bloques expandidos. */
-function boundarySet(ctx: CommandContext): Entity[] {
+export function boundarySet(ctx: CommandContext): Entity[] {
   const hidden = hiddenLayerIds(ctx.doc.layers)
   const frozen = frozenLayerIds(ctx.doc.layers)
   const visible = ctx.doc.entities.filter((e) => !hidden.has(e.layer) && !frozen.has(e.layer) && e.type !== 'HATCH')
@@ -127,7 +127,7 @@ function runHatch(cli: boolean) {
     const getIndex = (): BoundaryIndex => {
       // El grafo se rearma sólo si cambió el dibujo (no por el propio sombreado).
       if (!index || indexRev !== ctx.doc.revision) {
-        index = boundaryIndex(boundarySet(ctx), 0)
+        index = boundaryIndex(boundarySet(ctx), 0, ctx.doc.vars.HPGAPTOL ?? 0)
         indexRev = ctx.doc.revision
       }
       return index
@@ -426,6 +426,16 @@ export const hatchVarCommands: Command[] = [
   hpVar('HPANG', 'Default hatch pattern angle (degrees)', false),
   hpVar('HPSPACE', 'Line spacing of user defined hatches', true),
   hpSwitch('HPASSOC', 'New hatches are associative (0/1)'),
+  {
+    name: 'HPGAPTOL',
+    aliases: [],
+    description: 'Gap tolerance of hatch and BOUNDARY boundaries: gaps up to this size are closed (0 = closed only)',
+    async run(ctx) {
+      const cur = ctx.doc.vars.HPGAPTOL ?? 0
+      const r = await askNumber(ctx, `Enter new value for HPGAPTOL <${fmt(cur)}>: `, { def: cur, check: (v) => (v >= 0 ? null : 'Requires a non-negative number.') })
+      if (r?.kind === 'number') ctx.doc.setVar('HPGAPTOL', r.value)
+    },
+  },
   hpSwitch('HPDOUBLE', 'User defined hatches are double hatched (0/1)'),
   {
     name: 'HPISLANDDETECTION',

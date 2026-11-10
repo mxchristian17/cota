@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { solidGeometry, triangleSoup } from '../../render/csg'
 import type { ChamferEdgeProps, Entity, FilletEdgeProps, SolidProps } from '../document/types'
+import type { Vec3 } from '../math'
 import { resetSysvars } from '../commands/sysvars'
 import { makeEngine } from '../../test/engineHarness'
 import { applyField, entityFields } from './props'
@@ -170,5 +171,40 @@ describe('snaps del sólido resultante', () => {
     // Sin el error de la malla (antes 10,1.9887…,9.9992…): coordenadas exactas.
     for (const v of solidVertices(round)) for (const x of v) expect(Number(x.toFixed(6))).toBe(x)
     expect(solidArcCenters(round).map((v) => v.join(','))).toEqual(expect.arrayContaining(['0,2,8', '10,2,8']))
+  })
+})
+
+describe('esquina entre dos empalmes (esfera menos caja)', () => {
+  /** Altura de la superficie superior del sólido en (x, y): el corte más alto de la vertical con la malla. */
+  function topAt(p: SolidProps, x: number, y: number): number {
+    const s = triangleSoup(solidGeometry(p))
+    let best = -Infinity
+    for (let i = 0; i + 8 < s.length; i += 9) {
+      const [ax, ay, az, bx, by, bz, cx, cy, cz] = Array.from(s.subarray(i, i + 9))
+      const d = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+      if (Math.abs(d) < 1e-12) continue
+      const l1 = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / d
+      const l2 = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / d
+      const l3 = 1 - l1 - l2
+      if (l1 < -1e-9 || l2 < -1e-9 || l3 < -1e-9) continue
+      best = Math.max(best, l1 * az + l2 * bz + l3 * cz)
+    }
+    return best
+  }
+  const cut: SolidProps = { op: 'SUBTRACT', operands: [{ op: 'SPHERE', center: [0, 0, 0], radius: 10, segments: 48 }, { op: 'BOX', origin: [0, 0, 0], width: 20, depth: 20, height: 20 }] } as SolidProps
+  const s = Math.SQRT1_2 * 10
+  const edges = [{ at: [0, s, s] as Vec3 }, { at: [s, 0, s] as Vec3 }, { at: [s, s, 0] as Vec3 }]
+
+  it('FILLETEDGE en los tres arcos del corte: en el vértice las dos superficies se cortan (sin muesca ni astilla)', () => {
+    const f: SolidProps = { op: 'FILLETEDGE', solid: cut, edges, radius: 2 }
+    // Junto al vértice (0, 0, 10), a 0,3 de las dos paredes: el empalme baja a ~9,05 (sin la esquina quedaba ~9,99).
+    expect(topAt(f, -0.3, -0.3)).toBeLessThan(9.4)
+    // Lejos del vértice, sobre la esfera, nada cambia.
+    expect(topAt(f, -3, -3)).toBeCloseTo(Math.sqrt(100 - 18), 0)
+  })
+
+  it('CHAMFEREDGE igual', () => {
+    const c: SolidProps = { op: 'CHAMFEREDGE', solid: cut, edges, d1: 2, d2: 2 }
+    expect(topAt(c, -0.3, -0.3)).toBeLessThan(9.6)
   })
 })

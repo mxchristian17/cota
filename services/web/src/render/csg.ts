@@ -536,7 +536,8 @@ function blendGeometry(props: EdgeBlendProps): THREE.BufferGeometry {
   for (const tool of [...tools.filter((t) => !t.add), ...tools.filter((t) => t.add)]) {
     try {
       // El cortador es una sopa de triángulos: sólo se confía en la clasificación contra el sólido.
-      acc = booleanOp(acc, soupBrush(tool.soup), tool.add ? 'union' : 'subtract', false)
+      const brush = tool.clip ? booleanOp(soupBrush(tool.soup), soupBrush(tool.clip), 'intersect', false) : soupBrush(tool.soup)
+      acc = booleanOp(acc, brush, tool.add ? 'union' : 'subtract', false)
     } catch (err) {
       console.warn('Cota: edge fillet/chamfer failed in CSG; that edge is skipped.', err)
     }

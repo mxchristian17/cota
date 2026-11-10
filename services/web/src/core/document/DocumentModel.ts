@@ -174,6 +174,7 @@ export class DocumentModel {
       HPANG: v.HPANG ?? 0,
       HPASSOC: v.HPASSOC ?? 1,
       HPISLANDDETECTION: v.HPISLANDDETECTION ?? 1,
+      HPGAPTOL: v.HPGAPTOL ?? 0,
       HPSPACE: v.HPSPACE ?? 1,
       HPDOUBLE: v.HPDOUBLE ?? 0,
       HPORIGIN: v.HPORIGIN,

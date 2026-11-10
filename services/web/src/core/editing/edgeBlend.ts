@@ -23,6 +23,8 @@ export type BlendSpec = { kind: 'fillet'; r: number } | { kind: 'chamfer'; d1: n
 export interface BlendTool {
   soup: number[]
   add: boolean
+  /** Si está, la herramienta es la intersección de `soup` con esta otra sopa (la esquina entre dos empalmes). */
+  clip?: number[]
 }
 
 const ARC_STEP = (7.5 * Math.PI) / 180
@@ -170,7 +172,44 @@ export function blendTools(topo: Topology, node: EdgeBlendProps): ResolvedBlend 
     else skipped++
   }
   if (node.op === 'FILLETEDGE') tools.push(...vertexPatches(topo, [...seen], node.radius))
+  tools.push(...cornerTools(topo, [...seen], node))
   return { tools, skipped }
+}
+
+/**
+ * Esquina entre dos aristas convexas tratadas que se juntan en un vértice con quiebre (p. ej. los bordes de una esfera
+ * a la que se le restó una caja): cada barrido termina en el vértice y entre ambos quedaba una muesca. Como en el CAD
+ * clásico, las dos superficies se prolongan hasta cortarse: se resta la intersección de sus prolongaciones.
+ */
+function cornerTools(topo: Topology, edges: number[], node: EdgeBlendProps): BlendTool[] {
+  const ends = new Map<number, Array<{ e: TopoEdge; end: 0 | 1 }>>()
+  for (const i of edges) {
+    const e = topo.edges[i]
+    if (e.closed || !e.convex) continue
+    for (const end of [0, 1] as const) {
+      const vid = e.vids[end === 0 ? 0 : e.vids.length - 1]
+      ends.set(vid, [...(ends.get(vid) ?? []), { e, end }])
+    }
+  }
+  const tools: BlendTool[] = []
+  for (const list of ends.values()) {
+    if (list.length !== 2 || list[0].e === list[1].e) continue
+    const [a, b] = list
+    // Seguidas sin quiebre (tangentes): no hay hueco entre los barridos.
+    if (vdot(endTangent(a.e, a.end), endTangent(b.e, b.end)) < -0.99) continue
+    const ext = (x: (typeof list)[number]): number[] | null => {
+      const spec = edgeSpec(topo, x.e, node)
+      const size = spec.kind === 'fillet' ? spec.r : Math.max(spec.d1, spec.d2)
+      const k = x.end === 0 ? 0 : x.e.n1.length - 1
+      const v = x.e.pts[x.end === 0 ? 0 : x.e.pts.length - 1]
+      const t = endTangent(x.e, x.end)
+      const stub: TopoEdge = { ...x.e, pts: [v, vadd(v, vscale(t, 3 * size))], vids: [-1, -1], n1: [x.e.n1[k]], n2: [x.e.n2[k]], kind: 'line' }
+      return sweepEdge(stub, spec, Math.max(topo.diag * 1e-4, 1e-6), 0)
+    }
+    const [sa, sb] = [ext(a), ext(b)]
+    if (sa && sb) tools.push({ soup: sa, add: false, clip: sb })
+  }
+  return tools
 }
 
 /** Aplana triángulos a una sopa orientada hacia afuera (volumen con signo positivo). */

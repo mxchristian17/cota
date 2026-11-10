@@ -4,6 +4,20 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.31.0] — 2026-11-09
+
+### Added
+- **BOUNDARY** (also `BO`, `BPOLY`): pick a point inside an area and get a closed polyline of its outline (and of the
+  islands inside it). Advanced options: boundary set (everything or selected objects), island detection, object type
+  and gap tolerance. In the Draw menu, next to Hatch.
+- **Gap tolerance (`HPGAPTOL`)**: outlines that almost close (gaps up to this size, between two loose ends or from an
+  end to another object) are taken as closed by HATCH and BOUNDARY, as in classic CAD.
+
+### Fixed
+- **Fillet and chamfer where two treated edges meet**: on a sphere minus a box, the fillet or chamfer of the cut
+  edges left a notch and slivers at each corner where two of them met. Now both surfaces extend until they meet,
+  as in classic CAD.
+
 ## [2.30.0] — 2026-11-09
 
 ### Added
