@@ -175,25 +175,36 @@ describe('snaps del sólido resultante', () => {
 })
 
 describe('esquina entre dos empalmes (esfera menos caja)', () => {
-  /** Altura de la superficie superior del sólido en (x, y): el corte más alto de la vertical con la malla. */
-  function topAt(p: SolidProps, x: number, y: number): number {
+  /**
+   * Primer corte de la malla con una recta paralela al eje `axis` que pasa por (`u`, `v`) (las otras dos
+   * coordenadas, en orden): el mayor valor de esa coordenada; −∞ si no corta.
+   */
+  function hitAt(p: SolidProps, axis: 0 | 1 | 2, u: number, v: number): number {
     const s = triangleSoup(solidGeometry(p))
+    const [iu, iv] = axis === 0 ? [1, 2] : axis === 1 ? [2, 0] : [0, 1]
     let best = -Infinity
     for (let i = 0; i + 8 < s.length; i += 9) {
-      const [ax, ay, az, bx, by, bz, cx, cy, cz] = Array.from(s.subarray(i, i + 9))
-      const d = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+      const t = Array.from(s.subarray(i, i + 9))
+      const [au, av, bu, bv, cu, cv] = [t[iu], t[iv], t[3 + iu], t[3 + iv], t[6 + iu], t[6 + iv]]
+      const d = (bv - cv) * (au - cu) + (cu - bu) * (av - cv)
       if (Math.abs(d) < 1e-12) continue
-      const l1 = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / d
-      const l2 = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / d
+      const l1 = ((bv - cv) * (u - cu) + (cu - bu) * (v - cv)) / d
+      const l2 = ((cv - av) * (u - cu) + (au - cu) * (v - cv)) / d
       const l3 = 1 - l1 - l2
       if (l1 < -1e-9 || l2 < -1e-9 || l3 < -1e-9) continue
-      best = Math.max(best, l1 * az + l2 * bz + l3 * cz)
+      best = Math.max(best, l1 * t[axis] + l2 * t[3 + axis] + l3 * t[6 + axis])
     }
     return best
   }
+  /** Altura de la superficie superior del sólido en (x, y). */
+  const topAt = (p: SolidProps, x: number, y: number): number => hitAt(p, 2, x, y)
   const cut: SolidProps = { op: 'SUBTRACT', operands: [{ op: 'SPHERE', center: [0, 0, 0], radius: 10, segments: 48 }, { op: 'BOX', origin: [0, 0, 0], width: 20, depth: 20, height: 20 }] } as SolidProps
   const s = Math.SQRT1_2 * 10
   const edges = [{ at: [0, s, s] as Vec3 }, { at: [s, 0, s] as Vec3 }, { at: [s, s, 0] as Vec3 }]
+  // Caja corrida: las paredes no cortan los arcos a 90° (en el vértice, la pared opuesta queda a ~18° de la normal).
+  const cut3: SolidProps = { op: 'SUBTRACT', operands: [{ op: 'SPHERE', center: [0, 0, 0], radius: 10, segments: 48 }, { op: 'BOX', origin: [3, 3, 3], width: 20, depth: 20, height: 20 }] } as SolidProps
+  const m = Math.sqrt(91 / 2)
+  const edges3 = [{ at: [3, m, m] as Vec3 }, { at: [m, 3, m] as Vec3 }, { at: [m, m, 3] as Vec3 }]
 
   it('FILLETEDGE en los tres arcos del corte: en el vértice las dos superficies se cortan (sin muesca ni astilla)', () => {
     const f: SolidProps = { op: 'FILLETEDGE', solid: cut, edges, radius: 2 }
@@ -206,5 +217,26 @@ describe('esquina entre dos empalmes (esfera menos caja)', () => {
   it('CHAMFEREDGE igual', () => {
     const c: SolidProps = { op: 'CHAMFEREDGE', solid: cut, edges, d1: 2, d2: 2 }
     expect(topAt(c, -0.3, -0.3)).toBeLessThan(9.6)
+  })
+
+  it('la pared x=0 queda intacta junto al vértice (el anillo final seguía la tangente del último tramo y la mordía)', () => {
+    // Bajo la tangencia del empalme con la pared (radio 8): la pared sigue en x=0 (antes bajaba a −0,13).
+    const f: SolidProps = { op: 'FILLETEDGE', solid: cut, edges, radius: 2 }
+    for (const z of [7.5, 7.7, 7.9]) expect(hitAt(f, 0, 0.3, z)).toBeGreaterThan(-0.02)
+    const c: SolidProps = { op: 'CHAMFEREDGE', solid: cut, edges, d1: 2, d2: 2 }
+    for (const z of [7.5, 7.7, 7.9]) expect(hitAt(c, 0, 0.3, z)).toBeGreaterThan(-0.02)
+  })
+
+  it('caja corrida (3,3,3), R3: la pared y=3 queda intacta donde el anillo final, inclinado, la mordía', () => {
+    const f: SolidProps = { op: 'FILLETEDGE', solid: cut3, edges: edges3, radius: 3 }
+    // Apenas sobre la tangencia del empalme con la pared (sin frenar el barrido en la pared quedaba 2,40).
+    expect(hitAt(f, 1, 7, 3.2)).toBeGreaterThan(2.9)
+    expect(hitAt(f, 1, 6.5, 3.2)).toBeGreaterThan(2.98)
+    // La esquina sigue cortada: junto al vértice (3, 3, 9,06) el empalme baja.
+    expect(topAt(f, 2.7, 2.7)).toBeLessThan(8.6)
+    // Chaflán: la cara inclinada llega más abajo; sobre ella, sin el freno quedaba 2,54 y 2,25.
+    const c: SolidProps = { op: 'CHAMFEREDGE', solid: cut3, edges: edges3, d1: 3, d2: 3 }
+    expect(hitAt(c, 1, 6, 3.2)).toBeGreaterThan(2.7)
+    expect(hitAt(c, 1, 6.5, 3.2)).toBeGreaterThan(2.4)
   })
 })

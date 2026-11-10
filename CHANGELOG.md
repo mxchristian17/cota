@@ -4,6 +4,20 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.34.2] — 2026-11-10
+
+### Fixed
+- **FILLETEDGE/CHAMFEREDGE on a sphere with a box subtracted**: the blends along the three arcs no longer bite the
+  neighbouring wall next to the corner vertex, and the corner is built the way classic CAD does it: each blend is
+  extended along its own curve and the two are trimmed where they cut each other.
+  - The end ring of a blend on a faceted curve followed the last segment (half a facet step off), so it cut a
+    notch into the wall next to the vertex.
+  - When the wall that stops the blend is not at 90° to the arc (box not centred on the sphere), the end ring
+    leaned into that wall; the sweep is now extended past the vertex and cut flush with the wall.
+  - The corner between two blends is now the intersection of both extended sweeps, limited to the region behind
+    both walls, so it leaves no notch, sliver or dark triangles; the extension follows the arc instead of a
+    straight line, and the end tangent comes from the circle fitted to the whole arc.
+
 ## [2.34.1] — 2026-11-10
 
 ### Documentation
