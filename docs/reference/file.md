@@ -11,7 +11,7 @@ Cota saves drawings as `.cota` files. Where they go depends on how you work:
   that can open folders (Chrome, Edge, Brave, Opera).
 - **In your account**: with the optional server, `LOGIN` and the drawings are stored on the server.
 
-See [files](../user-guide.md#files) for the formats Cota reads and writes.
+See [files](../guides/files.md) for the formats Cota reads and writes.
 
 ## NEW
 

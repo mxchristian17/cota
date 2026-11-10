@@ -260,7 +260,7 @@ UCS W
 ## OSNAP
 
 Opens the **Object Snap** settings: which snaps are running (always active) while you pick points. See
-[object snaps](../user-guide.md#drawing-aids).
+[object snaps](object-snaps.md).
 
 **Aliases** `OS`, `-OSNAP`, `DDOSNAP` · **Menu** Tools
 
@@ -323,7 +323,7 @@ agent draws it with commands you can see and undo.
 **Notes**
 
 - The key stays in your browser and is sent only to the provider you choose. See
-  [modeling agent](../user-guide.md#modeling-agent) and [external agents](../external-agents.md).
+  [modeling agent](../guides/agent.md) and [external agents](../external-agents.md).
 
 ## COMPACT
 

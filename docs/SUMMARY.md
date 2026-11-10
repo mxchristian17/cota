@@ -9,7 +9,19 @@ side navigation; each link below it is a page, in reading order.
 
 ## Guides
 - [User guide](user-guide.md)
+- [The command line](guides/command-line.md)
+- [Points and distances](guides/coordinates.md)
+- [Selecting objects](guides/selection.md)
+- [Drawing aids](guides/drawing-aids.md)
+- [Layers and properties](guides/layers.md)
+- [Text, blocks, hatches and dimensions](guides/annotation.md)
+- [3D modeling](guides/3d-modeling.md)
+- [Layouts and plotting](guides/layouts-plotting.md)
+- [Files](guides/files.md)
+- [Modeling agent](guides/agent.md)
 - [External agents](external-agents.md)
+- [Mobile view](guides/mobile.md)
+- [Interface and shortcuts](guides/interface.md)
 
 ## Reference
 - [Commands and variables](commands.md)

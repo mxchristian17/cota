@@ -6,7 +6,7 @@ capitalized letters (or clicking them); a value in angle brackets is the default
 
 Points can be clicked, snapped or typed: `x,y` is absolute, `@dx,dy` is relative to the last point and
 `@d<a` is a distance and an angle. While the cursor follows a tracking or polar path, typing a number places
-the point at that distance along the path. See [entering points](../user-guide.md#entering-points-and-distances).
+the point at that distance along the path. See [entering points](../guides/coordinates.md).
 
 ## LINE
 

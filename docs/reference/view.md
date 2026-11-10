@@ -5,7 +5,7 @@ viewports, layout viewports and the parts of the screen you can show or hide.
 
 The mouse does most of this without commands: the wheel zooms at the cursor, the middle button pans,
 <kbd>Shift</kbd> + middle button (or the right button in 3D views) orbits, and a double click with the middle
-button zooms to the extents. See [keyboard and mouse](../user-guide.md#keyboard-and-mouse).
+button zooms to the extents. See [keyboard and mouse](../guides/interface.md#keyboard-and-mouse).
 
 ## VIEW
 
@@ -264,7 +264,7 @@ crosshair, change the visual style and pick views, layers and layouts with your 
 
 **Notes**
 
-- On phones Cota opens in this view. See [mobile view](../user-guide.md#mobile-view-for-the-job-site).
+- On phones Cota opens in this view. See [mobile view](../guides/mobile.md).
 
 ## MVIEW
 

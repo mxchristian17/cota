@@ -4,6 +4,18 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.34.1] — 2026-11-10
+
+### Documentation
+- **The user guide is now twelve guides**: command line, points and distances, selection, drawing aids, layers,
+  annotation, 3D modeling, layouts and plotting, files, modeling agent, mobile view, and interface and shortcuts,
+  each linked to the commands it uses.
+- Updated: DWG files open and save in the browser (the guide still said they needed the server); STEP, IGES and STL
+  in the list of formats; `.bak` and `.sv$` recovery copies; typed distances along tracking lines.
+
+### Fixed
+- A documentation test that failed in 2.34.0.
+
 ## [2.34.0] — 2026-11-10
 
 ### Added

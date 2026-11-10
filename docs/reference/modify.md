@@ -4,7 +4,7 @@ Commands of the **Modify** menu: move, copy and transform objects, trim and join
 edit 3D solids. Most of them start with `Select objects:`. You can also select first and then run the command:
 the selection is used and the prompt is skipped. At `Select objects:` click objects, drag a window (left to right
 selects what is fully inside, right to left also what it crosses) or type `ALL`, `L` (last) or `P` (previous);
-<kbd>Enter</kbd> ends the selection. See [selecting objects](../user-guide.md#selecting-objects).
+<kbd>Enter</kbd> ends the selection. See [selecting objects](../guides/selection.md).
 
 ## ERASE
 
