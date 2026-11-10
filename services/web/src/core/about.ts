@@ -10,4 +10,8 @@ export const ABOUT = {
   url: 'https://github.com/mxchristian17/cota',
 } as const
 
+/** Documentación: la del mismo sitio si el build la generó (`/docs/`); si no, la publicada. */
+export const docsUrl = (path = ''): string =>
+  (import.meta.env.VITE_DOCS_BUILT ? `${import.meta.env.BASE_URL}docs/` : 'https://mxchristian17.github.io/cota/docs/') + path
+
 export const aboutLine = (): string => `${ABOUT.name} ${ABOUT.version} — © ${ABOUT.year} ${ABOUT.author} — ${ABOUT.license} — ${ABOUT.url}`

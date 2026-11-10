@@ -22,6 +22,9 @@ npm run dev
 The optional server is in `services/api` (see its [README](services/api/README.md)). The web app works
 without it. Read the [architecture guide](docs/architecture.md) before a large change.
 
+The documentation site is the Markdown in [`docs/`](docs/): add a page there and list it in
+[`docs/SUMMARY.md`](docs/SUMMARY.md). `npm run dev` shows it at <http://localhost:5173/docs/>.
+
 ## Before you open a pull request
 
 ```bash

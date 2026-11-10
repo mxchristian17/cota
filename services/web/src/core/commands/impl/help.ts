@@ -22,6 +22,17 @@ export function makeHelpCommand(getCommands: () => Command[]): Command {
   }
 }
 
+/** DOCS: abre la documentación (guías y referencia) en otra pestaña. */
+export const docsCommand: Command = {
+  name: 'DOCS',
+  aliases: ['DOCUMENTATION'],
+  description: 'Open the documentation (guides and command reference) in a new tab',
+  async run(ctx) {
+    ctx.openDocs()
+    ctx.print('Documentation opened in a new tab.')
+  },
+}
+
 /** ABOUT: versión, autor y licencia. */
 export const aboutCommand: Command = {
   name: 'ABOUT',

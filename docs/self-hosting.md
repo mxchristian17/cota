@@ -23,7 +23,10 @@ VITE_CLOUD=off npm run build
 Upload `services/web/dist/` to any static host (GitHub Pages, Netlify, Cloudflare Pages, an Nginx or Apache
 folder, an S3 bucket…). Serve `index.html` for unknown paths. Serve it over **HTTPS** (or from `localhost`):
 browsers only offer to install the app and enable offline use on secure origins. The build includes the web app
-manifest and a service worker (`sw.js`) that caches that version's files.
+manifest and a service worker (`sw.js`) that caches that version's files. It also includes this documentation
+as static pages under `docs/` (built from the Markdown in the repository's `docs/` folder); the **DOCS** command
+opens them. The Docker image below is built from `services/web` alone and has no copy of the docs: there, **DOCS**
+opens the published documentation instead.
 
 If the site lives in a subfolder (for example `https://user.github.io/cota/`), set the base path when
 building:

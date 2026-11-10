@@ -59,7 +59,7 @@ export const CATEGORIES: { label: string; names: string[] }[] = [
       '§3D operations', 'ALIGN', '§Solid editing', 'UNION', 'SUBTRACT', 'INTERSECT', 'SLICE', 'FILLETEDGE', 'CHAMFEREDGE', '§', 'EXPLODE',
     ],
   },
-  { label: 'Help', names: ['HELP', 'ABOUT'] },
+  { label: 'Help', names: ['HELP', 'DOCS', 'ABOUT'] },
 ]
 
 /** Comandos que figuran en algún menú (para tests). */

@@ -249,6 +249,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | Command | Aliases | What it does |
 | --- | --- | --- |
 | `HELP` | `?` | List available commands |
+| `DOCS` | `DOCUMENTATION` | Open the documentation (guides and command reference) in a new tab |
 | `ABOUT` | — | Show the Cota version, author and license |
 
 ## Command-line versions

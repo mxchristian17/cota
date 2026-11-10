@@ -1,3 +1,5 @@
+import { docsUrl } from '../core/about'
+import { chooseFile, chooseFiles } from './filePicker'
 import { frozenLayerIds, layerEditable, layerShown } from '../core/layers/visibility'
 import { type ProjStd } from '../core/viewNet'
 import { setChainBase } from '../core/commands/impl/dim'
@@ -1266,13 +1268,7 @@ export const useStore = create<AppState>((set, get) => {
         return `Template saved as "${a.download}".`
       }
       // Open: un dibujo nuevo desde un archivo de plantilla.
-      const file = await new Promise<File | null>((resolve) => {
-        const input = document.createElement('input')
-        input.type = 'file'
-        input.accept = fileAccept(`${DRAWING_TEMPLATE_EXT},.json`)
-        input.onchange = () => resolve(input.files?.[0] ?? null)
-        input.click()
-      })
+      const file = await chooseFile(fileAccept(`${DRAWING_TEMPLATE_EXT},.json`))
       if (!file) return 'No template opened.'
       const t = parseDrawingTemplate(await file.text())
       if (!t) return `"${file.name}" is not a drawing template.`
@@ -1437,6 +1433,7 @@ export const useStore = create<AppState>((set, get) => {
     onPrint: print,
     onChange: () => bump(),
     onOpenHelp: () => set({ helpOpen: true }),
+    onOpenDocs: (path) => window.open(docsUrl(path), '_blank', 'noopener'),
     onBeforeCommand: (name) => {
       get().viewports.forEach((vp) => vp.cancelPendingBox()) // un comando cierra la ventana de selección abierta
       if (name === 'UNDO' || name === 'REDO') {
@@ -2838,12 +2835,7 @@ export const useStore = create<AppState>((set, get) => {
       res?.(r)
     },
     importFile: () => {
-      const input = document.createElement('input')
-      input.type = 'file'
-      input.accept = fileAccept(`.obj,.dxf,.dwg,${DRAWING_EXTS.join(',')}`)
-      input.onchange = () => {
-        const file = input.files?.[0]
-        if (!file) return
+      chooseFiles(fileAccept(`.obj,.dxf,.dwg,${DRAWING_EXTS.join(',')}`), ([file]) => {
         const name = file.name.toLowerCase()
         // Un .cota no se "importa" sobre el dibujo actual: se abre como dibujo.
         if (isDrawingFile(name)) {
@@ -2878,17 +2870,12 @@ export const useStore = create<AppState>((set, get) => {
         }
         reader.onload = () => runImport(() => importObjText(String(reader.result ?? '')), (n) => `Imported ${n} mesh(es) from OBJ.`)
         reader.readAsText(file)
-      }
-      input.click()
+      })
     },
     openFromDevice: () => {
-      const input = document.createElement('input')
-      input.type = 'file'
-      input.accept = fileAccept(`${DRAWING_EXTS.join(',')},.dxf,.dwg,${MODEL_EXTS.join(',')},${IMAGE_EXTS.join(',')}`)
       // Se puede elegir el plano junto con sus imágenes: se cargan al abrirlo.
-      input.multiple = true
-      input.onchange = () => void get().openDeviceFiles([...(input.files ?? [])])
-      input.click()
+      const accept = fileAccept(`${DRAWING_EXTS.join(',')},.dxf,.dwg,${MODEL_EXTS.join(',')},${IMAGE_EXTS.join(',')}`)
+      chooseFiles(accept, (files) => void get().openDeviceFiles(files), true)
     },
     openDeviceFiles: async (files) => {
       const images = files.filter((f) => isImageFile(f.name))
@@ -2898,14 +2885,7 @@ export const useStore = create<AppState>((set, get) => {
       else if (!drawingImages(doc).length) return void get().openDeviceFile(images[0]) // una foto sola no es un plano
       if (images.length) await get().attachImageFiles(images)
     },
-    attachImages: () => {
-      const input = document.createElement('input')
-      input.type = 'file'
-      input.accept = fileAccept(IMAGE_EXTS.join(','))
-      input.multiple = true
-      input.onchange = () => void get().attachImageFiles([...(input.files ?? [])])
-      input.click()
-    },
+    attachImages: () => chooseFiles(fileAccept(IMAGE_EXTS.join(',')), (files) => void get().attachImageFiles(files), true),
     attachImageFiles: async (files) => {
       const images = drawingImages(doc)
       if (!images.length) {

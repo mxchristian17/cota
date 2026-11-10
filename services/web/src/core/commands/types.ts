@@ -309,6 +309,8 @@ export interface CommandContext {
   getString(prompt: string, opts?: { default?: string }): Promise<string | null>
   print(msg: string): void
   openHelp(): void
+  /** Abre la documentación en otra pestaña (`path` relativo a `docs/`, p. ej. `commands/#fillet`). */
+  openDocs(path?: string): void
   app: AppHooks
   doc: DocumentModel
   currentLayerId(): string

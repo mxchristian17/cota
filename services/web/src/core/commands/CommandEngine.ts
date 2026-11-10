@@ -69,6 +69,7 @@ export interface CommandEngineDeps {
   onPrint: (line: string) => void
   onChange: () => void
   onOpenHelp: () => void
+  onOpenDocs?: (path: string) => void
   onBeforeCommand: (name: string) => void
   /** `discard`: el comando se interrumpió para rehacerlo (Ctrl+Z a mitad): lo que cambió se descarta, sin paso de deshacer. */
   onAfterCommand: (name: string, discard?: boolean) => void
@@ -228,6 +229,7 @@ export class CommandEngine {
       getString: (prompt, opts) => this.ask(() => this.requestString(prompt, opts)),
       print: (msg) => this.deps.onPrint(msg),
       openHelp: () => this.deps.onOpenHelp(),
+      openDocs: (path = '') => this.deps.onOpenDocs?.(path),
       app: this.deps.app,
       doc: this.deps.doc,
       currentLayerId: this.deps.currentLayerId,

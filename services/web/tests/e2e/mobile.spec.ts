@@ -233,6 +233,8 @@ test.describe('Mobile view for the job site', () => {
       const fc = await chooser
       // Sin filtro: los selectores de Android e iOS dejan en gris las extensiones sin tipo MIME (.dwg, .cota).
       expect(await fc.element().getAttribute('accept')).toBe('')
+      // El selector sigue en la página mientras se elige: suelto, el teléfono lo descartaba y había que abrir dos veces.
+      expect(await fc.element().evaluate((e) => e.isConnected)).toBe(true)
       await fc.setFiles({ name, mimeType, buffer })
     }
     await pick('obra.cota', 'application/octet-stream', Buffer.from(data))

@@ -12,13 +12,14 @@ Command-line driven drafting, real 3D solids and full drawing production —
 no install, no account, no license fee.
 
 [**Try it now**](https://mxchristian17.github.io/cota/) ·
+[**Documentation**](https://mxchristian17.github.io/cota/docs/) ·
 [Getting started](docs/getting-started.md) ·
 [User guide](docs/user-guide.md) ·
 [Command reference](docs/commands.md) ·
 [Self-hosting](docs/self-hosting.md)
 
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
-![Version](https://img.shields.io/badge/version-1.0.0-green)
+![Version](https://img.shields.io/github/v/release/mxchristian17/cota?label=version&color=green)
 ![Commands](https://img.shields.io/badge/commands-240%2B-orange)
 
 ![Cota in action: a part is modeled with typed commands, then its drawing views are generated and dimensioned automatically](docs/images/cota-demo.gif)
@@ -106,6 +107,9 @@ You now have a plate with a hole. Continue with the [getting started guide](docs
 
 ## Documentation
 
+The full documentation is online at **<https://mxchristian17.github.io/cota/docs/>** (type `DOCS` inside Cota),
+with search across every guide, command and variable. The same pages are in this repository:
+
 - [Getting started](docs/getting-started.md) — install, first drawing, saving and opening
 - [User guide](docs/user-guide.md) — command line, coordinates, selection, precision, layers, 3D,
   dimensions, layouts and plotting, keyboard and mouse
@@ -129,6 +133,12 @@ with [acad-ts](https://github.com/node-projects/acad-ts) (MIT, a TypeScript port
 Bug reports, feature requests and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and the
 [Code of Conduct](CODE_OF_CONDUCT.md) first. If Cota is useful to you, a ⭐ on GitHub helps others find it.
 
+## Support the project
+
+Cota is free and has no paid edition. If you or your company use it, you can
+[sponsor its development on GitHub](https://github.com/sponsors/mxchristian17): sponsorship pays for the time that
+goes into new features, file compatibility and fixes, and keeps the project independent.
+
 ## Privacy
 
 The online demo has no accounts, cookies or third-party scripts. It counts visits anonymously with
@@ -144,7 +154,7 @@ to the provider whose API key you configure.
 
 Cota is provided "as is", without warranty of any kind (sections 7 and 8 of the license). Check dimensions and
 drawings before you manufacture or build from them. Geometry proposed by the AI feature can be wrong, and DWG
-conversion can lose data (3D solids stored as ACIS data are not read).
+conversion can lose data (3D solids stored as ACIS data open as meshes, not as editable solids).
 
 ## License and credits
 

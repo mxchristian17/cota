@@ -15,7 +15,8 @@ export function serviceWorker(publicDir = 'public'): Plugin {
     enforce: 'post',
     generateBundle(_options, bundle) {
       // OpenCascade (STEP/IGES, ~8 MB) no se precarga: se baja sólo cuando alguien abre uno de esos archivos.
-      const built = Object.keys(bundle).filter((f) => !f.endsWith('.map') && f !== 'index.html' && !/occt/i.test(f))
+      // Las docs (`docs/`) no se precargan: son un sitio aparte que se lee con conexión.
+      const built = Object.keys(bundle).filter((f) => !f.endsWith('.map') && f !== 'index.html' && !/occt/i.test(f) && !f.startsWith('docs/'))
       let fromPublic: string[] = []
       try {
         fromPublic = readdirSync(join(process.cwd(), publicDir))
@@ -51,6 +52,8 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return
   const url = new URL(req.url)
   if (url.origin !== self.location.origin || url.pathname.includes('/api/')) return
+  // Las docs son otro sitio: van a la red y nunca reemplazan la página de la app guardada para usar sin conexión.
+  if (url.pathname.startsWith(new URL('docs/', self.registration.scope).pathname)) return
   if (req.mode === 'navigate') {
     // La página: primero la red (versión nueva), sin conexión la guardada.
     event.respondWith(

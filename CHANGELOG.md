@@ -4,6 +4,22 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.33.0] — 2026-11-09
+
+### Added
+- **Documentation site** at `/docs/` (online at <https://mxchristian17.github.io/cota/docs/>): every guide and the
+  full command reference as fast static pages, separate from the app, with side navigation, "On this page",
+  search across guides, commands and variables (<kbd>/</kbd> or <kbd>Ctrl</kbd>+<kbd>K</kbd>), light and dark
+  themes and a phone layout. It is built from the Markdown in `docs/` (table of contents in `docs/SUMMARY.md`), and
+  `npm run dev` serves it too.
+- **DOCS** command (Help ▸ Documentation) opens the documentation in a new tab.
+- Sponsor button: the project can be sponsored through GitHub Sponsors.
+
+### Fixed
+- Opening a file from the device (OPEN, IMPORT, images, templates) sometimes had to be done twice, mostly on
+  phones: the browser could discard the file picker while it was open and the chosen file was lost.
+- The offline copy of the app is never replaced by a documentation page.
+
 ## [2.32.0] — 2026-11-09
 
 ### Added

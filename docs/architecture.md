@@ -141,6 +141,10 @@ plus screen-space tests), grips, the crosshair, snap glyphs and previews of the 
   floating toolbars, the context menu and the TOOLBAR dialog. Icons are hand-drawn SVG in `ui/icons.ts`.
 - **Preferences:** `core/ui/prefs.ts` stores the interface and display setup in `localStorage` with a timestamp;
   with a session, the same object goes to `PUT /config`, and at sign-in the most recent copy wins.
+- **Documentation site:** `tools/docsSite.ts` is a Vite plugin that turns the Markdown of `docs/` into static pages
+  under `/docs/` (side navigation from `docs/SUMMARY.md`, search index, GitHub-style anchors), separate from the app:
+  no React and no engine code. `npm run dev` serves the same pages. `docs/commands.md` is generated from the command
+  registry by `commandsDoc.test.ts`.
 - **App:** `public/manifest.webmanifest` makes it installable; `tools/serviceWorker.ts` is a Vite plugin that emits
   `sw.js` at build time with the list of that build's files (registered only in production). `ui/appWindow.ts`
   handles the install prompt and full screen (Fullscreen API with Keyboard Lock for <kbd>Esc</kbd>).

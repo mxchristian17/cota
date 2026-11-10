@@ -21,7 +21,7 @@ import {
 import { rotateCommand } from './impl/rotate'
 import { mirrorCommand } from './impl/mirror'
 import { stretchCommand } from './impl/stretch'
-import { aboutCommand, makeHelpCommand } from './impl/help'
+import { aboutCommand, docsCommand, makeHelpCommand } from './impl/help'
 import { cloudCommand, loginCommand, newCommand, openCmdlineCommand, openCommand, openFolderCommand, saveCommand } from './impl/file'
 import { planCommand, ucsCommand, ucsiconCommand, ucsVarCommands } from './impl/ucs'
 import { extrudeCommand } from './impl/extrude'
@@ -301,4 +301,5 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   // Ayuda
   engine.register(makeHelpCommand(() => engine.getCommands()))
   engine.register(aboutCommand)
+  engine.register(docsCommand)
 }

@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { docsSite } from './tools/docsSite'
 import { serviceWorker } from './tools/serviceWorker'
 
 // Destino del backend para el proxy de dev. En Docker: http://api:8000.
@@ -10,8 +11,8 @@ const apiTarget = process.env.API_PROXY_TARGET || 'http://localhost:8000'
 export default defineConfig({
   // Ruta base del sitio: `/` en local; la demo en GitHub Pages se publica bajo `/<repositorio>/`.
   base: process.env.COTA_BASE || '/',
-  // La app es instalable (PWA): el service worker se genera en el build.
-  plugins: [react(), serviceWorker()],
+  // La app es instalable (PWA): el service worker se genera en el build. Las docs (`/docs/`) son páginas estáticas aparte.
+  plugins: [react(), docsSite(), serviceWorker()],
   // La librería de DWG (acad-ts) busca sus clases por nombre (`constructor.name`): al minificar sin conservarlos, abrir
   // o guardar algunos DWG fallaba ("Rt is not a DXF subclass"). También en el hilo aparte que lee los DWG.
   build: { rolldownOptions: { output: { keepNames: true } } },
