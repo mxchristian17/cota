@@ -1,4 +1,5 @@
 import { keepCommon } from '../document/common'
+import { mapRegion } from '../region/region'
 import { mapImage } from '../geom/image'
 import { mapShade } from '../projection/shade'
 import type { Vec3 } from '../math'
@@ -292,6 +293,14 @@ function transformEntityProps(e: Entity, r: Rigid): EntityInput | null {
       else props.normal = normal
       if (h.assoc?.seeds) props.assoc = { ...h.assoc, seeds: h.assoc.seeds.map((v) => tp(r, v)) }
       return { type: 'HATCH', layer, props }
+    }
+    case 'REGION': {
+      // Movimiento rígido: los arcos conservan su sentido respecto de la normal, que gira con la región.
+      const props = mapRegion(e.props, (v) => tp(r, v))
+      const n = vnorm(rigidDir(r, e.props.normal ?? [0, 0, 1]))
+      if (isZ(n)) delete props.normal
+      else props.normal = n
+      return { type: 'REGION', layer, props }
     }
     case 'INSERT': {
       // El plano de la inserción (OCS) gira con ella: normal y X del bloque transformadas.

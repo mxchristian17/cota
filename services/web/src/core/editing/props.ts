@@ -1,4 +1,5 @@
 import { PATTERN_NAMES, USER } from '../hatch/patterns'
+import { regionArea, regionPerimeter } from '../region/region'
 import { hatchArea } from '../hatch/geometry'
 import type { Vec3 } from '../math'
 import type { Entity, ShadePlot } from '../document/types'
@@ -281,6 +282,12 @@ export function entityFields(e: Entity): PropField[] {
         { key: '_area', label: 'Area', kind: 'number', value: hatchArea(p), readOnly: true },
       ]
     }
+    case 'REGION':
+      // Como la paleta del CAD clásico: Geometry con el área y el perímetro.
+      return [
+        { key: '_area', label: 'Area', kind: 'number', value: regionArea(e.props), readOnly: true },
+        { key: '_perimeter', label: 'Perimeter', kind: 'number', value: regionPerimeter(e.props), readOnly: true },
+      ]
   }
 }
 

@@ -39,7 +39,8 @@ import { entityPattern, type LinetypeContext } from '../core/linetype/linetypes'
 import { entityDashes, linetypePaths, type DashResult } from '../core/linetype/dash'
 import { hatchFrame, hatchRegions, hatchRings, hatchStrokesCached, isSolidHatch, to3, type Ring } from '../core/hatch/geometry'
 import { isWide, polylineBand } from '../core/geom/plineWidth'
-import type { HatchEntity, ImageEntity } from '../core/document/types'
+import type { HatchEntity, ImageEntity, RegionEntity } from '../core/document/types'
+import { regionPolylines, regionSegments } from '../core/region/region'
 import { imageClip, imageFileName, imagePoint, imageRing, imageUv } from '../core/geom/image'
 import { isDoubleTap, isTap, pinchStep, touchConfig, TOUCH_AIM_OFFSET, type TouchPt } from './touchGesture'
 
@@ -250,7 +251,7 @@ interface PointBatch { pos: number[]; rank: number[] }
 /**
  * Regiones de relleno de un sombreado en triángulos de mundo (regla par-impar con sus agujeros).
  */
-function hatchTriangles(e: HatchEntity): number[] {
+function hatchTriangles(e: HatchEntity | RegionEntity): number[] {
   const f = hatchFrame(e.props)
   const out: number[] = []
   for (const g of hatchRegions(hatchRings(e.props, f))) {
@@ -1786,7 +1787,9 @@ export class Viewport {
       this.snapSpheres = null
     }
     if (!this.snapList) {
-      const own = hidden.size ? this.entities().filter((e) => !hidden.has(e.layer)) : this.entities()
+      const vis = hidden.size ? this.entities().filter((e) => !hidden.has(e.layer)) : this.entities()
+      // Las regiones dan los snaps de sus rectas y arcos, como polilíneas cerradas con su id.
+      const own = vis.some((e) => e.type === 'REGION') ? vis.flatMap((e) => (e.type === 'REGION' ? regionPolylines(e) : [e])) : vis
       // Los bloques llegan expandidos; el INSERT original va además sólo para su punto de inserción (INS).
       const inserts = d.entities.filter((e) => e.type === 'INSERT' && !hidden.has(e.layer))
       this.snapList = own.concat(d.snapExtras ?? [], d.snapLive ?? [], inserts)
@@ -2129,6 +2132,7 @@ export class Viewport {
       case 'INSERT':
       case 'HATCH':
       case 'SHADE':
+      case 'REGION':
         return null
     }
   }
@@ -2664,6 +2668,27 @@ export class Viewport {
           individual(e) // banda rellena
           continue
         }
+        if (e.type === 'REGION') {
+          // El contorno con su capa y color; en los estilos sombreados, además la cara (como la de un sólido).
+          const b = getLine(lineB, `${ro}|${colorHex}${lwKey(layer, e.lineWeight)}`)
+          b.ranges.push({ s: b.n, id: e.id })
+          for (const seg of regionSegments(e)) {
+            b.pos.push(...seg)
+            b.n += 2
+          }
+          if (showMesh) {
+            const tris = hatchTriangles(e)
+            const n = hatchFrame(e.props).n
+            const nor = new Float32Array(tris.length)
+            for (let i = 0; i < nor.length; i += 3) nor.set(n, i)
+            const m = getMesh(`${ro}|${style === 'hidden' ? `${bgHex}|flat` : this.faceHex(colorHex)}`)
+            m.ranges.push({ s: m.n, id: e.id })
+            m.parts.push({ pos: this.origin.lengthSq() ? this.shifted(tris) : tris, nor })
+            m.n += tris.length / 3
+            m.verts += tris.length / 3
+          }
+          continue
+        }
         const dashes = ltCtx ? entityDashes(e, entityPattern(e, layerOf, ltCtx), ltCtx.plinegen) : null
         if (dashes) {
           // Tipo de línea: los trazos al lote visible; el recorrido entero, invisible, para el pick.
@@ -3060,6 +3085,10 @@ export class Viewport {
         this.entityGroup.add(this.buildHatch(e, color))
         return
       }
+      if (e.type === 'REGION') {
+        this.entityGroup.add(this.buildRegion(e, color))
+        return
+      }
       if (e.type === 'SHADE') {
         this.entityGroup.add(this.buildShade(e, selected))
         return
@@ -3220,6 +3249,26 @@ export class Viewport {
     mesh.userData.entityId = e.id
     mesh.userData.lowPick = true // como el relleno de un sombreado: una línea cercana gana el pick
     return mesh
+  }
+
+  /** Región: su contorno y, en los estilos sombreados, la cara semitransparente con el color de resaltado. */
+  private buildRegion(e: RegionEntity, color: THREE.Color): THREE.Object3D {
+    const group = new THREE.Object3D()
+    group.userData.entityId = e.id
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', this.local(regionSegments(e).flat()))
+    const l = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color }))
+    l.userData.entityId = e.id
+    group.add(l)
+    const style = this.visualStyle
+    if (style === 'shaded' || style === 'shadedEdges' || style === 'hidden') {
+      const fg = new THREE.BufferGeometry()
+      fg.setAttribute('position', this.local(hatchTriangles(e)))
+      const mesh = new THREE.Mesh(fg, new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity: 0.6, ...FACE_OFFSET }))
+      mesh.userData.entityId = e.id
+      group.add(mesh)
+    }
+    return group
   }
 
   private buildHatch(e: HatchEntity, color: THREE.Color): THREE.Object3D {

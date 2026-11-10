@@ -1,4 +1,5 @@
 import { hatchCenter } from '../hatch/edit'
+import { regionCenter } from '../region/region'
 import type { Vec3 } from '../math'
 import type { Entity } from '../document/types'
 import { translateEntity } from './edit'
@@ -148,6 +149,8 @@ export function entityGrips(e: Entity): Grip[] {
       return [{ point: e.props.position, role: { t: 'move' } }]
     case 'HATCH':
       return [{ point: hatchCenter(e.props), role: { t: 'move' } }]
+    case 'REGION':
+      return [{ point: regionCenter(e.props), role: { t: 'move' } }]
     case 'SHADE':
       return []
     case 'IMAGE':
@@ -293,6 +296,7 @@ export function applyGrip(e: Entity, grip: Grip, to: Vec3): void {
     case 'MESH3D':
     case 'INSERT':
     case 'HATCH':
+    case 'REGION':
       break // sólo grip de mover (ya resuelto arriba)
   }
 }

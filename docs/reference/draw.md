@@ -578,6 +578,41 @@ LINE 0,0 100,0 100,50 0,50 0,0.4 ""
 BOUNDARY A G 0.5 50,25 ""
 ```
 
+## REGION
+
+Converts closed objects into regions: flat areas with an outline, which you can measure, move, explode and, later,
+combine with UNION, SUBTRACT and INTERSECT or turn into solids.
+
+**Aliases** `REG` · **Menu** Draw › Hatch
+
+**Steps**
+
+1. `Select objects:` select the objects and press <kbd>Enter</kbd>.
+   - Each closed object becomes a region: a closed polyline, circle, ellipse, rectangle or closed spline.
+   - Lines, arcs and open polylines also make a region when they close end to end in the same plane, in any order
+     and direction.
+2. Cota prints `n loop(s) extracted.` and `n Region(s) created.`. The objects that formed a region are deleted;
+   objects that do not close are left as they are.
+
+**Notes**
+
+- One region per closed outline, as in classic CAD: a circle inside a rectangle gives two regions.
+- Regions work in the XY plane of the current UCS.
+- A region keeps arcs exact. AREA › Object, LIST and the Properties palette show its area and perimeter.
+- EXPLODE turns a region back into lines and arcs.
+- In the shaded visual styles a region shows its face. Plotting shows its outline.
+- DXF and DWG files get each outline of a region as a closed polyline.
+
+**Example**: a slot made of two lines and two arcs, turned into one region.
+
+```text
+LINE 0,0 40,0 ""
+ARC 40,0 50,10 40,20
+LINE 40,20 0,20 ""
+ARC 0,20 -10,10 0,0
+REGION ALL ""
+```
+
 ## EXTRUDE
 
 Turns closed 2D profiles into solids by giving them height, by pulling them along a direction or along a path,

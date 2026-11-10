@@ -1,4 +1,5 @@
 import { BASELINE_DROP, attdefText, lineSpacingOf, textAxes, textSize } from '../geom/text'
+import { loopPolyline } from '../region/region'
 import { decodeTextCodes, encodeTextCodes } from '../text/codes'
 import type { Vec3 } from '../math'
 import type { DimensionProps, DrawingVars, Entity, EntityProps, EntityType, ImageProps, InsertProps, Layer, TextRun, LineType, LinetypeDefData, RectangleProps, TextProps } from '../document/types'
@@ -216,6 +217,9 @@ function entityDxf(e: Entity, layerName: string): string | null {
       return entityDxf({ id: e.id, type: 'TEXT', layer: e.layer, props: attdefText(e.props), lineType: e.lineType, ltScale: e.ltScale }, layerName)
     case 'HATCH':
       return e.props.wipeout ? wipeoutDxf(e.props.loops[0]?.vertices ?? [], h) : hatchDxf(e.props, h)
+    case 'REGION':
+      // Sin ACIS: cada lazo sale como una polilínea cerrada (se puede volver a hacer región con REGION).
+      return e.props.loops.map((l) => entityDxf({ ...e, type: 'POLYLINE', props: loopPolyline(l, e.props.normal) }, layerName)).join('')
     case 'IMAGE': // necesita su definición en OBJECTS (ver `exportDxf`)
       return null
     case 'SHADE': {

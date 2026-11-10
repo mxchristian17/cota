@@ -1,4 +1,5 @@
 import { mapHatch } from '../hatch/edit'
+import { mapRegion } from '../region/region'
 import { mapImage } from '../geom/image'
 import { mapShade } from '../projection/shade'
 import { commonOf } from '../document/common'
@@ -55,6 +56,9 @@ export function translateEntity(e: Entity, dx: number, dy: number, dz = 0): void
     case 'HATCH':
       Object.assign(e.props, mapHatch(e.props, t))
       break
+    case 'REGION':
+      e.props.loops = mapRegion(e.props, t).loops
+      break
     case 'SHADE':
       Object.assign(e.props, mapShade(e.props, t))
       break
@@ -108,6 +112,9 @@ export function scaleEntity(e: Entity, c: Vec3, f: number): void {
       break
     case 'HATCH':
       Object.assign(e.props, mapHatch(e.props, s, Math.abs(f)))
+      break
+    case 'REGION':
+      e.props.loops = mapRegion(e.props, s).loops
       break
     case 'SHADE':
       Object.assign(e.props, mapShade(e.props, s))

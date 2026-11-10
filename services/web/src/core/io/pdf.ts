@@ -1,4 +1,5 @@
 import { lineSpan } from '../geom/xline'
+import { loopPolyline } from '../region/region'
 import { imagePoint, imageRing } from '../geom/image'
 import { layerShown } from '../layers/visibility'
 import type { Entity, ImageProps, Layer, PlotStyle, ShadeProps } from '../document/types'
@@ -391,6 +392,10 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
       case 'POLYLINE':
         // Los tramos con bulge se tesselan; el anillo ya viene cerrado si corresponde.
         out += polyStroke(polylinePoints(e.props).map((v) => [v[0], v[1]]), t)
+        break
+      case 'REGION':
+        // El contorno de cada lazo, como el CAD clásico (una región no se rellena al plotear).
+        for (const l of e.props.loops) out += polyStroke(polylinePoints(loopPolyline(l, e.props.normal)).map((v) => [v[0], v[1]]), t)
         break
       case 'SPLINE':
         out += polyStroke(catmullRom(e.props.controlPoints.map((v) => [v[0], v[1]])), t)

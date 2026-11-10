@@ -39,7 +39,7 @@ export function loopPoints(loop: HatchLoop, normal?: Vec3): Vec3[] {
 }
 
 /** Lazos del sombreado en 2D del plano. */
-export function hatchRings(p: HatchProps, f: HatchFrame = hatchFrame(p)): Ring[] {
+export function hatchRings(p: Pick<HatchProps, 'normal' | 'loops'>, f: HatchFrame = hatchFrame(p)): Ring[] {
   return p.loops.map((l) => loopPoints(l, p.normal).map((q) => to2(q, f))).filter((r) => r.length >= 3)
 }
 
@@ -117,7 +117,7 @@ export function loopArea(loop: HatchLoop, f: HatchFrame): number {
 }
 
 /** Área sombreada (regla par-impar: cada lazo suma o resta según su anidamiento). */
-export function hatchArea(p: HatchProps): number {
+export function hatchArea(p: Pick<HatchProps, 'normal' | 'loops'>): number {
   const f = hatchFrame(p)
   const rings = hatchRings(p, f)
   if (rings.length !== p.loops.length) return 0

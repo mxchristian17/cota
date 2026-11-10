@@ -2,6 +2,7 @@ import { BYBLOCK, BYLAYER_OF } from '../linetype/linetypes'
 import { mapImage } from '../geom/image'
 import { mapShade } from '../projection/shade'
 import { mapHatch } from '../hatch/edit'
+import { mapRegion } from '../region/region'
 import type { Vec3 } from '../math'
 import type { AttDisp, AttdefProps, AttributeValue, BlockDef, EdgeRef, Entity, InsertProps, SolidProps } from '../document/types'
 import { attdefText } from '../geom/text'
@@ -300,6 +301,14 @@ export function transformEntity(e: Entity, ins: InsertProps): Entity {
       if (Math.abs(n[0]) < 1e-12 && Math.abs(n[1]) < 1e-12 && n[2] > 0) delete props.normal
       else props.normal = n
       props.angle = e.props.angle + ins.rotation * ((e.props.normal?.[2] ?? 1) < 0 ? -1 : 1)
+      return { ...e, props }
+    }
+    case 'REGION': {
+      // Como una polilínea: los arcos conservan su sentido y la normal acompaña a la escala con signo.
+      const props = mapRegion(e.props, P)
+      const n = N(e.props.normal)
+      if (isPlusZ(n)) delete props.normal
+      else props.normal = n
       return { ...e, props }
     }
     case 'VIEWPORT':

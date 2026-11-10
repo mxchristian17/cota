@@ -1,4 +1,5 @@
 import { hatchPoints, mapHatch } from '../hatch/edit'
+import { mapRegion, regionPoints } from '../region/region'
 import { imageRing, mapImage } from '../geom/image'
 import { mapShade, shadeOutline } from '../projection/shade'
 import type { Vec3 } from '../math'
@@ -94,6 +95,8 @@ function entityPoints(e: Entity): Vec3[] {
       return viewportRing(e.props)
     case 'HATCH':
       return hatchPoints(e.props)
+    case 'REGION':
+      return regionPoints(e.props)
     case 'SHADE':
       return shadeOutline(e.props)
     case 'IMAGE':
@@ -284,6 +287,8 @@ export function rotateEntityInput(e: Entity, center: Vec3, ang: number): EntityI
       p.angle = e.props.angle + ((e.props.normal?.[2] ?? 1) < 0 ? -ang : ang)
       return { type: 'HATCH', layer: e.layer, props: p }
     }
+    case 'REGION':
+      return { type: 'REGION', layer: e.layer, props: mapRegion(e.props, (v) => rot(v, cx, cy, cos, sin)) }
     case 'VIEWPORT': {
       // El marco sigue alineado al papel: rota sólo su centro (como BOX); la vista no cambia.
       const p = structuredClone(e.props)

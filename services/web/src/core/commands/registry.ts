@@ -36,6 +36,7 @@ import { dashLinetypeCommand, linetypeCommand, linetypeVarCommands } from './imp
 import { peditCommand, peditVarCommands } from './impl/pedit'
 import { dashHatchCommand, dashHatchEditCommand, hatchCommand, hatchEditCommand, hatchVarCommands } from './impl/hatch'
 import { boundaryCommand } from './impl/boundary'
+import { regionCommand } from './impl/region'
 import { centerlineCommand, mleaderAlignCommand, mleaderCommand, mleaderEditCommand, mleaderStyleCommand, qleaderCommand } from './impl/mleader'
 import { revolveCommand } from './impl/revolve'
 import { intersectCommand, subtractCommand, unionCommand } from './impl/csg'
@@ -277,6 +278,7 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   // Sombreados
   engine.register(hatchCommand)
   engine.register(boundaryCommand)
+  engine.register(regionCommand)
   engine.register(dashHatchCommand)
   engine.register(hatchEditCommand)
   engine.register(dashHatchEditCommand)

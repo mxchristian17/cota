@@ -78,6 +78,7 @@ export function entityPreviewShapes(e: Entity, dx: number, dy: number, dz = 0): 
     case 'IMAGE':
       return [{ kind: 'polyline', points: imageRing(e.props).map(shift) }]
     case 'HATCH':
+    case 'REGION':
       return e.props.loops.map((l) => {
         const pts = loopPoints(l, e.props.normal)
         return { kind: 'polyline', points: [...pts, pts[0]].map(shift) }

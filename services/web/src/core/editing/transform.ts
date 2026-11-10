@@ -1,4 +1,5 @@
 import { mapHatch } from '../hatch/edit'
+import { mapRegion } from '../region/region'
 import { mapImage } from '../geom/image'
 import { mapShade } from '../projection/shade'
 import { commonOf } from '../document/common'
@@ -273,6 +274,11 @@ export function mirrorEntityInput(e: Entity, ax: MirrorAxis): EntityInput | null
       const p = mapHatch(e.props, (v) => mirrorPoint(v, ax), 1, true)
       if (!isPlanNormal(e.props.normal)) p.normal = mirrorDirection(e.props.normal!, ax)
       return { type: 'HATCH', layer: e.layer, props: p }
+    }
+    case 'REGION': {
+      const p = mapRegion(e.props, (v) => mirrorPoint(v, ax), true)
+      if (!isPlanNormal(e.props.normal)) p.normal = mirrorDirection(e.props.normal!, ax)
+      return { type: 'REGION', layer: e.layer, props: p }
     }
     case 'TEXT': {
       const p = props as TextProps

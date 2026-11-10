@@ -1,4 +1,5 @@
 import type { Command, CommandContext } from '../types'
+import { regionArea, regionPerimeter } from '../../region/region'
 import type { Entity, MeshProps } from '../../document/types'
 import type { Pt, Vec3 } from '../../math'
 import { curveOf } from '../../geom/curve'
@@ -66,6 +67,7 @@ export const idCommand: Command = {
 /** Área y perímetro de un objeto (o largo, si está abierto) para AREA y LIST. */
 function objectArea(ctx: CommandContext, e: Entity): { area: number; perimeter: number; label: string } | null {
   if (e.type === 'HATCH') return { area: hatchArea(e.props), perimeter: NaN, label: 'Perimeter' }
+  if (e.type === 'REGION') return { area: regionArea(e.props), perimeter: regionPerimeter(e.props), label: 'Perimeter' }
   // Elipse completa: π·a·b exacto.
   if (e.type === 'ELLIPSE' && e.props.startParam === undefined) {
     const a = Math.hypot(...e.props.major)
@@ -220,7 +222,7 @@ export function describeEntity(ctx: CommandContext, e: Entity): string[] {
       break
   }
   // Curvas: área y perímetro (o largo, si está abierta), como el CAD clásico.
-  if (['POLYLINE', 'RECTANGLE', 'ELLIPSE', 'SPLINE', 'HATCH'].includes(e.type)) {
+  if (['POLYLINE', 'RECTANGLE', 'ELLIPSE', 'SPLINE', 'HATCH', 'REGION'].includes(e.type)) {
     const c = curveOf(e)
     if (e.type === 'POLYLINE') out.push(`  ${e.props.closed ? 'Closed' : 'Open'}, ${e.props.vertices.length} vertices`)
     if (e.type === 'SPLINE') out.push(`  Degree ${e.props.degree}, ${e.props.controlPoints.length} control points`)

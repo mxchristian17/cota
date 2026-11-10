@@ -161,6 +161,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | [`ATTDEF`](reference/draw.md#attdef) | `ATT`, `-ATTDEF` | Define a block attribute (tag, prompt, default value, Invisible/Constant/Preset) |
 | [`HATCH`](reference/draw.md#hatch) | `H`, `BH`, `BHATCH` | Fill an enclosed area with a hatch pattern, solid fill or user lines |
 | [`BOUNDARY`](reference/draw.md#boundary) | `BO`, `BPOLY`, `-BOUNDARY` | Create closed polylines from the area around a picked point [Advanced options: boundary set, islands, gap tolerance] |
+| [`REGION`](reference/draw.md#region) | `REG` | Convert closed objects and closed chains of lines and arcs into regions |
 | [`TEXT`](reference/draw.md#text) | `DT`, `DTEXT` | Create single-line text on its baseline (Justify: Left/Center/Right); each Enter starts a new line, an empty line finishes. %%c = Ø, %%d = °, %%p = ± |
 | [`MTEXT`](reference/draw.md#mtext) | `MT`, `T` | Create multiline text from its top-left corner (enter lines; empty line finishes). %%c = Ø, %%d = °, %%p = ± |
 | [`BOX`](reference/draw.md#box) | — | Create a parametric box (two base corners + height) |

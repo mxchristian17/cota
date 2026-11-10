@@ -1,4 +1,5 @@
 import { hatchPoints } from '../hatch/edit'
+import { regionPoints } from '../region/region'
 import { imageRing } from '../geom/image'
 import { shadeOutline } from '../projection/shade'
 import { loopPoints } from '../hatch/geometry'
@@ -82,6 +83,9 @@ export function entityBounds(e: Entity): Bounds {
       break
     case 'HATCH':
       for (const v of hatchPoints(e.props)) pts.push([v[0], v[1]])
+      break
+    case 'REGION':
+      for (const v of regionPoints(e.props)) pts.push([v[0], v[1]])
       break
   }
   let minX = Infinity
@@ -190,6 +194,7 @@ export function entityOutline(e: Entity): Pt[][] {
     case 'IMAGE':
       return [imageRing(e.props).map(fromVec3)]
     case 'HATCH':
+    case 'REGION':
       return e.props.loops.map((l) => {
         const pts = loopPoints(l, e.props.normal).map(fromVec3)
         return [...pts, pts[0]]

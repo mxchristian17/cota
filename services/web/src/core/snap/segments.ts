@@ -1,4 +1,5 @@
 import { lineSpan } from '../geom/xline'
+import { loopPolyline } from '../region/region'
 import { splineCurve } from '../geom/curve'
 import { imageRing } from '../geom/image'
 import { fromVec3, pt, type Pt } from '../math'
@@ -32,6 +33,8 @@ export function endpointsOfEntity(e: Entity): Pt[] {
       return arcEndpoints(e.props).map(fromVec3)
     case 'POLYLINE':
       return e.props.vertices.map(fromVec3)
+    case 'REGION':
+      return e.props.loops.flatMap((l) => l.vertices.map(fromVec3))
     case 'SPLINE': {
       // Extremos de la curva; los puntos de ajuste intermedios dan NODE, no END.
       const cp = e.props.controlPoints
@@ -77,6 +80,11 @@ export function segmentsOfEntity(e: Entity): [Pt, Pt][] {
   } else if (e.type === 'POLYLINE') {
     const v = polylinePoints(e.props).map(fromVec3) // ya viene cerrada si corresponde
     for (let i = 0; i < v.length - 1; i++) segs.push([v[i], v[i + 1]])
+  } else if (e.type === 'REGION') {
+    for (const l of e.props.loops) {
+      const v = polylinePoints(loopPolyline(l, e.props.normal)).map(fromVec3)
+      for (let i = 0; i < v.length - 1; i++) segs.push([v[i], v[i + 1]])
+    }
   } else if (e.type === 'SPLINE') {
     // La curva (como se dibuja), no la poligonal de sus puntos: NEA, INT y PER caen sobre ella.
     for (const q of splineCurve(e.props.controlPoints, e.props.degree)?.prims ?? []) if (q.k === 'L') segs.push([fromVec3(q.a), fromVec3(q.b)])

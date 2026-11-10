@@ -1,4 +1,5 @@
 import { bulgeArc, bulgeAt, polylineSpans } from '../../geom/polyline'
+import { regionPieces } from '../../region/region'
 import { hatchStrokes, isSolidHatch } from '../../hatch/geometry'
 import { commonOf } from '../../document/common'
 import { translateEntity } from '../../editing/edit'
@@ -130,6 +131,7 @@ export function explodeCurveLike(e: Entity): EntityInput[] | null {
       return arc ? piece('ARC', arc) : piece('LINE', { start: [...p.vertices[i]] as Vec3, end: [...p.vertices[j]] as Vec3 })
     })
   }
+  if (e.type === 'REGION') return regionPieces(e.props).map((q) => piece(q.type, q.props))
   if (e.type === 'HATCH') {
     if (isSolidHatch(e.props)) return null
     return hatchStrokes(e.props).segs.map(([a, b]) => piece('LINE', { start: a, end: b }))

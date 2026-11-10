@@ -47,6 +47,7 @@ export type EntityType =
   | 'SHADE'
   | 'POINT'
   | 'IMAGE'
+  | 'REGION'
 
 /** Nombre de un tipo de línea de la tabla del dibujo, p. ej. `CONTINUOUS`, `HIDDEN`, `CENTER`. */
 export type LineType = string
@@ -567,6 +568,17 @@ export interface HatchProps {
   wipeout?: boolean
 }
 
+/**
+ * Región (REGION): área plana cerrada, con un contorno exterior y sus agujeros (regla par-impar, como un sombreado
+ * sin patrón). Los lazos usan rectas y bulges, así los arcos quedan exactos. Se hace con REGION, BOUNDARY y las
+ * booleanas; EXTRUDE y REVOLVE la convierten en sólido.
+ */
+export interface RegionProps {
+  loops: HatchLoop[]
+  /** Normal del plano (ausente = +Z). */
+  normal?: Vec3
+}
+
 /** Cómo se plotea un viewport: como se ve, alambre o líneas ocultas. */
 export type ShadePlot = 'asDisplayed' | 'wireframe' | 'hidden'
 
@@ -617,6 +629,7 @@ export type EntityProps =
   | HatchProps
   | ShadeProps
   | ImageProps
+  | RegionProps
 
 /**
  * Propiedades comunes de todo objeto: tipo de línea (ausente = ByLayer; `BYBLOCK` o un nombre de
@@ -791,6 +804,13 @@ export interface ImageEntity extends EntityCommon {
   props: ImageProps
 }
 
+export interface RegionEntity extends EntityCommon {
+  id: string
+  type: 'REGION'
+  layer: string
+  props: RegionProps
+}
+
 export type Entity =
   | PointEntity
   | LineEntity
@@ -810,6 +830,7 @@ export type Entity =
   | HatchEntity
   | ShadeEntity
   | ImageEntity
+  | RegionEntity
 
 /**
  * Entidad a agregar. Sin `lineType`/`ltScale` es un objeto nuevo y toma `CELTYPE`/`CELTSCALE`; con
