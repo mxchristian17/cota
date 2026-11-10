@@ -272,6 +272,16 @@ export function buildSite(opts: SiteOptions): Site | null {
     search.push(...r.search)
     files.set(page.slug ? `${page.slug}/index.html` : 'index.html', pageHtml({ page, rendered: r, nav, prev: pages[i - 1], next: pages[i + 1], repoUrl: opts.repoUrl, version: opts.version, hash }))
   })
+  // Un comando con sección propia en la referencia: el buscador muestra la sección (con los alias de la tabla) y no
+  // la fila de la tabla de comandos.
+  const sections = new Map(search.filter((e) => e.u.startsWith('reference/') && e.u.includes('#')).map((e) => [e.h, e]))
+  for (let i = search.length - 1; i >= 0; i--) {
+    const e = search[i]
+    const sec = !e.u.startsWith('reference/') && e.u.includes('#') ? sections.get(e.h) : undefined
+    if (!sec || !e.u.endsWith(`#${e.h.toLowerCase()}`)) continue
+    if (e.k && !sec.k) sec.k = e.k
+    search.splice(i, 1)
+  }
   for (const a of assets) if (existsSync(join(opts.root, a))) files.set(a.slice(5), readFileSync(join(opts.root, a)))
   files.set('docs.css', DOCS_CSS)
   files.set('docs.js', DOCS_JS)

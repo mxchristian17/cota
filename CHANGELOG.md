@@ -4,6 +4,14 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.33.5] — 2026-11-10
+
+### Documentation
+- **The command reference is complete**: every one of the 210 commands now has its own section, with the Format,
+  File, Edit, Insert and Help menus and the command-line versions (`-LAYER`, `-LINETYPE`, `-DIMSTYLE`, `-HATCH`…)
+  added. A test makes sure every new command gets its section.
+- Search shows the full section of a command first, with its aliases.
+
 ## [2.33.4] — 2026-11-10
 
 ### Documentation

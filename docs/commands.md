@@ -6,37 +6,37 @@ Every command can be typed in the command line (aliases too) or picked from the 
 
 | Command | Aliases | What it does |
 | --- | --- | --- |
-| `NEW` | — | Start a new empty drawing (asks to save the changes first) |
-| `OPEN` | — | Open a drawing: from the working folder / cloud list, or from the device (.cota, .dxf, .dwg, .stl, .obj, .step, .iges) |
-| `OPENFOLDER` | `FOLDER`, `WORKSPACE` | Choose a system folder to open and save drawings as files |
-| `SAVE` | `QSAVE`, `SAVEAS` | Save the current drawing: working folder, your account, or a downloaded .cota file |
-| `CLOUD` | `CLOUDSTORAGE` | Store drawings in your account again (detach the local folder) |
-| `IMPORT` | `IMP` | Import geometry from an OBJ or DXF file |
-| `EXPORT` | `EXP` | Export the drawing to OBJ (3D mesh), DXF (2D) or DWG (2D) |
-| `PAGESETUP` | — | Page setup of the current layout (paper, orientation, margins, plot style) |
-| `PLOT` | `PRINT` | Plot to a vector PDF from a dialog with preview: paper, orientation, area (Extents/Display/Window), scale, plot style; a layout plots 1:1 with its page setup |
-| `PUBLISH` | — | Publish layouts to a multi-page PDF [All/Current or layout names] |
-| `DWGPROPS` | — | Drawing properties: title, subject, author, keywords and custom properties (used by fields) |
-| `UNITS` | `UN` | Set the drawing units: millimeters, centimeters, meters, inches or feet |
-| `TEMPLATE` | — | Drawing template: save it, open one, make the current settings the default for new drawings, or clear it |
-| `PURGE` | `PU`, `-PURGE`, `-PU` | Remove unused blocks, dimension styles, layers and linetypes [Blocks/Dimstyles/LAyers/LTypes/All] |
-| `LOGIN` | — | Sign in to save and load drawings |
+| [`NEW`](reference/file.md#new) | — | Start a new empty drawing (asks to save the changes first) |
+| [`OPEN`](reference/file.md#open) | — | Open a drawing: from the working folder / cloud list, or from the device (.cota, .dxf, .dwg, .stl, .obj, .step, .iges) |
+| [`OPENFOLDER`](reference/file.md#openfolder) | `FOLDER`, `WORKSPACE` | Choose a system folder to open and save drawings as files |
+| [`SAVE`](reference/file.md#save) | `QSAVE`, `SAVEAS` | Save the current drawing: working folder, your account, or a downloaded .cota file |
+| [`CLOUD`](reference/file.md#cloud) | `CLOUDSTORAGE` | Store drawings in your account again (detach the local folder) |
+| [`IMPORT`](reference/file.md#import) | `IMP` | Import geometry from an OBJ or DXF file |
+| [`EXPORT`](reference/file.md#export) | `EXP` | Export the drawing to OBJ (3D mesh), DXF (2D) or DWG (2D) |
+| [`PAGESETUP`](reference/file.md#pagesetup) | — | Page setup of the current layout (paper, orientation, margins, plot style) |
+| [`PLOT`](reference/file.md#plot) | `PRINT` | Plot to a vector PDF from a dialog with preview: paper, orientation, area (Extents/Display/Window), scale, plot style; a layout plots 1:1 with its page setup |
+| [`PUBLISH`](reference/file.md#publish) | — | Publish layouts to a multi-page PDF [All/Current or layout names] |
+| [`DWGPROPS`](reference/file.md#dwgprops) | — | Drawing properties: title, subject, author, keywords and custom properties (used by fields) |
+| [`UNITS`](reference/file.md#units) | `UN` | Set the drawing units: millimeters, centimeters, meters, inches or feet |
+| [`TEMPLATE`](reference/file.md#template) | — | Drawing template: save it, open one, make the current settings the default for new drawings, or clear it |
+| [`PURGE`](reference/file.md#purge) | `PU`, `-PURGE`, `-PU` | Remove unused blocks, dimension styles, layers and linetypes [Blocks/Dimstyles/LAyers/LTypes/All] |
+| [`LOGIN`](reference/file.md#login) | — | Sign in to save and load drawings |
 
 ## Edit menu
 
 | Command | Aliases | What it does |
 | --- | --- | --- |
-| `UNDO` | `U` | Undo the last command |
-| `REDO` | — | Redo the last undone command |
-| `CUTCLIP` | — | Copy objects to the clipboard and erase them (Ctrl+X) |
-| `COPYCLIP` | — | Copy objects to the clipboard (Ctrl+C) |
-| `COPYBASE` | — | Copy objects to the clipboard with a base point (Ctrl+Shift+C) |
-| `PASTECLIP` | — | Paste the clipboard at an insertion point (Ctrl+V) |
-| `PASTEORIG` | — | Paste the clipboard at its original coordinates |
-| `SELECTALL` | — | Select all objects (Ctrl+A) |
-| `SELECT` | `SE` | Select objects |
-| `SELECTSIMILAR` | — | Select every object of the same type and layer as the selected ones |
-| `QSELECT` | — | Quick Select: select objects by type and property (layer, linetype, length, radius, area, text…) in a dialog |
+| [`UNDO`](reference/edit.md#undo) | `U` | Undo the last command |
+| [`REDO`](reference/edit.md#redo) | — | Redo the last undone command |
+| [`CUTCLIP`](reference/edit.md#cutclip) | — | Copy objects to the clipboard and erase them (Ctrl+X) |
+| [`COPYCLIP`](reference/edit.md#copyclip) | — | Copy objects to the clipboard (Ctrl+C) |
+| [`COPYBASE`](reference/edit.md#copybase) | — | Copy objects to the clipboard with a base point (Ctrl+Shift+C) |
+| [`PASTECLIP`](reference/edit.md#pasteclip) | — | Paste the clipboard at an insertion point (Ctrl+V) |
+| [`PASTEORIG`](reference/edit.md#pasteorig) | — | Paste the clipboard at its original coordinates |
+| [`SELECTALL`](reference/edit.md#selectall) | — | Select all objects (Ctrl+A) |
+| [`SELECT`](reference/edit.md#select) | `SE` | Select objects |
+| [`SELECTSIMILAR`](reference/edit.md#selectsimilar) | — | Select every object of the same type and layer as the selected ones |
+| [`QSELECT`](reference/edit.md#qselect) | — | Quick Select: select objects by type and property (layer, linetype, length, radius, area, text…) in a dialog |
 | [`ERASE`](reference/modify.md#erase) | `E` | Erase selected objects |
 
 ## View menu
@@ -80,38 +80,38 @@ Every command can be typed in the command line (aliases too) or picked from the 
 
 | Command | Aliases | What it does |
 | --- | --- | --- |
-| `INSERT` | `I`, `DDINSERT` | Insert a block reference |
-| `IMAGE` | `IM` | Load the files of the pictures the drawing uses (a DXF stores only their path) |
-| `LAYOUT` | `LO` | Manage layouts [Copy/Delete/New/Template/Rename/SAveas/Set/?] |
-| `VIEWBASE` | — | Create a base view of the model in a layout, then its projected views |
-| `VIEWGEN` | — | Generate the Monge views of a part at once (choose them on a diagram, ISO-E or ISO-A) |
-| `VIEWPROJ` | — | Create projected views from an existing drawing view |
-| `VIEWEDIT` | — | Edit a drawing view: hidden lines and scale |
-| `VIEWUPDATE` | — | Update drawing views that are out of date with the model |
-| `VIEWSTD` | `-VIEWSTD` | Drafting standard of drawing views: first-angle or third-angle projection |
-| `FIELD` | — | Insert a field (file name, dates, drawing properties, layout, sheet, viewport scale) into text |
-| `UPDATEFIELD` | — | Update the fields of the selected objects |
+| [`INSERT`](reference/insert.md#insert) | `I`, `DDINSERT` | Insert a block reference |
+| [`IMAGE`](reference/insert.md#image) | `IM` | Load the files of the pictures the drawing uses (a DXF stores only their path) |
+| [`LAYOUT`](reference/insert.md#layout) | `LO` | Manage layouts [Copy/Delete/New/Template/Rename/SAveas/Set/?] |
+| [`VIEWBASE`](reference/insert.md#viewbase) | — | Create a base view of the model in a layout, then its projected views |
+| [`VIEWGEN`](reference/insert.md#viewgen) | — | Generate the Monge views of a part at once (choose them on a diagram, ISO-E or ISO-A) |
+| [`VIEWPROJ`](reference/insert.md#viewproj) | — | Create projected views from an existing drawing view |
+| [`VIEWEDIT`](reference/insert.md#viewedit) | — | Edit a drawing view: hidden lines and scale |
+| [`VIEWUPDATE`](reference/insert.md#viewupdate) | — | Update drawing views that are out of date with the model |
+| [`VIEWSTD`](reference/insert.md#viewstd) | `-VIEWSTD` | Drafting standard of drawing views: first-angle or third-angle projection |
+| [`FIELD`](reference/insert.md#field) | — | Insert a field (file name, dates, drawing properties, layout, sheet, viewport scale) into text |
+| [`UPDATEFIELD`](reference/insert.md#updatefield) | — | Update the fields of the selected objects |
 
 ## Format menu
 
 | Command | Aliases | What it does |
 | --- | --- | --- |
-| `LAYER` | `LA`, `DDLMODES` | Open the Layer Properties Manager (create, rename, color, lineweight, plot…) |
-| `LAYMCUR` | — | Make the layer of a selected object current |
-| `LAYISO` | — | Isolate the layers of the selected objects: the other layers are turned off (LAYUNISO restores) |
-| `LAYUNISO` | — | Restore the layers turned off by the last LAYISO |
-| `LAYOFF` | — | Turn off the layer of the selected objects |
-| `LAYON` | — | Turn on all layers |
-| `LAYFRZ` | — | Freeze the layer of the selected objects |
-| `LAYTHW` | — | Thaw all layers |
-| `LAYLCK` | — | Lock the layer of the selected object |
-| `LAYULK` | — | Unlock the layer of the selected object |
-| `COLOR` | `COL`, `COLOUR`, `-COLOR`, `CECOLOR` | Color of new objects (CECOLOR): ByLayer, index 1-255, name, #rrggbb or r,g,b |
-| `LINETYPE` | `LT`, `LTYPE`, `DDLTYPE` | Linetype Manager: load linetypes, set the current one and the scale factors |
-| `LWEIGHT` | `LW`, `LINEWEIGHT`, `-LWEIGHT`, `CELWEIGHT` | Lineweight of new objects (CELWEIGHT): ByLayer, Default or a width in mm [?] |
-| `DIMSTYLE` | `D`, `DST`, `DDIM`, `DIMSTY` | Dimension Style Manager: create, modify, override and set the current dimension style |
-| `MLEADERSTYLE` | `MLS` | Multileader style: multileaders use the leader arrow (DIMLDRBLK), arrow size and text of the dimension style |
-| `LIMITS` | — | Set the drawing limits (lower left, upper right) and turn the limits check ON/OFF |
+| [`LAYER`](reference/format.md#layer) | `LA`, `DDLMODES` | Open the Layer Properties Manager (create, rename, color, lineweight, plot…) |
+| [`LAYMCUR`](reference/format.md#laymcur) | — | Make the layer of a selected object current |
+| [`LAYISO`](reference/format.md#layiso) | — | Isolate the layers of the selected objects: the other layers are turned off (LAYUNISO restores) |
+| [`LAYUNISO`](reference/format.md#layuniso) | — | Restore the layers turned off by the last LAYISO |
+| [`LAYOFF`](reference/format.md#layoff) | — | Turn off the layer of the selected objects |
+| [`LAYON`](reference/format.md#layon) | — | Turn on all layers |
+| [`LAYFRZ`](reference/format.md#layfrz) | — | Freeze the layer of the selected objects |
+| [`LAYTHW`](reference/format.md#laythw) | — | Thaw all layers |
+| [`LAYLCK`](reference/format.md#laylck) | — | Lock the layer of the selected object |
+| [`LAYULK`](reference/format.md#layulk) | — | Unlock the layer of the selected object |
+| [`COLOR`](reference/format.md#color) | `COL`, `COLOUR`, `-COLOR`, `CECOLOR` | Color of new objects (CECOLOR): ByLayer, index 1-255, name, #rrggbb or r,g,b |
+| [`LINETYPE`](reference/format.md#linetype) | `LT`, `LTYPE`, `DDLTYPE` | Linetype Manager: load linetypes, set the current one and the scale factors |
+| [`LWEIGHT`](reference/format.md#lweight) | `LW`, `LINEWEIGHT`, `-LWEIGHT`, `CELWEIGHT` | Lineweight of new objects (CELWEIGHT): ByLayer, Default or a width in mm [?] |
+| [`DIMSTYLE`](reference/format.md#dimstyle) | `D`, `DST`, `DDIM`, `DIMSTY` | Dimension Style Manager: create, modify, override and set the current dimension style |
+| [`MLEADERSTYLE`](reference/format.md#mleaderstyle) | `MLS` | Multileader style: multileaders use the leader arrow (DIMLDRBLK), arrow size and text of the dimension style |
+| [`LIMITS`](reference/format.md#limits) | — | Set the drawing limits (lower left, upper right) and turn the limits check ON/OFF |
 
 ## Tools menu
 
@@ -248,9 +248,9 @@ Every command can be typed in the command line (aliases too) or picked from the 
 
 | Command | Aliases | What it does |
 | --- | --- | --- |
-| `HELP` | `?` | List available commands |
-| `DOCS` | `DOCUMENTATION` | Open the documentation (guides and command reference) in a new tab |
-| `ABOUT` | — | Show the Cota version, author and license |
+| [`HELP`](reference/help.md#help) | `?` | List available commands |
+| [`DOCS`](reference/help.md#docs) | `DOCUMENTATION` | Open the documentation (guides and command reference) in a new tab |
+| [`ABOUT`](reference/help.md#about) | — | Show the Cota version, author and license |
 
 ## Command-line versions
 
@@ -258,16 +258,16 @@ Dash versions run without dialogs, for scripts and power users.
 
 | Command | Aliases | What it does |
 | --- | --- | --- |
-| `-GROUP` | `-G` | Groups from the command line [?/Add/Remove/Explode/REName/Selectable/Create] |
-| `-TOOLBAR` | `-TO` | Show, hide, dock or float a toolbar from the command line (or ALL toolbars) |
-| `-PLOT` | `-PRINT` | Plot to PDF right away with the last PLOT settings (no dialog) |
-| `-DIMSTYLE` | — | Dimension styles from the command line [ANnotative/Save/Restore/STatus/Variables/Apply/?] |
-| `-LAYER` | `-LA` | Layers from the command line: ?/Make/Set/New/Rename/ON/OFF/Color/Ltype/LWeight/Plot/Freeze/Thaw/LOck/Unlock |
-| `-LINETYPE` | `-LT` | Linetypes from the command line: ?, Create, Load, Set |
-| `-HATCH` | `-H`, `-BHATCH` | Hatch from the command line (Properties, Select objects, Advanced, Origin) |
-| `-HATCHEDIT` | `-HE` | Edit a hatch from the command line |
-| `-OPEN` | — | Open a drawing from the command line [Device/List] |
-| `-IMAGE` | — | Images of the drawing from the command line [Reload/?] |
+| [`-GROUP`](reference/command-line.md#-group) | `-G` | Groups from the command line [?/Add/Remove/Explode/REName/Selectable/Create] |
+| [`-TOOLBAR`](reference/command-line.md#-toolbar) | `-TO` | Show, hide, dock or float a toolbar from the command line (or ALL toolbars) |
+| [`-PLOT`](reference/command-line.md#-plot) | `-PRINT` | Plot to PDF right away with the last PLOT settings (no dialog) |
+| [`-DIMSTYLE`](reference/command-line.md#-dimstyle) | — | Dimension styles from the command line [ANnotative/Save/Restore/STatus/Variables/Apply/?] |
+| [`-LAYER`](reference/command-line.md#-layer) | `-LA` | Layers from the command line: ?/Make/Set/New/Rename/ON/OFF/Color/Ltype/LWeight/Plot/Freeze/Thaw/LOck/Unlock |
+| [`-LINETYPE`](reference/command-line.md#-linetype) | `-LT` | Linetypes from the command line: ?, Create, Load, Set |
+| [`-HATCH`](reference/command-line.md#-hatch) | `-H`, `-BHATCH` | Hatch from the command line (Properties, Select objects, Advanced, Origin) |
+| [`-HATCHEDIT`](reference/command-line.md#-hatchedit) | `-HE` | Edit a hatch from the command line |
+| [`-OPEN`](reference/command-line.md#-open) | — | Open a drawing from the command line [Device/List] |
+| [`-IMAGE`](reference/command-line.md#-image) | — | Images of the drawing from the command line [Reload/?] |
 
 ## System variables
 

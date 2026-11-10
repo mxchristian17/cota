@@ -97,10 +97,8 @@ it('docs/commands.md is up to date with the command registry', () => {
 it('docs/reference: la línea de alias y menú de cada comando sale del registry', () => {
   const pages = referencePages()
   const synced = syncReference(pages)
-  for (const [f, md] of synced) {
-    if (process.env.UPDATE_DOCS) writeFileSync(REF + f, md)
-    expect(pages.get(f), f).toBe(md)
-  }
+  if (process.env.UPDATE_DOCS) for (const [f, md] of synced) writeFileSync(REF + f, md)
+  else for (const [f, md] of synced) expect(pages.get(f), f).toBe(md)
   // Cada sección `## NOMBRE` es un comando registrado y tiene su línea de datos.
   const names = new Set(makeEngine().engine.getCommands().map((c) => c.name))
   for (const [f, md] of synced)
@@ -108,4 +106,13 @@ it('docs/reference: la línea de alias y menú de cada comando sale del registry
       expect(names.has(m[1]), `${f}: ${m[1]} no es un comando`).toBe(true)
       expect(m[2], `${f}: ${m[1]} sin línea **Aliases**`).toBeTruthy()
     }
+})
+
+it('docs/reference: todo comando tiene su sección (las variables van en la tabla de commands.md)', () => {
+  const documented = new Set([...referencePages().values()].flatMap((md) => [...md.matchAll(/^## (\S+)$/gm)].map((m) => m[1])))
+  const missing = makeEngine()
+    .engine.getCommands()
+    .filter((c) => !VARIABLE_COMMANDS.has(c.name) && !documented.has(c.name))
+    .map((c) => c.name)
+  expect(missing).toEqual([])
 })

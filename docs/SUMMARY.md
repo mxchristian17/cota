@@ -18,6 +18,12 @@ side navigation; each link below it is a page, in reading order.
 - [Dimension commands](reference/dimension.md)
 - [View commands](reference/view.md)
 - [Tools commands](reference/tools.md)
+- [Format commands](reference/format.md)
+- [File commands](reference/file.md)
+- [Edit commands](reference/edit.md)
+- [Insert commands](reference/insert.md)
+- [Help commands](reference/help.md)
+- [Command-line versions](reference/command-line.md)
 - [DWG and DXF coverage](dwg-coverage.md)
 
 ## Host and contribute
