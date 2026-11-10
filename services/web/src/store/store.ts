@@ -2082,14 +2082,15 @@ export const useStore = create<AppState>((set, get) => {
       })
       const area = engine.selectionArea
       const cross = area ? area === 'crossing' : crossing
-      const ids = entitiesInScreenBox(selectable, rect, cross, project)
+      const expand = (e: Entity): Entity[] => expandEntities([e], doc.blocks, { attdisp: doc.attdisp })
+      const ids = entitiesInScreenBox(selectable, rect, cross, project, expand)
       // Como el CAD clásico: dentro de un comando avisa lo que quedó afuera por estar en una capa bloqueada.
       const reportLocked = () => {
         const locked = doc.entities.filter((e) => {
           const l = layerSvc.get(e.layer)
           return !!l && l.locked && l.visible && !l.frozen
         })
-        const n = locked.length ? entitiesInScreenBox(locked, rect, cross, project).length : 0
+        const n = locked.length ? entitiesInScreenBox(locked, rect, cross, project, expand).length : 0
         if (n) print(`${n} ${n === 1 ? 'was' : 'were'} on a locked layer.`)
       }
       if (area) {

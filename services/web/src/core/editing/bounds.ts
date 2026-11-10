@@ -236,10 +236,12 @@ export function entitiesInScreenBox(
   rect: RectPx,
   crossing: boolean,
   project: Projector,
+  /** Geometría de mundo de una inserción (sin ella, los bloques no tienen contorno y la caja nunca los tomaba). */
+  expandInsert?: (e: Entity) => Entity[],
 ): string[] {
   const ids: string[] = []
   for (const e of entities) {
-    const polys = entityOutline(e)
+    const polys = e.type === 'INSERT' && expandInsert ? expandInsert(e).flatMap(entityOutline) : entityOutline(e)
     let anyPoint = false
     let allInside = true
     let touches = false

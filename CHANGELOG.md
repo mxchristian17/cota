@@ -4,6 +4,19 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.35.2] — 2026-11-10
+
+### Fixed
+- **Window and crossing selection now take blocks.** A selection box drawn over blocks (and over 3D solids and blocks
+  together) left the blocks out, because a block insert had no outline for the box test. Each insert is now tested
+  with the geometry of its block, nested blocks included: a window takes it when all of it is inside, a crossing
+  when the box touches it.
+
+### Documentation
+- **Roadmap**: new items for motion constraints between parts, animations of mechanisms and views, a session log
+  with a `TRACEBACK` command to reproduce bugs, auto-smooth shading, editing a block by double-clicking it, and
+  robust fillets on any edge selection (evaluating an exact B-rep kernel).
+
 ## [2.35.1] — 2026-11-10
 
 ### Fixed

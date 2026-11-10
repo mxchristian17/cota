@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { entitiesInBox, entitiesInScreenBox, entityBounds, type Projector } from './bounds'
-import type { CircleEntity, LineEntity } from '../document/types'
+import type { BlockDef, CircleEntity, Entity, LineEntity } from '../document/types'
+import { expandEntities } from './block'
 
 const line: LineEntity = { id: 'l1', type: 'LINE', layer: '0', props: { start: [0, 0, 0], end: [10, 0, 0] } }
 const circle: CircleEntity = {
@@ -51,6 +52,17 @@ describe('entitiesInScreenBox', () => {
   it('window selecciona la entidad totalmente contenida', () => {
     const ids = entitiesInScreenBox(ents, { minX: -1, minY: -1, maxX: 11, maxY: 5 }, false, project)
     expect(ids).toEqual(['l1'])
+  })
+
+  it('los bloques entran en la caja por su geometría (antes no tenían contorno y nunca se seleccionaban)', () => {
+    const blocks: BlockDef[] = [{ name: 'B', entities: [line] }]
+    const ins = { id: 'i1', type: 'INSERT', layer: '0', props: { name: 'B', position: [100, 0, 0], scale: [1, 1, 1], rotation: 0 } } as Entity
+    const expand = (e: Entity): Entity[] => expandEntities([e], blocks)
+    // Ventana: la línea del bloque va de x=100 a x=110.
+    expect(entitiesInScreenBox([ins], { minX: 99, minY: -1, maxX: 111, maxY: 1 }, false, project, expand)).toEqual(['i1'])
+    expect(entitiesInScreenBox([ins], { minX: 99, minY: -1, maxX: 105, maxY: 1 }, false, project, expand)).toEqual([])
+    // Captura: alcanza con tocarla.
+    expect(entitiesInScreenBox([ins], { minX: 104, minY: -1, maxX: 106, maxY: 1 }, true, project, expand)).toEqual(['i1'])
   })
 
   it('crossing (toca) selecciona una entidad que sólo cruza un borde', () => {

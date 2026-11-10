@@ -23,8 +23,10 @@ discussion.
 | Status | Item |
 |---|---|
 | next | EXTRUDE with a live solid preview; the height follows the side of the cursor. |
+| next | **Robust fillets and chamfers on any edge selection**: today a sphere with a box subtracted fails when only some edges are rounded (concave blends overflow the sphere, mixed corners). Evaluate an exact B-rep kernel (OpenCascade compiled to WebAssembly, loaded only for 3D solids) for booleans, fillets and chamfers instead of mesh-based tools. |
 | planned | Per-object lineweight (ByLayer by default) and a toggle to show lineweights in the model. |
 | planned | Isolate / hide objects and quick select from the context menu. |
+| planned | **Edit a block by double-clicking it**: the block definition opens for editing in place, as in the classic block editor, and the changes update every insert of that block. |
 | planned | Drawing in a UCS seen edge-on (the cursor stays on the view plane through the base point). |
 | idea | Parametric sketches with geometric and dimensional constraints. |
 
@@ -60,8 +62,10 @@ discussion.
 | Status | Item |
 |---|---|
 | planned | **Joints between parts**: revolute (a bearing turning on a shaft), prismatic (a slider), cylindrical, planar, fixed. |
+| planned | **Motion constraints between parts**: mates that position parts against each other (coincident, concentric, parallel, tangent, distance, angle) and limit how they can move, with travel and angle limits on each joint. |
 | planned | **Mechanisms**: crank–slider, four-bar linkages, cams; drive a joint and watch the assembly move. |
 | planned | **Gear contact**: a gear rolling against another gear or a rack, with the correct ratio. |
+| planned | **Animations**: play a mechanism through its motion, animate the camera (orbits, fly-throughs) and exploded views, and export the result as a video or GIF. |
 | idea | Interference and collision checks while the mechanism moves. |
 | idea | Exploded views and a bill of materials in layouts. |
 
@@ -79,6 +83,7 @@ discussion.
 
 | Status | Item |
 |---|---|
+| planned | **Auto-smooth shading**: facets that meet at less than a set angle (10° by default, configurable) are shaded as one smooth surface, so cylinders, fillets and spheres look round instead of faceted, while real edges stay crisp. |
 | idea | **Ray-traced rendering** with physically based materials, environment lighting and soft shadows. |
 | idea | **Real physics**: rigid bodies, gravity, contacts and friction, motors on joints. |
 | idea | Mass properties for assemblies (mass, center of gravity, inertia) with materials. |
@@ -99,3 +104,4 @@ discussion.
 |---|---|
 | next | Heavy models: faster rebuild after each change, orbit and selection with hundreds of filleted solids. |
 | planned | Drawing views: small glitches near rounded edges in some projections. |
+| planned | **Session log and `TRACEBACK`**: Cota keeps a log of everything done since the window was opened, with all its parameters: commands and every input, geometry created or edited, selections, view and visual style changes, settings. It lives until the window is closed. `TRACEBACK` exports the last *n* lines or the last *n* minutes to a file, detailed enough that an agent can replay that interval exactly and reproduce a bug found by you or by a user. |
