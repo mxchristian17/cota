@@ -41,6 +41,7 @@ import { revolveCommand } from './impl/revolve'
 import { intersectCommand, subtractCommand, unionCommand } from './impl/csg'
 import { orthographicCommand, perspectiveCommand, viewCommand } from './impl/view'
 import { dashPanCommand, limitsCommand, navCommands, panCommand, zoomCommand, zoomVarCommands } from './impl/zoom'
+import { saveVarCommands } from './impl/savevars'
 import { divideCommand, measureCommand, pointCommand, pointVarCommands } from './impl/points'
 import { arrayCommand } from './impl/array'
 import { blockCommand, explodeCommand, insertCommand } from './impl/block'
@@ -201,6 +202,7 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   engine.register(dashPanCommand)
   engine.register(limitsCommand)
   for (const c of zoomVarCommands) registerVariable(engine, c)
+  for (const c of saveVarCommands) registerVariable(engine, c)
   engine.register(pointCommand)
   engine.register(divideCommand)
   engine.register(measureCommand)

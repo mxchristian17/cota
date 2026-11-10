@@ -1,4 +1,4 @@
-import { DRAWING_EXT, DRAWING_EXTS, drawingFileName, extensionOf, folderSegments, joinPath, stripExtension } from './paths'
+import { BACKUP_EXTS, DRAWING_EXT, DRAWING_EXTS, drawingFileName, extensionOf, folderSegments, joinPath, stripExtension } from './paths'
 
 /**
  * Acceso a una **carpeta real del sistema** con la File System Access API.
@@ -43,7 +43,7 @@ export interface LocalDrawing {
 }
 
 /** Extensiones que el diálogo de apertura muestra. */
-export const OPENABLE_EXT = [...DRAWING_EXTS, '.dxf']
+export const OPENABLE_EXT = [...DRAWING_EXTS, '.dxf', ...BACKUP_EXTS]
 
 /** Profundidad máxima al recorrer la carpeta (evita árboles enormes). */
 const MAX_DEPTH = 4

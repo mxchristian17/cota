@@ -56,6 +56,10 @@ export interface Sysvars {
   SPLINESEGS: number
   /** PLINEWID: ancho por defecto de los tramos de PLINE. */
   PLINEWID: number
+  /** ISAVEBAK: 1 = al guardar en la carpeta local, la versión anterior queda como `.bak`. */
+  ISAVEBAK: 0 | 1
+  /** SAVETIME: minutos entre copias de recuperación `.sv$` en la carpeta local (0 = nunca). */
+  SAVETIME: number
   /** ZOOMFACTOR: cuánto acerca cada paso de la rueda (3–100; 60 = ×1,1). */
   ZOOMFACTOR: number
   /** RENDERMINPX: piezas más chicas que esto en pantalla se dibujan como un punto; 0 = nunca. */
@@ -104,6 +108,8 @@ const DEFAULTS: Sysvars = {
   SPLINETYPE: 6,
   SPLINESEGS: 8,
   PLINEWID: 0,
+  ISAVEBAK: 1,
+  SAVETIME: 10,
   ZOOMFACTOR: 60,
   RENDERMINPX: 3,
   ZOOMWHEEL: 0,
@@ -129,6 +135,7 @@ export const PERSISTED_SYSVARS = [
   'FILLETRAD', 'CHAMFERA', 'CHAMFERB', 'CHAMFERC', 'CHAMFERD', 'CHAMMODE', 'TRIMMODE',
   'UCSICON', 'ZOOMFACTOR', 'ZOOMWHEEL', 'RENDERMINPX', 'UCSORTHO', 'UCSFOLLOW', 'UCSDETECT', 'UCSVIEW',
   'ATTDIA', 'ATTREQ', 'PEDITACCEPT', 'OFFSETGAPTYPE', 'EDGEMODE', 'PROJMODE', 'PDMODE', 'PDSIZE', 'POLARANG', 'PICKSTYLE',
+  'ISAVEBAK', 'SAVETIME',
 ] as const
 
 export type PersistedSysvars = Pick<Sysvars, (typeof PERSISTED_SYSVARS)[number]>
@@ -149,7 +156,7 @@ export function applySysvars(data: Record<string, unknown>): void {
   if (data.CHAMMODE === 'Distance' || data.CHAMMODE === 'Angle') sysvars.CHAMMODE = data.CHAMMODE
   if (data.TRIMMODE === 0 || data.TRIMMODE === 1) sysvars.TRIMMODE = data.TRIMMODE
   const bit = (v: unknown): v is 0 | 1 => v === 0 || v === 1
-  for (const k of ['ZOOMWHEEL', 'UCSORTHO', 'UCSFOLLOW', 'UCSDETECT', 'UCSVIEW', 'ATTDIA', 'ATTREQ', 'PEDITACCEPT', 'EDGEMODE', 'PICKSTYLE'] as const) {
+  for (const k of ['ZOOMWHEEL', 'UCSORTHO', 'UCSFOLLOW', 'UCSDETECT', 'UCSVIEW', 'ATTDIA', 'ATTREQ', 'PEDITACCEPT', 'EDGEMODE', 'PICKSTYLE', 'ISAVEBAK'] as const) {
     const v = data[k]
     if (bit(v)) sysvars[k] = v
   }
@@ -165,4 +172,5 @@ export function applySysvars(data: Record<string, unknown>): void {
   if (typeof pd === 'number' && Number.isInteger(pd) && (pd & 31) <= 4 && (pd & ~(31 | 32 | 64)) === 0) sysvars.PDMODE = pd
   if (typeof data.PDSIZE === 'number' && Number.isFinite(data.PDSIZE)) sysvars.PDSIZE = data.PDSIZE
   if (typeof data.POLARANG === 'number' && data.POLARANG > 0 && data.POLARANG <= 180) sysvars.POLARANG = data.POLARANG
+  if (nonNegative(data.SAVETIME) && Number.isInteger(data.SAVETIME) && data.SAVETIME <= 600) sysvars.SAVETIME = data.SAVETIME
 }

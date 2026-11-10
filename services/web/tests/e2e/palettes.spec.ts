@@ -181,8 +181,8 @@ test.describe('Cota paletas: LAYER modal + Properties', () => {
     await typeCmd(page, 'DRAWORDER', 'B')
     await click()
     await expect.poll(selectedLayer).toBe('Abajo')
-    // UNDO deshace el cambio de orden.
-    await typeCmd(page, 'UNDO')
+    // UNDO deshace el cambio de orden (el primero vuelve a la selección anterior: cada selección es un paso).
+    await typeCmd(page, 'UNDO', 'UNDO')
     await click()
     await expect.poll(selectedLayer).toBe('Arriba')
   })

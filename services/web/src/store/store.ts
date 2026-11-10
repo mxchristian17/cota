@@ -84,7 +84,7 @@ import {
 } from '../core/io/fileSystem'
 import { CLOUD_ENABLED } from '../core/io/backend'
 import { idbDelete, idbGet, idbSet } from '../core/io/idb'
-import { DRAWING_EXT, DRAWING_EXTS, isDrawingFile, splitDrawingPath, drawingFileName, joinPath } from '../core/io/paths'
+import { DRAWING_EXT, DRAWING_EXTS, isBackupFile, isDrawingFile, splitDrawingPath, drawingFileName, joinPath } from '../core/io/paths'
 import { selectableEntities } from '../core/commands/selectionSets'
 import { DEFAULT_FLATSHOT, flatshotItems, type FlatshotOptions } from '../core/projection/flatshot'
 import { alignDrawingViews, isDrawingView, isShaded, showsHidden, viewBlockEntities } from '../core/drawing/views'
@@ -489,6 +489,8 @@ export interface AppState {
   newDocument: () => void
   /** Guarda el dibujo (carpeta, cuenta o descarga); true si quedó guardado. */
   saveDocument: () => Promise<boolean>
+  /** Copia de recuperación `.sv$` del dibujo en la carpeta local (SAVETIME); no cuenta como guardado. */
+  writeRecovery: () => Promise<void>
   /** ¿Hay cambios desde que se abrió, se creó o se guardó el dibujo? */
   isDirty: () => boolean
   /** El dibujo actual cuenta como guardado (al terminar de arrancar la app). */
@@ -569,6 +571,9 @@ async function readModelFile(file: File, lower: string): Promise<Array<Pick<ObjM
   const { readCadFile } = await import('../core/io/occt')
   return readCadFile(await file.arrayBuffer(), lower.endsWith('.step') || lower.endsWith('.stp') ? 'step' : 'iges')
 }
+
+/** Registra un cambio de selección como paso de deshacer (lo arma el store; ver `SelUndo`). */
+let selectionStep: ((prev: string[], next: string[]) => void) | null = null
 
 export const useStore = create<AppState>((set, get) => {
   const doc = DocumentModel.createDefault()
@@ -768,8 +773,34 @@ export const useStore = create<AppState>((set, get) => {
     cam: CameraState
     ucs: Ucs
   }
-  type UndoEntry = DocumentData | ViewUndo
+  /** Selección anterior: cada cambio de selección hecho por el usuario (fuera de un comando) es un paso de Ctrl+Z. */
+  interface SelUndo {
+    kind: 'selection'
+    ids: string[]
+  }
+  type UndoEntry = DocumentData | ViewUndo | SelUndo
   const isView = (e: UndoEntry | undefined): e is ViewUndo => !!e && (e as ViewUndo).kind === 'view'
+  const isSel = (e: UndoEntry | undefined): e is SelUndo => !!e && (e as SelUndo).kind === 'selection'
+  /** Cambios de selección que no son pasos: los de deshacer/rehacer y los que hace un comando (al terminar la vacía). */
+  let selQuiet = false
+  const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((id, i) => id === b[i])
+  selectionStep = (prev, next) => {
+    if (selQuiet || get().engine.busy || sameIds(prev, next)) return
+    undoStack.push({ kind: 'selection', ids: prev })
+    if (undoStack.length > MAX_UNDO) undoStack.shift()
+  }
+  /** Deshace o rehace un paso de selección; false si ya no cambia nada (sus objetos no existen o es la misma). */
+  const applySelStep = (e: SelUndo, other: UndoEntry[], verb: string): boolean => {
+    const ids = e.ids.filter((id) => doc.getEntity(id))
+    const cur = get().selection
+    if (sameIds(ids, cur)) return false
+    other.push({ kind: 'selection', ids: cur })
+    selQuiet = true
+    set({ selection: ids })
+    selQuiet = false
+    print(`${verb}: selection.`)
+    return true
+  }
   const undoStack: UndoEntry[] = []
   const redoStack: UndoEntry[] = []
   /** Qué hizo cada paso de deshacer (EXTRUDE, cambio de capa…), para decirlo al deshacerlo o rehacerlo. */
@@ -1107,10 +1138,12 @@ export const useStore = create<AppState>((set, get) => {
 
   const afterRestore = () => {
     const stillThere = doc.layers.some((l) => l.id === get().currentLayerId)
+    selQuiet = true
     set({
       selection: [],
       currentLayerId: stillThere ? get().currentLayerId : doc.firstLayerId,
     })
+    selQuiet = false
     bump()
   }
 
@@ -1393,7 +1426,11 @@ export const useStore = create<AppState>((set, get) => {
     trackPath: () => get().activeViewport?.trackPath() ?? null,
     currentUcs: () => get().ucs,
     currentSelection: () => get().selection,
-    onSelectionChange: (ids) => set({ selection: ids }),
+    onSelectionChange: (ids) => {
+      selQuiet = true
+      set({ selection: ids })
+      selQuiet = false
+    },
     onPicked: (ids) => set({ picked: ids }),
     app,
     onPrompt: (prompt) => set({ prompt }),
@@ -1412,10 +1449,19 @@ export const useStore = create<AppState>((set, get) => {
       capturedBefore = scriptDepth || VIEW_ONLY_COMMANDS.has(name) ? null : doc.toJSON()
       capturedRev = doc.revision
     },
-    onAfterCommand: (name) => {
+    onAfterCommand: (name, discard) => {
       // FILLETRAD, CHAMFERA… cambiados desde un comando se guardan en la config del usuario.
       if (capturedVars !== null && capturedVars !== JSON.stringify(persistedSysvars())) saveConfig()
       capturedVars = null
+      if (discard && capturedBefore) {
+        // Ctrl+Z a mitad del comando: vuelve el dibujo a como estaba al empezarlo (el comando se rehace sin el último paso).
+        if (doc.revision !== capturedRev) {
+          doc.load(capturedBefore)
+          afterRestore()
+        }
+        capturedBefore = null
+        return
+      }
       if (name === 'UNDO' || name === 'REDO' || !capturedBefore) return
       if (doc.revision !== capturedRev) {
         undoLabels.set(capturedBefore, name)
@@ -3046,8 +3092,14 @@ export const useStore = create<AppState>((set, get) => {
       print(`Erased ${removable.length} object(s).`)
     },
     undo: () => {
+      // A mitad de un comando, Ctrl+Z vuelve a la etapa anterior del comando (no deshace el dibujo).
+      if (get().engine.busy && get().engine.stepBack()) return
       while (undoStack.length > 0) {
         const e = undoStack.pop()!
+        if (isSel(e)) {
+          if (applySelStep(e, redoStack, 'Undo')) return
+          continue
+        }
         if (isView(e)) {
           const back = applyViewUndo(e)
           if (!back) continue // su viewport ya no existe: se salta
@@ -3069,6 +3121,10 @@ export const useStore = create<AppState>((set, get) => {
     redo: () => {
       while (redoStack.length > 0) {
         const e = redoStack.pop()!
+        if (isSel(e)) {
+          if (applySelStep(e, undoStack, 'Redo')) return
+          continue
+        }
         if (isView(e)) {
           const back = applyViewUndo(e)
           if (!back) continue
@@ -3236,7 +3292,20 @@ export const useStore = create<AppState>((set, get) => {
         // abierto queda como estaba.
         const path = get().fsFilePath
         if (currentFile && path && path.toLowerCase() !== joinPath(docFolder, drawingFileName(docName, DRAWING_EXT)).toLowerCase()) currentFile = null
+        // ISAVEBAK: la versión que se va a pisar queda como `nombre.bak` (si no se puede, el guardado sigue igual).
+        const dir = workspaceDir
+        const backup = async (h: FsFileHandle | null): Promise<void> => {
+          if (!h || !sysvars.ISAVEBAK) return
+          try {
+            const old = await readTextFile(h)
+            const bak = old ? await fileHandleAt(dir, docFolder, drawingFileName(docName, '.bak'), { create: true }) : null
+            if (bak) await writeTextFile(bak, old)
+          } catch {
+            /* sin copia */
+          }
+        }
         try {
+          await backup(currentFile ?? (await fileHandleAt(workspaceDir, docFolder, drawingFileName(docName, DRAWING_EXT))))
           if (currentFile) {
             await writeTextFile(currentFile, text)
             print(`<Saved "${get().fsFilePath ?? docName}">`)
@@ -3337,6 +3406,19 @@ export const useStore = create<AppState>((set, get) => {
       set({ fsFolderName: null, fsFilePath: null, fsPending: false, fsList: [] })
       print('Working in the cloud: SAVE/OPEN use your account again.')
     },
+    writeRecovery: async () => {
+      // Sólo en la carpeta local y con el permiso ya dado (no se pide en segundo plano).
+      if (!workspaceDir || (await permissionState(workspaceDir)) !== 'granted') return
+      const { docFolder, docName } = get()
+      try {
+        const h = await fileHandleAt(workspaceDir, docFolder, drawingFileName(docName, '.sv$'), { create: true })
+        if (!h) return
+        await writeTextFile(h, JSON.stringify(doc.toJSON()))
+        print(`<Automatic save to "${joinPath(docFolder, drawingFileName(docName, '.sv$'))}">`)
+      } catch {
+        /* la copia de recuperación no es imprescindible */
+      }
+    },
     openLocalDrawing: async (path) => {
       if (!workspaceDir) return
       const { folder, name } = splitDrawingPath(path)
@@ -3366,19 +3448,21 @@ export const useStore = create<AppState>((set, get) => {
           doc.load(JSON.parse(text) as DocumentData)
           restoreModelUcs()
           applyViews()
-          currentFile = handle
+          // Una copia `.bak`/`.sv$` se abre como el dibujo sin guardar: SAVE la escribe como `nombre.cota`.
+          const backupCopy = isBackupFile(fileName)
+          currentFile = backupCopy ? null : handle
           set({
             docId: null,
             docName: name,
             docFolder: folder,
-            fsFilePath: path,
+            fsFilePath: backupCopy ? null : path,
             currentLayerId: doc.currentLayer,
             openOpen: false,
             selection: [],
             viewportLayout: doc.viewportLayout,
           })
-          print(`Opened "${path}".`)
-          markSaved()
+          print(backupCopy ? `Opened the copy "${path}": SAVE writes it as "${drawingFileName(name, DRAWING_EXT)}".` : `Opened "${path}".`)
+          if (!backupCopy) markSaved()
         }
         bump()
       } catch {
@@ -3445,4 +3529,9 @@ function applyNumber(e: Entity, path: string, value: number): void {
 // camino de guardado (SAVE, autoguardado, DXF) la lleva y al abrir el .cota vuelve la misma capa.
 useStore.subscribe((s, prev) => {
   if (s.currentLayerId !== prev.currentLayerId) s.doc.setCurrentLayer(s.currentLayerId)
+})
+
+// Cada cambio de selección del usuario es un paso de Ctrl+Z (el store decide cuáles; ver `selectionStep`).
+useStore.subscribe((s, prev) => {
+  if (s.selection !== prev.selection) selectionStep?.(prev.selection, s.selection)
 })

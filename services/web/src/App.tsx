@@ -37,6 +37,7 @@ import { HatchPanel } from './ui/HatchPanel'
 import { RealtimeMenu } from './ui/RealtimeMenu'
 import { useStore } from './store/store'
 import { canAutosave } from './core/io/autosave'
+import { sysvars } from './core/commands/sysvars'
 
 /**
  * ¿Se está editando texto ahora mismo? El foco de Cota vive en la línea de comandos, así que si se
@@ -151,6 +152,21 @@ export default function App() {
     }, 120_000)
     return () => clearInterval(id)
   }, [autosave])
+
+  // SAVETIME (CAD clásico): cada N minutos con cambios, una copia de recuperación `.sv$` junto al dibujo en la carpeta
+  // local (no pisa el dibujo ni cuenta como guardado). Se mira cada 30 s para seguir el valor de SAVETIME.
+  useEffect(() => {
+    let since = performance.now()
+    let rev = useStore.getState().doc.revision
+    const id = setInterval(() => {
+      const s = useStore.getState()
+      if (!sysvars.SAVETIME || s.doc.revision === rev || performance.now() - since < sysvars.SAVETIME * 60_000) return
+      since = performance.now()
+      rev = s.doc.revision
+      void s.writeRecovery()
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [])
 
   // App instalable: el botón aparece cuando el navegador ofrece instalarla.
   const [installable, setInstallable] = useState(canInstall())

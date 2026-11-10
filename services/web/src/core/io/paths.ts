@@ -6,6 +6,10 @@ export const DRAWING_EXT = '.cota'
 /** Extensión de los dibujos hechos antes del nombre Cota: se siguen abriendo. */
 export const LEGACY_DRAWING_EXT = '.ccad'
 export const DRAWING_EXTS = [DRAWING_EXT, LEGACY_DRAWING_EXT]
+/** Copias de un dibujo: la versión anterior al guardar (`.bak`, ISAVEBAK) y la de recuperación (`.sv$`, SAVETIME). */
+export const BACKUP_EXTS = ['.bak', '.sv$']
+/** ¿Es una copia `.bak`/`.sv$` (se abre como un dibujo sin guardar)? */
+export const isBackupFile = (fileName: string): boolean => BACKUP_EXTS.includes(extensionOf(fileName))
 
 /** ¿Es un dibujo nativo (`.cota` o `.ccad`)? */
 export const isDrawingFile = (fileName: string): boolean => DRAWING_EXTS.includes(extensionOf(fileName))
@@ -43,7 +47,7 @@ export function splitDrawingPath(path: string): DrawingPath {
 /** Quita la extensión conocida (`.cota`/`.ccad`/`.dxf`), respetando nombres con puntos. */
 export function stripExtension(name: string): string {
   const lower = name.toLowerCase()
-  for (const ext of DRAWING_EXTS) if (lower.endsWith(ext)) return name.slice(0, -ext.length)
+  for (const ext of [...DRAWING_EXTS, ...BACKUP_EXTS]) if (lower.endsWith(ext)) return name.slice(0, -ext.length)
   if (lower.endsWith('.dxf')) return name.slice(0, -4)
   return name
 }

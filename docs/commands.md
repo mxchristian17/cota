@@ -281,6 +281,8 @@ Type the name to see or change the value.
 | `ZOOMFACTOR` | Mouse wheel zoom step (3–100) |
 | `RENDERMINPX` | Draw solids smaller than this many pixels as a point (0 = off) |
 | `ZOOMWHEEL` | Mouse wheel direction: 0 = forward zooms in, 1 = forward zooms out |
+| `ISAVEBAK` | Keep the previous version as a .bak file when saving to the local folder (0/1) |
+| `SAVETIME` | Minutes between automatic recovery copies (.sv$) in the local folder (0 = off) |
 | `PDMODE` | Point style: 0 dot, 1 none, 2 plus, 3 cross, 4 tick; add 32 for a circle and 64 for a square |
 | `PDSIZE` | Point size: 0 = 5% of the view, negative = % of the view, positive = drawing units |
 | `DIMTEXTSIZE` | Set the dimension text height for new dimensions (DIMTXT override) |

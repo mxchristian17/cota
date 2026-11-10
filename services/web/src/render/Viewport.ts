@@ -1393,6 +1393,14 @@ export class Viewport {
     return len > 1e-9 ? { origin: o, dir: { x: v.x / len, y: v.y / len, z: v.z / len } } : null
   }
 
+  /**
+   * Color de las aristas de sólidos y mallas según el estilo visual: negras en Shaded with edges; en Shaded, un tono
+   * más oscuro de la pieza (se distinguen las piezas sin recargar); en alambre y oculto, el de la pieza.
+   */
+  private edgeHex(hex: string): string {
+    return this.visualStyle === 'shadedEdges' ? '#111111' : this.visualStyle === 'shaded' ? darkerHex(hex, 0.55) : hex
+  }
+
   /** Rayo del cursor en mundo, para los snaps de caras de sólidos. */
   private cursorRay(): { o: Vec3; d: Vec3 } | undefined {
     if (!this.lastClient) return undefined
@@ -1489,10 +1497,24 @@ export class Viewport {
   private constructionPlane(): THREE.Plane {
     // UCS dinámica: el cursor se mueve sobre la cara plana del sólido que tiene debajo.
     const u = this.ducsFace?.ucs ?? null
-    const o = u ? u.origin : this.ucs.origin
+    const base = !u && this.data?.pointPrompt ? this.data.snapBase : null
+    const o = u ? u.origin : (base ?? this.ucs.origin)
     const origin = new THREE.Vector3(o.x, o.y, o.z)
-    const n = u ? ucsZ(u) : this.constructionNormal()
+    const n = u ? ucsZ(u) : base ? this.basePlaneNormal() : this.constructionNormal()
     return new THREE.Plane().setFromNormalAndCoplanarPoint(new THREE.Vector3(n[0], n[1], n[2]), origin)
+  }
+
+  /**
+   * Con punto base (MOVE, COPY, el segundo punto de una línea…) el cursor corre por el plano que pasa por él: el XY de la
+   * UCS a la altura del punto (lo que se mueve no salta a z = 0 al orbitar) o, si la vista está casi de costado
+   * (menos de ~20° sobre ese plano), el plano vertical de la UCS que más mira a la cámara.
+   */
+  private basePlaneNormal(): Vec3 {
+    const v = this.controller.viewDirection()
+    const along = (a: Vec3) => Math.abs(a[0] * v.x + a[1] * v.y + a[2] * v.z)
+    const z = ucsZ(this.ucs)
+    if (along(z) >= 0.34) return z
+    return along(this.ucs.x) >= along(this.ucs.y) ? this.ucs.x : this.ucs.y
   }
 
   screenToWorld(clientX: number, clientY: number): Pt {
@@ -2320,7 +2342,8 @@ export class Viewport {
   ): THREE.Object3D {
     const style = this.visualStyle
     const showMesh = style === 'shaded' || style === 'shadedEdges' || style === 'hidden'
-    const showEdges = style !== 'shaded'
+    // También en Shaded (con un tono más oscuro de la pieza): sin aristas, piezas del mismo color no se distinguían.
+    const showEdges = true
     const group = new THREE.Object3D() // no Group: ver buildDimension (orden de capas)
     group.userData.entityId = id
 
@@ -2338,7 +2361,7 @@ export class Viewport {
     }
     if (showEdges) {
       // Aristas oscuras sobre superficie sombreada; en wireframe/hidden, del color de la entidad.
-      const edgeColor = selected ? HIGHLIGHT : style === 'shadedEdges' ? 0x111111 : color
+      const edgeColor = selected ? HIGHLIGHT : new THREE.Color(this.edgeHex('#' + color.getHexString()))
       let eg: THREE.BufferGeometry
       if (edgePositions) {
         eg = new THREE.BufferGeometry()
@@ -2464,7 +2487,7 @@ export class Viewport {
     }
     const style = this.visualStyle
     const showMesh = style === 'shaded' || style === 'shadedEdges' || style === 'hidden'
-    const showEdges = style !== 'shaded'
+    const showEdges = true // en Shaded, más oscuras que la pieza (ver `edgeHex`)
     // Batches por material (clave = color): fusionan la geometría estática (no seleccionada) para bajar
     // de miles de draw calls a unas pocas decenas → orbit fluido en modelos pesados. `ranges` mapea
     // cada tramo de vértices a su entityId (para el pick).
@@ -2567,7 +2590,7 @@ export class Viewport {
             b.verts += m.pos.length / 3
           }
           if (showEdges && m.edges.length) {
-            const b = getEdges(`${ro}|${style === 'shadedEdges' ? '#111111' : colorHex}${lwKey(layer, e.lineWeight)}`)
+            const b = getEdges(`${ro}|${this.edgeHex(colorHex)}${lwKey(layer, e.lineWeight)}`)
             b.ranges.push({ s: b.n, id: e.id })
             b.parts.push(m.edges)
             b.n += m.edges.length / 3
@@ -2590,7 +2613,7 @@ export class Viewport {
           }
           if (showEdges) {
             const pa: ArrayLike<number> = solidEdgePositions(e.props)
-            const b = getEdges(`${ro}|${style === 'shadedEdges' ? '#111111' : colorHex}${lwKey(layer, e.lineWeight)}`)
+            const b = getEdges(`${ro}|${this.edgeHex(colorHex)}${lwKey(layer, e.lineWeight)}`)
             b.ranges.push({ s: b.n, id: e.id })
             b.parts.push(this.origin.lengthSq() ? this.shifted(pa) : pa)
             b.n += pa.length / 3
@@ -2956,7 +2979,7 @@ export class Viewport {
     const dir = new THREE.Vector3()
     cam.getWorldDirection(dir)
     const q = (v: number) => Math.round(v * 2000)
-    const key = d && style !== 'shaded' ? `${style}|${this.lastRevision}|${this.lastSelectionKey}|${q(dir.x)},${q(dir.y)},${q(dir.z)}${persp ? `|${q(cam.position.x)},${q(cam.position.y)},${q(cam.position.z)}` : ''}` : ''
+    const key = d ? `${style}|${this.lastRevision}|${this.lastSelectionKey}|${q(dir.x)},${q(dir.y)},${q(dir.z)}${persp ? `|${q(cam.position.x)},${q(cam.position.y)},${q(cam.position.z)}` : ''}` : ''
     if (key === this.silhouetteKey) return
     if (key && this.dragging && this.silhouetteMs > 30) return // pesado: se actualiza al terminar de orbitar
     this.silhouetteKey = key
@@ -2974,7 +2997,7 @@ export class Viewport {
       const topo = solidTopology(e.props)
       if (!topo) continue
       const { verts, normals, triFace, links } = topo
-      const hex = sel.has(e.id) ? '#' + new THREE.Color(HIGHLIGHT).getHexString() : style === 'shadedEdges' ? '#111111' : this.layerHex(layer, e.color)
+      const hex = sel.has(e.id) ? '#' + new THREE.Color(HIGHLIGHT).getHexString() : this.edgeHex(this.layerHex(layer, e.color))
       let out = byColor.get(hex)
       if (!out) byColor.set(hex, (out = []))
       for (const [ta, tb, a, b] of links) {
@@ -3672,8 +3695,13 @@ export class Viewport {
 
 /** Color de la textura de rosca: el de la pieza, oscurecido. */
 function threadHex(hex: string): string {
+  return darkerHex(hex, 0.45)
+}
+
+/** El color `hex` oscurecido (cada canal × `k`). */
+function darkerHex(hex: string, k: number): string {
   const n = parseInt(hex.replace('#', '').slice(0, 6), 16)
   if (!Number.isFinite(n)) return '#555555'
-  const k = (v: number) => Math.round(v * 0.45).toString(16).padStart(2, '0')
-  return `#${k((n >> 16) & 255)}${k((n >> 8) & 255)}${k(n & 255)}`
+  const c = (v: number) => Math.round(v * k).toString(16).padStart(2, '0')
+  return `#${c((n >> 16) & 255)}${c((n >> 8) & 255)}${c(n & 255)}`
 }

@@ -70,7 +70,8 @@ export interface CommandEngineDeps {
   onChange: () => void
   onOpenHelp: () => void
   onBeforeCommand: (name: string) => void
-  onAfterCommand: (name: string) => void
+  /** `discard`: el comando se interrumpió para rehacerlo (Ctrl+Z a mitad): lo que cambió se descarta, sin paso de deshacer. */
+  onAfterCommand: (name: string, discard?: boolean) => void
 }
 
 type PreviewFn = (cursor: Pt) => PreviewShape[]
@@ -86,6 +87,9 @@ type SelArea = 'Window' | 'Crossing' | 'WPolygon' | 'CPolygon' | 'Fence'
 export function stripUnderscore(text: string): string {
   return text.trim().replace(/^_+/, '')
 }
+
+/** Una entrada de un comando, para rehacerlo: texto, punto (con su pick) u objetos elegidos. */
+type Step = string | { pt: Pt; snapped: boolean; pick?: PointPick } | { ids: string[] }
 
 type Pending =
   | {
@@ -177,8 +181,14 @@ export class CommandEngine {
   private runPoints = 0
   private runSelected = false
   private ducsRun = false
-  private replay: Array<string | Pt> = []
-  private restart: { name: string; ucs: Ucs; replay: Array<string | Pt> } | null = null
+  private replay: Step[] = []
+  private restart: { name: string; ucs: Ucs; replay: Step[] } | null = null
+  /**
+   * Entradas del comando en curso en orden (texto, punto con su pick, objetos elegidos): Ctrl+Z a mitad de un comando
+   * lo rehace con todas menos la última (vuelve a la etapa anterior).
+   */
+  private runSteps: Step[] = []
+  private backRun: { name: string; replay: Step[] } | null = null
   /** Hubo Esc en el comando en curso: un prompt más lo termina (ver `CommandCancelled`). */
   private escaped = false
 
@@ -309,8 +319,12 @@ export class CommandEngine {
     // Reinicio por UCS dinámica: se vuelven a dar las entradas que el usuario ya había dado.
     if (this.pending && this.replay.length) {
       const next = this.replay.shift()!
-      // El texto se vuelve a teclear; el clic se repite como punto (sin eco, como un clic).
-      setTimeout(() => (typeof next === 'string' ? this.submitText(next) : this.submitPoint(next, true)), 0)
+      // El texto se vuelve a teclear; el clic se repite como punto (sin eco, como un clic); los objetos, ya elegidos.
+      setTimeout(() => {
+        if (typeof next === 'string') this.submitText(next)
+        else if ('ids' in next) this.resolveSelection(next.ids)
+        else this.submitPoint(next.pt, next.snapped, next.pick)
+      }, 0)
     }
   }
 
@@ -407,6 +421,7 @@ export class CommandEngine {
   submitText(text: string): void {
     if (this.pending) {
       this.runInputs.push(text)
+      if (this.pending.type !== 'selection') this.runSteps.push(text) // de una selección se guarda el resultado
       this.echo(text.trim())
       this.resolveFromText(text)
       return
@@ -431,6 +446,7 @@ export class CommandEngine {
   submitPoint(p: Pt, snapped = false, pick?: PointPick): void {
     const pending = this.pending
     if (!pending) return
+    if (pending.type !== 'selection' && pending.type !== 'string') this.runSteps.push({ pt: { ...p }, snapped, ...(pick ? { pick } : {}) })
     this.osnapOverrideKind = null // el override se consume con la captura
     if (pending.type !== 'selection' && pending.type !== 'string') this.echo()
     if (pending.type === 'point') {
@@ -502,7 +518,7 @@ export class CommandEngine {
     // UCS dinámica: el primer punto sobre una cara plana reinicia el comando en la UCS de esa cara (el
     // punto y lo ya tecleado se repiten); al terminar vuelve la UCS anterior.
     if (face && this.ducsEligible && this.activeCommand) {
-      this.restart = { name: this.activeCommand.name, ucs: face, replay: [...this.runInputs, { ...world }] }
+      this.restart = { name: this.activeCommand.name, ucs: face, replay: [...this.runInputs, { pt: { ...world }, snapped: true }] }
       this.cancel(true)
       return
     }
@@ -544,6 +560,34 @@ export class CommandEngine {
   }
 
   /** Cancelación (ESC); `quiet` = sin `*Cancel*` (el reinicio de la UCS dinámica). */
+  /**
+   * Ctrl+Z (o U) a mitad de un comando: vuelve a la etapa anterior. Si el prompt ofrece `Undo` (PLINE, LINE…) lo usa;
+   * si no, el comando se rehace con todas las entradas menos la última. Sin entradas todavía, no hace nada.
+   */
+  stepBack(): boolean {
+    const p = this.pending
+    const cmd = this.activeCommand
+    if (!p || !cmd) return false
+    const undo = p.type === 'point' || p.type === 'distance' || p.type === 'angle' ? p.keywords.find((k) => k.toLowerCase() === 'undo') : undefined
+    if (undo) {
+      this.submitText(undo)
+      return true
+    }
+    if (!this.runSteps.length) return true
+    this.backRun = { name: cmd.name, replay: this.runSteps.slice(0, -1) }
+    this.cancel(true)
+    return true
+  }
+
+  /** Responde un prompt de selección con objetos ya elegidos (al rehacer un comando). */
+  private resolveSelection(ids: string[]): void {
+    const sel = this.pending
+    if (sel?.type !== 'selection') return
+    this.pending = null
+    this.runSteps.push({ ids: [...ids] })
+    sel.resolve([...ids])
+  }
+
   cancel(quiet = false): void {
     const pending = this.pending
     if (!pending) return
@@ -578,6 +622,7 @@ export class CommandEngine {
     this.selectionUsed = false
     this.preselectionTaken = false
     this.runInputs = []
+    this.runSteps = []
     this.runPoints = 0
     this.runSelected = false
     const u = this.deps.currentUcs()
@@ -605,9 +650,21 @@ export class CommandEngine {
         this.picked = []
         this.deps.onPicked?.([])
       }
-      this.deps.onAfterCommand(cmd.name)
+      // Ctrl+Z a mitad del comando: lo hecho se descarta (el comando se rehace hasta la etapa anterior).
+      this.deps.onAfterCommand(cmd.name, !!this.backRun)
       this.setPrompt('')
       this.deps.onChange()
+    }
+    const back = this.backRun
+    if (back) {
+      this.backRun = null
+      this.replay = [...back.replay]
+      try {
+        await this.executeByName(back.name, { silent: true })
+      } finally {
+        this.replay = []
+      }
+      return
     }
     const r = this.restart
     if (r) {
@@ -617,7 +674,7 @@ export class CommandEngine {
   }
 
   /** Corre el comando de nuevo en la UCS de una cara (temporal) y restaura la anterior al terminar. */
-  private async runInFaceUcs(r: { name: string; ucs: Ucs; replay: Array<string | Pt> }): Promise<void> {
+  private async runInFaceUcs(r: { name: string; ucs: Ucs; replay: Step[] }): Promise<void> {
     const app = this.ctx.app
     const before = app.getUcs?.() ?? null
     const beforeName = app.ucsName?.() ?? undefined
@@ -769,6 +826,7 @@ export class CommandEngine {
     if (pre.length > 0) {
       this.preselectionTaken = true
       this.previousSet = [...pre]
+      this.runSteps.push({ ids: [...pre] })
       return Promise.resolve([...pre])
     }
     return new Promise<string[] | null>((resolve) => {
@@ -877,6 +935,7 @@ export class CommandEngine {
     }
     if (trimmed === '') {
       this.pending = null
+      this.runSteps.push({ ids: [...sel.ids] })
       sel.resolve([...sel.ids])
       return
     }
@@ -985,6 +1044,13 @@ export class CommandEngine {
     if (kw) {
       this.pending = null
       pending.resolve({ kind: 'keyword', keyword: kw })
+      return
+    }
+
+    // U (o UNDO) en un prompt sin opción Undo: vuelve a la etapa anterior del comando, como Ctrl+Z.
+    if (/^(u|undo)$/i.test(trimmed)) {
+      this.runSteps.pop() // la propia U
+      this.stepBack()
       return
     }
 

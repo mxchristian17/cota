@@ -606,9 +606,12 @@ test.describe('Imágenes de fondo', () => {
       .toBe(true)
     expect(await st<number>(page, 'return s.selection.length')).toBe(1)
     // Deshacer la deja sin cargar; soltar el archivo sobre la ventana la vuelve a cargar.
+    // (Esc la deselecciona: el primer U vuelve a esa selección, el segundo deshace la carga.)
     await page.keyboard.press('Escape')
-    await input.fill('U')
-    await page.keyboard.press('Enter')
+    for (let k = 0; k < 2; k++) {
+      await input.fill('U')
+      await page.keyboard.press('Enter')
+    }
     expect(await st<boolean>(page, "return !s.doc.entities.find((e) => e.type === 'IMAGE').props.data")).toBe(true)
     const dt = await page.evaluateHandle((b64) => {
       const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))

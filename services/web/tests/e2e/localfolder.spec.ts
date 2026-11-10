@@ -149,6 +149,27 @@ test.describe('Cota carpeta local del sistema', () => {
     expect(JSON.parse((await readMem(page, 'tercera.cota')) as string).entities).toHaveLength(3)
   })
 
+  test('ISAVEBAK: la versión anterior queda como .bak; SAVETIME deja una copia .sv$; las dos se abren', async ({ page }) => {
+    await typeCmd(page, 'OPENFOLDER')
+    await typeCmd(page, 'LINE', '0,0', '#50,0', '')
+    await typeCmd(page, 'SAVE', '')
+    expect(await readMem(page, 'drawing1.bak')).toBeNull() // el primer guardado no pisa nada
+    await typeCmd(page, 'CIRCLE', '0,0', '10', 'SAVE', '')
+    expect(JSON.parse((await readMem(page, 'drawing1.cota')) as string).entities).toHaveLength(2)
+    expect(JSON.parse((await readMem(page, 'drawing1.bak')) as string).entities).toHaveLength(1)
+    // La copia de recuperación (la que hace SAVETIME cada N minutos) no pisa el dibujo.
+    await typeCmd(page, 'CIRCLE', '30,0', '5')
+    await page.evaluate(() => (window as unknown as { __cotaStore: { getState: () => { writeRecovery: () => Promise<void> } } }).__cotaStore.getState().writeRecovery())
+    await expect(page.locator('.cmd-output')).toContainText('Automatic save to "drawing1.sv$"')
+    expect(JSON.parse((await readMem(page, 'drawing1.sv$')) as string).entities).toHaveLength(3)
+    expect(JSON.parse((await readMem(page, 'drawing1.cota')) as string).entities).toHaveLength(2)
+    // Abrir el .bak: es el dibujo sin guardar; SAVE lo vuelve a escribir como drawing1.cota.
+    await page.evaluate(() => (window as unknown as { __cotaStore: { getState: () => { openLocalDrawing: (p: string) => Promise<void> } } }).__cotaStore.getState().openLocalDrawing('drawing1.bak'))
+    await expect(page.locator('.cmd-output')).toContainText('SAVE writes it as "drawing1.cota"')
+    await typeCmd(page, 'SAVE', '')
+    expect(JSON.parse((await readMem(page, 'drawing1.cota')) as string).entities).toHaveLength(1)
+  })
+
   test('guarda en subcarpetas según la ruta del dibujo y sobrescribe el mismo archivo', async ({ page }) => {
     await typeCmd(page, 'OPENFOLDER')
     await typeCmd(page, 'CIRCLE', '0,0', '10')

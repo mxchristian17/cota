@@ -48,3 +48,24 @@ describe('ORTHO y esquinas opuestas', () => {
     expect((h.ofType('LINE')[0].props as { end: number[] }).end).toEqual([10, 20, 0])
   })
 })
+
+describe('Ctrl+Z / U a mitad de un comando', () => {
+  it('BOX: U en la altura vuelve a la esquina opuesta; el resultado usa la nueva', async () => {
+    const h = makeEngine()
+    await h.run('BOX', '#0,0', '#10,10', 'U', '#20,5', '3')
+    const b = h.ofType('SOLID3D')
+    expect(b.length).toBe(1)
+    expect((b[0].props as { width: number; depth: number }).width).toBe(20)
+    expect((b[0].props as { depth: number }).depth).toBe(5)
+  })
+
+  it('stepBack: el prompt con Undo propio (PLINE) lo usa', async () => {
+    const h = makeEngine()
+    await h.run('PLINE', '#0,0', '#10,0', '#10,10')
+    expect(h.engine.stepBack()).toBe(true)
+    await new Promise((r) => setTimeout(r, 20))
+    await h.run('#0,10', '')
+    const p = h.ofType('POLYLINE')[0].props as { vertices: number[][] }
+    expect(p.vertices).toEqual([[0, 0, 0], [10, 0, 0], [0, 10, 0]])
+  })
+})

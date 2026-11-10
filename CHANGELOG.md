@@ -4,6 +4,25 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.32.0] — 2026-11-09
+
+### Added
+- **Undo one step inside a command**: Ctrl+Z (or typing `U`) in the middle of a command goes back to its previous
+  step: the last point of a polyline, the opposite corner of a box, and so on. Commands with their own Undo option
+  (PLINE, LINE...) use it; the others are redone with all the input except the last one.
+- **Selection in undo**: each change of selection you make (picking, a window, Esc) is an undo step, so Ctrl+Z brings
+  back the previous selection.
+- **`.bak` and recovery copies** (as classic CAD's ISAVEBAK and SAVETIME): saving to the local folder keeps the
+  previous version as `name.bak`, and every `SAVETIME` minutes (10 by default, 0 = off) a recovery copy `name.sv$` is
+  written next to the drawing without touching it. Both appear in OPEN and open as an unsaved drawing.
+- **Edges in the Shaded visual style**: solids and meshes now show their edges in a darker tone of their own color,
+  so parts of the same color are told apart (Shaded with edges keeps black edges).
+
+### Changed
+- **Moving in 3D views**: with a base point (MOVE, COPY, the next point of a line...), the cursor runs on the plane
+  through that point: objects keep their height while you orbit instead of dropping to the XY plane, and in a view
+  close to the side the cursor uses the vertical UCS plane that faces the camera.
+
 ## [2.31.0] — 2026-11-09
 
 ### Added
