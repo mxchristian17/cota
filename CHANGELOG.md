@@ -4,6 +4,13 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.33.8] — 2026-11-10
+
+### Documentation
+- **Object snaps and tracking reference**: every snap with what it snaps to, its abbreviation and whether it runs by
+  default; the point modifiers M2P and FROM; object, polar and ortho tracking with typed distances; and how snaps
+  work on the real edges and faces of 3D solids.
+
 ## [2.33.7] — 2026-11-10
 
 ### Documentation

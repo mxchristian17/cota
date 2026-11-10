@@ -25,6 +25,7 @@ side navigation; each link below it is a page, in reading order.
 - [Help commands](reference/help.md)
 - [Command-line versions](reference/command-line.md)
 - [System variables](reference/variables.md)
+- [Object snaps and tracking](reference/object-snaps.md)
 - [DWG and DXF coverage](dwg-coverage.md)
 
 ## Host and contribute

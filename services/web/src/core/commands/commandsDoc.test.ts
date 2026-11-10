@@ -12,9 +12,12 @@ import { VARIABLE_COMMANDS } from './registry'
 const DOC = fileURLToPath(new URL('../../../../../docs/commands.md', import.meta.url))
 const REF = fileURLToPath(new URL('../../../../../docs/reference/', import.meta.url))
 
-/** Páginas de la referencia de comandos (`docs/reference/*.md`): archivo → contenido. `variables.md` va aparte. */
+/** Páginas de la referencia que no son de comandos (sus títulos son temas). */
+const TOPIC_PAGES = new Set(['variables.md', 'object-snaps.md'])
+
+/** Páginas de la referencia de comandos (`docs/reference/*.md`): archivo → contenido. */
 function referencePages(): Map<string, string> {
-  return new Map(readdirSync(REF).filter((f) => f.endsWith('.md') && f !== 'variables.md').map((f) => [f, readFileSync(REF + f, 'utf8')]))
+  return new Map(readdirSync(REF).filter((f) => f.endsWith('.md') && !TOPIC_PAGES.has(f)).map((f) => [f, readFileSync(REF + f, 'utf8')]))
 }
 
 const variablesPage = (): string => readFileSync(REF + 'variables.md', 'utf8')
