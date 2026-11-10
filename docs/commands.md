@@ -144,34 +144,34 @@ Every command can be typed in the command line (aliases too) or picked from the 
 
 | Command | Aliases | What it does |
 | --- | --- | --- |
-| `LINE` | `L` | Draw connected line segments (closing converts them to a closed polyline) |
-| `XLINE` | `XL` | Construction line, infinite in both directions |
-| `RAY` | — | Ray: a line infinite in one direction |
-| `PLINE` | `PL` | Draw a polyline with straight and arc segments (Arc/Close/Undo) |
-| `POLYGON` | `POL` | Draw a regular polygon (center + inscribed/circumscribed radius, or Edge) |
-| `RECTANGLE` | `REC`, `RECT`, `RECTANG` | Draw a rectangle by two opposite corners [Dimensions] |
-| `ARC` | `A` | Draw an arc: 3 points, or Start/Center/End with Angle, chord Length, Direction or Radius |
-| `CIRCLE` | `C` | Draw a circle: center + radius/Diameter, 3P (points or tangents), 2P or Ttr (tan tan radius) |
-| `SPLINE` | `SPL` | Draw a spline through control points |
-| `ELLIPSE` | `EL` | Draw an ellipse (axis endpoints + other axis distance, or Center) |
-| `POINT` | `PO` | Place a point object (its look is set by PDMODE and PDSIZE; it snaps as NODE) |
-| `DIVIDE` | `DIV` | Place points that divide an object into equal-length segments |
-| `MEASURE` | `ME` | Place points at measured intervals along an object, from the end nearest the pick |
-| `BLOCK` | `B` | Create a block definition from selected objects (and insert a reference) |
-| `ATTDEF` | `ATT`, `-ATTDEF` | Define a block attribute (tag, prompt, default value, Invisible/Constant/Preset) |
-| `HATCH` | `H`, `BH`, `BHATCH` | Fill an enclosed area with a hatch pattern, solid fill or user lines |
-| `BOUNDARY` | `BO`, `BPOLY`, `-BOUNDARY` | Create closed polylines from the area around a picked point [Advanced options: boundary set, islands, gap tolerance] |
-| `TEXT` | `DT`, `DTEXT` | Create single-line text on its baseline (Justify: Left/Center/Right); each Enter starts a new line, an empty line finishes. %%c = Ø, %%d = °, %%p = ± |
-| `MTEXT` | `MT`, `T` | Create multiline text from its top-left corner (enter lines; empty line finishes). %%c = Ø, %%d = °, %%p = ± |
-| `BOX` | — | Create a parametric box (two base corners + height) |
-| `CYLINDER` | `CYL` | Create a parametric cylinder (base center + radius + height) |
-| `CONE` | — | Create a parametric cone or truncated cone (base center + radius + height + top radius) |
-| `SPHERE` | `SPH` | Create a parametric sphere (center + radius) |
-| `TORUS` | `TOR` | Create a parametric torus (center + radius + tube radius) |
-| `EXTRUDE` | `EXT` | Extrude a closed 2D profile into a solid (a circle becomes a parametric cylinder) |
-| `REVOLVE` | `REV` | Revolve closed profiles about an axis into solids [Object/X/Y/Z, STart angle/Reverse] |
-| `FLATSHOT` | — | Create a 2D representation of the 3D solids in the current view |
-| `SOLPROF` | — | Create profile images of 3D solids for a layout viewport (visible and hidden lines) |
+| [`LINE`](reference/draw.md#line) | `L` | Draw connected line segments (closing converts them to a closed polyline) |
+| [`XLINE`](reference/draw.md#xline) | `XL` | Construction line, infinite in both directions |
+| [`RAY`](reference/draw.md#ray) | — | Ray: a line infinite in one direction |
+| [`PLINE`](reference/draw.md#pline) | `PL` | Draw a polyline with straight and arc segments (Arc/Close/Undo) |
+| [`POLYGON`](reference/draw.md#polygon) | `POL` | Draw a regular polygon (center + inscribed/circumscribed radius, or Edge) |
+| [`RECTANGLE`](reference/draw.md#rectangle) | `REC`, `RECT`, `RECTANG` | Draw a rectangle by two opposite corners [Dimensions] |
+| [`ARC`](reference/draw.md#arc) | `A` | Draw an arc: 3 points, or Start/Center/End with Angle, chord Length, Direction or Radius |
+| [`CIRCLE`](reference/draw.md#circle) | `C` | Draw a circle: center + radius/Diameter, 3P (points or tangents), 2P or Ttr (tan tan radius) |
+| [`SPLINE`](reference/draw.md#spline) | `SPL` | Draw a spline through control points |
+| [`ELLIPSE`](reference/draw.md#ellipse) | `EL` | Draw an ellipse (axis endpoints + other axis distance, or Center) |
+| [`POINT`](reference/draw.md#point) | `PO` | Place a point object (its look is set by PDMODE and PDSIZE; it snaps as NODE) |
+| [`DIVIDE`](reference/draw.md#divide) | `DIV` | Place points that divide an object into equal-length segments |
+| [`MEASURE`](reference/draw.md#measure) | `ME` | Place points at measured intervals along an object, from the end nearest the pick |
+| [`BLOCK`](reference/draw.md#block) | `B` | Create a block definition from selected objects (and insert a reference) |
+| [`ATTDEF`](reference/draw.md#attdef) | `ATT`, `-ATTDEF` | Define a block attribute (tag, prompt, default value, Invisible/Constant/Preset) |
+| [`HATCH`](reference/draw.md#hatch) | `H`, `BH`, `BHATCH` | Fill an enclosed area with a hatch pattern, solid fill or user lines |
+| [`BOUNDARY`](reference/draw.md#boundary) | `BO`, `BPOLY`, `-BOUNDARY` | Create closed polylines from the area around a picked point [Advanced options: boundary set, islands, gap tolerance] |
+| [`TEXT`](reference/draw.md#text) | `DT`, `DTEXT` | Create single-line text on its baseline (Justify: Left/Center/Right); each Enter starts a new line, an empty line finishes. %%c = Ø, %%d = °, %%p = ± |
+| [`MTEXT`](reference/draw.md#mtext) | `MT`, `T` | Create multiline text from its top-left corner (enter lines; empty line finishes). %%c = Ø, %%d = °, %%p = ± |
+| [`BOX`](reference/draw.md#box) | — | Create a parametric box (two base corners + height) |
+| [`CYLINDER`](reference/draw.md#cylinder) | `CYL` | Create a parametric cylinder (base center + radius + height) |
+| [`CONE`](reference/draw.md#cone) | — | Create a parametric cone or truncated cone (base center + radius + height + top radius) |
+| [`SPHERE`](reference/draw.md#sphere) | `SPH` | Create a parametric sphere (center + radius) |
+| [`TORUS`](reference/draw.md#torus) | `TOR` | Create a parametric torus (center + radius + tube radius) |
+| [`EXTRUDE`](reference/draw.md#extrude) | `EXT` | Extrude a closed 2D profile into a solid (a circle becomes a parametric cylinder) |
+| [`REVOLVE`](reference/draw.md#revolve) | `REV` | Revolve closed profiles about an axis into solids [Object/X/Y/Z, STart angle/Reverse] |
+| [`FLATSHOT`](reference/draw.md#flatshot) | — | Create a 2D representation of the 3D solids in the current view |
+| [`SOLPROF`](reference/draw.md#solprof) | — | Create profile images of 3D solids for a layout viewport (visible and hidden lines) |
 
 ## Dimension menu
 

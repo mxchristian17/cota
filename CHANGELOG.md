@@ -4,6 +4,13 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.33.1] — 2026-11-09
+
+### Documentation
+- **Draw command reference**: every command of the Draw menu explained in full: what it does, its prompts step by
+  step as Cota prints them, every option, a working example to type and notes. The command list links each command
+  to its section; aliases and menu locations are generated from the program, so they never go stale.
+
 ## [2.33.0] — 2026-11-09
 
 ### Added

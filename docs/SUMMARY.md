@@ -13,6 +13,7 @@ side navigation; each link below it is a page, in reading order.
 
 ## Reference
 - [Commands and variables](commands.md)
+- [Draw commands](reference/draw.md)
 - [DWG and DXF coverage](dwg-coverage.md)
 
 ## Host and contribute
