@@ -24,6 +24,7 @@ side navigation; each link below it is a page, in reading order.
 - [Insert commands](reference/insert.md)
 - [Help commands](reference/help.md)
 - [Command-line versions](reference/command-line.md)
+- [System variables](reference/variables.md)
 - [DWG and DXF coverage](dwg-coverage.md)
 
 ## Host and contribute

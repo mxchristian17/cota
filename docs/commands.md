@@ -271,101 +271,101 @@ Dash versions run without dialogs, for scripts and power users.
 
 ## System variables
 
-Type the name to see or change the value.
+Type the name to see or change the value. Each one is explained in [System variables](reference/variables.md).
 
 | Variable | What it controls |
 | --- | --- |
-| `OFFSETGAPTYPE` | Gap fill when offsetting polylines: 0 extend, 1 fillet, 2 chamfer |
-| `POLARANG` | Polar tracking angle increment in degrees (POLAR / F10 tracks multiples of it from the base point) |
-| `PICKSTYLE` | Group selection: 1 = picking a grouped object selects its group, 0 = single objects (Ctrl+Shift+A toggles) |
-| `LWDISPLAY` | Show lineweights in the model (ON/OFF); layouts always show them |
-| `ZOOMFACTOR` | Mouse wheel zoom step (3–100) |
-| `RENDERMINPX` | Draw solids smaller than this many pixels as a point (0 = off) |
-| `ZOOMWHEEL` | Mouse wheel direction: 0 = forward zooms in, 1 = forward zooms out |
-| `ISAVEBAK` | Keep the previous version as a .bak file when saving to the local folder (0/1) |
-| `SAVETIME` | Minutes between automatic recovery copies (.sv$) in the local folder (0 = off) |
-| `PDMODE` | Point style: 0 dot, 1 none, 2 plus, 3 cross, 4 tick; add 32 for a circle and 64 for a square |
-| `PDSIZE` | Point size: 0 = 5% of the view, negative = % of the view, positive = drawing units |
-| `DIMTEXTSIZE` | Set the dimension text height for new dimensions (DIMTXT override) |
-| `DIMASSOC` | Associativity of new dimensions: 2 = associative, 1 = non-associative |
-| `CANNOSCALE` | Annotation scale of model space (annotative dimensions keep their paper size): 1:1, 1:50, 1:100… |
-| `DIMCLRD` | Dimension variable: Dimension line color |
-| `DIMLWD` | Dimension variable: Dimension line lineweight |
-| `DIMDLE` | Dimension variable: Extend beyond ticks |
-| `DIMDLI` | Dimension variable: Baseline spacing |
-| `DIMSD1` | Dimension variable: Suppress dim line 1 |
-| `DIMSD2` | Dimension variable: Suppress dim line 2 |
-| `DIMCLRE` | Dimension variable: Extension line color |
-| `DIMLWE` | Dimension variable: Extension line lineweight |
-| `DIMEXE` | Dimension variable: Extend beyond dim lines |
-| `DIMEXO` | Dimension variable: Offset from origin |
-| `DIMFXLON` | Dimension variable: Fixed length extension lines |
-| `DIMFXL` | Dimension variable: Fixed length |
-| `DIMSE1` | Dimension variable: Suppress ext line 1 |
-| `DIMSE2` | Dimension variable: Suppress ext line 2 |
-| `DIMBLK1` | Dimension variable: First arrowhead |
-| `DIMBLK2` | Dimension variable: Second arrowhead |
-| `DIMLDRBLK` | Dimension variable: Leader arrowhead |
-| `DIMASZ` | Dimension variable: Arrow size |
-| `DIMCEN` | Dimension variable: Center marks (− = lines) |
-| `DIMARCSYM` | Dimension variable: Arc length symbol |
-| `DIMJOGANG` | Dimension variable: Radius jog angle |
-| `DIMCLRT` | Dimension variable: Text color |
-| `DIMTFILL` | Dimension variable: Fill color |
-| `DIMTXT` | Dimension variable: Text height |
-| `DIMGAP` | Dimension variable: Offset from dim line (− = box) |
-| `DIMTAD` | Dimension variable: Text placement vertical |
-| `DIMJUST` | Dimension variable: Text placement horizontal |
-| `DIMTIH` | Dimension variable: Text inside horizontal |
-| `DIMTOH` | Dimension variable: Text outside horizontal |
-| `DIMATFIT` | Dimension variable: Fit options |
-| `DIMTIX` | Dimension variable: Always keep text between ext lines |
-| `DIMSOXD` | Dimension variable: Suppress arrows if they do not fit |
-| `DIMTMOVE` | Dimension variable: Text placement when moved |
-| `DIMTOFL` | Dimension variable: Draw dim line between ext lines |
-| `DIMSCALE` | Dimension variable: Use overall scale of |
-| `DIMLUNIT` | Dimension variable: Unit format |
-| `DIMDEC` | Dimension variable: Precision |
-| `DIMDSEP` | Dimension variable: Decimal separator |
-| `DIMRND` | Dimension variable: Round off |
-| `DIMPOST` | Dimension variable: Prefix / suffix (<> = value) |
-| `DIMLFAC` | Dimension variable: Measurement scale factor |
-| `DIMZIN` | Dimension variable: Zero suppression (4 leading, 8 trailing) |
-| `DIMAUNIT` | Dimension variable: Angular units |
-| `DIMADEC` | Dimension variable: Angular precision |
-| `DIMAZIN` | Dimension variable: Angular zero suppression |
-| `DIMALT` | Dimension variable: Display alternate units |
-| `DIMALTF` | Dimension variable: Multiplier for alt units |
-| `DIMALTD` | Dimension variable: Alt precision |
-| `DIMALTRND` | Dimension variable: Alt round off |
-| `DIMAPOST` | Dimension variable: Alt prefix / suffix |
-| `DIMALTU` | Dimension variable: Alt unit format |
-| `DIMALTZ` | Dimension variable: Alt zero suppression |
-| `DIMTOL` | Dimension variable: Tolerances (deviation) |
-| `DIMLIM` | Dimension variable: Limits |
-| `DIMTP` | Dimension variable: Upper value |
-| `DIMTM` | Dimension variable: Lower value |
-| `DIMTDEC` | Dimension variable: Precision |
-| `DIMTFAC` | Dimension variable: Scaling for height |
-| `DIMTOLJ` | Dimension variable: Vertical position |
-| `DIMTZIN` | Dimension variable: Zero suppression |
-| `UCSORTHO` | Orthographic views set their orthographic UCS (0/1) |
-| `UCSFOLLOW` | Plan view whenever the UCS changes (0/1) |
-| `UCSDETECT` | Dynamic UCS on planar faces of solids (0/1) |
-| `LTSCALE` | Global linetype scale factor |
-| `CELTSCALE` | Linetype scale of new objects |
-| `CELTYPE` | Linetype of new objects (ByLayer, ByBlock or a loaded linetype) |
-| `PSLTSCALE` | Paper space linetype scaling in layout viewports (0/1) |
-| `MSLTSCALE` | Scale model space linetypes by the annotation scale (0/1) |
-| `PLINEGEN` | Linetype pattern continuous around polyline vertices (0/1) |
-| `HPNAME` | Default hatch pattern name |
-| `HPSCALE` | Default hatch pattern scale |
-| `HPANG` | Default hatch pattern angle (degrees) |
-| `HPSPACE` | Line spacing of user defined hatches |
-| `HPASSOC` | New hatches are associative (0/1) |
-| `HPGAPTOL` | Gap tolerance of hatch and BOUNDARY boundaries: gaps up to this size are closed (0 = closed only) |
-| `HPDOUBLE` | User defined hatches are double hatched (0/1) |
-| `HPISLANDDETECTION` | Island detection of new hatches: 0 Normal, 1 Outer, 2 Ignore |
-| `PEDITACCEPT` | PEDIT converts lines and arcs to polylines without asking (0/1) |
-| `SPLINETYPE` | PEDIT Spline curve: 5 quadratic, 6 cubic B-spline |
-| `SPLINESEGS` | Segments per span of a spline-fit polyline |
+| [`OFFSETGAPTYPE`](reference/variables.md#offsetgaptype) | Gap fill when offsetting polylines: 0 extend, 1 fillet, 2 chamfer |
+| [`POLARANG`](reference/variables.md#polarang) | Polar tracking angle increment in degrees (POLAR / F10 tracks multiples of it from the base point) |
+| [`PICKSTYLE`](reference/variables.md#pickstyle) | Group selection: 1 = picking a grouped object selects its group, 0 = single objects (Ctrl+Shift+A toggles) |
+| [`LWDISPLAY`](reference/variables.md#lwdisplay) | Show lineweights in the model (ON/OFF); layouts always show them |
+| [`ZOOMFACTOR`](reference/variables.md#zoomfactor) | Mouse wheel zoom step (3–100) |
+| [`RENDERMINPX`](reference/variables.md#renderminpx) | Draw solids smaller than this many pixels as a point (0 = off) |
+| [`ZOOMWHEEL`](reference/variables.md#zoomwheel) | Mouse wheel direction: 0 = forward zooms in, 1 = forward zooms out |
+| [`ISAVEBAK`](reference/variables.md#isavebak) | Keep the previous version as a .bak file when saving to the local folder (0/1) |
+| [`SAVETIME`](reference/variables.md#savetime) | Minutes between automatic recovery copies (.sv$) in the local folder (0 = off) |
+| [`PDMODE`](reference/variables.md#pdmode) | Point style: 0 dot, 1 none, 2 plus, 3 cross, 4 tick; add 32 for a circle and 64 for a square |
+| [`PDSIZE`](reference/variables.md#pdsize) | Point size: 0 = 5% of the view, negative = % of the view, positive = drawing units |
+| [`DIMTEXTSIZE`](reference/variables.md#dimtextsize) | Set the dimension text height for new dimensions (DIMTXT override) |
+| [`DIMASSOC`](reference/variables.md#dimassoc) | Associativity of new dimensions: 2 = associative, 1 = non-associative |
+| [`CANNOSCALE`](reference/variables.md#cannoscale) | Annotation scale of model space (annotative dimensions keep their paper size): 1:1, 1:50, 1:100… |
+| [`DIMCLRD`](reference/variables.md#dimclrd) | Dimension variable: Dimension line color |
+| [`DIMLWD`](reference/variables.md#dimlwd) | Dimension variable: Dimension line lineweight |
+| [`DIMDLE`](reference/variables.md#dimdle) | Dimension variable: Extend beyond ticks |
+| [`DIMDLI`](reference/variables.md#dimdli) | Dimension variable: Baseline spacing |
+| [`DIMSD1`](reference/variables.md#dimsd1) | Dimension variable: Suppress dim line 1 |
+| [`DIMSD2`](reference/variables.md#dimsd2) | Dimension variable: Suppress dim line 2 |
+| [`DIMCLRE`](reference/variables.md#dimclre) | Dimension variable: Extension line color |
+| [`DIMLWE`](reference/variables.md#dimlwe) | Dimension variable: Extension line lineweight |
+| [`DIMEXE`](reference/variables.md#dimexe) | Dimension variable: Extend beyond dim lines |
+| [`DIMEXO`](reference/variables.md#dimexo) | Dimension variable: Offset from origin |
+| [`DIMFXLON`](reference/variables.md#dimfxlon) | Dimension variable: Fixed length extension lines |
+| [`DIMFXL`](reference/variables.md#dimfxl) | Dimension variable: Fixed length |
+| [`DIMSE1`](reference/variables.md#dimse1) | Dimension variable: Suppress ext line 1 |
+| [`DIMSE2`](reference/variables.md#dimse2) | Dimension variable: Suppress ext line 2 |
+| [`DIMBLK1`](reference/variables.md#dimblk1) | Dimension variable: First arrowhead |
+| [`DIMBLK2`](reference/variables.md#dimblk2) | Dimension variable: Second arrowhead |
+| [`DIMLDRBLK`](reference/variables.md#dimldrblk) | Dimension variable: Leader arrowhead |
+| [`DIMASZ`](reference/variables.md#dimasz) | Dimension variable: Arrow size |
+| [`DIMCEN`](reference/variables.md#dimcen) | Dimension variable: Center marks (− = lines) |
+| [`DIMARCSYM`](reference/variables.md#dimarcsym) | Dimension variable: Arc length symbol |
+| [`DIMJOGANG`](reference/variables.md#dimjogang) | Dimension variable: Radius jog angle |
+| [`DIMCLRT`](reference/variables.md#dimclrt) | Dimension variable: Text color |
+| [`DIMTFILL`](reference/variables.md#dimtfill) | Dimension variable: Fill color |
+| [`DIMTXT`](reference/variables.md#dimtxt) | Dimension variable: Text height |
+| [`DIMGAP`](reference/variables.md#dimgap) | Dimension variable: Offset from dim line (− = box) |
+| [`DIMTAD`](reference/variables.md#dimtad) | Dimension variable: Text placement vertical |
+| [`DIMJUST`](reference/variables.md#dimjust) | Dimension variable: Text placement horizontal |
+| [`DIMTIH`](reference/variables.md#dimtih) | Dimension variable: Text inside horizontal |
+| [`DIMTOH`](reference/variables.md#dimtoh) | Dimension variable: Text outside horizontal |
+| [`DIMATFIT`](reference/variables.md#dimatfit) | Dimension variable: Fit options |
+| [`DIMTIX`](reference/variables.md#dimtix) | Dimension variable: Always keep text between ext lines |
+| [`DIMSOXD`](reference/variables.md#dimsoxd) | Dimension variable: Suppress arrows if they do not fit |
+| [`DIMTMOVE`](reference/variables.md#dimtmove) | Dimension variable: Text placement when moved |
+| [`DIMTOFL`](reference/variables.md#dimtofl) | Dimension variable: Draw dim line between ext lines |
+| [`DIMSCALE`](reference/variables.md#dimscale) | Dimension variable: Use overall scale of |
+| [`DIMLUNIT`](reference/variables.md#dimlunit) | Dimension variable: Unit format |
+| [`DIMDEC`](reference/variables.md#dimdec) | Dimension variable: Precision |
+| [`DIMDSEP`](reference/variables.md#dimdsep) | Dimension variable: Decimal separator |
+| [`DIMRND`](reference/variables.md#dimrnd) | Dimension variable: Round off |
+| [`DIMPOST`](reference/variables.md#dimpost) | Dimension variable: Prefix / suffix (<> = value) |
+| [`DIMLFAC`](reference/variables.md#dimlfac) | Dimension variable: Measurement scale factor |
+| [`DIMZIN`](reference/variables.md#dimzin) | Dimension variable: Zero suppression (4 leading, 8 trailing) |
+| [`DIMAUNIT`](reference/variables.md#dimaunit) | Dimension variable: Angular units |
+| [`DIMADEC`](reference/variables.md#dimadec) | Dimension variable: Angular precision |
+| [`DIMAZIN`](reference/variables.md#dimazin) | Dimension variable: Angular zero suppression |
+| [`DIMALT`](reference/variables.md#dimalt) | Dimension variable: Display alternate units |
+| [`DIMALTF`](reference/variables.md#dimaltf) | Dimension variable: Multiplier for alt units |
+| [`DIMALTD`](reference/variables.md#dimaltd) | Dimension variable: Alt precision |
+| [`DIMALTRND`](reference/variables.md#dimaltrnd) | Dimension variable: Alt round off |
+| [`DIMAPOST`](reference/variables.md#dimapost) | Dimension variable: Alt prefix / suffix |
+| [`DIMALTU`](reference/variables.md#dimaltu) | Dimension variable: Alt unit format |
+| [`DIMALTZ`](reference/variables.md#dimaltz) | Dimension variable: Alt zero suppression |
+| [`DIMTOL`](reference/variables.md#dimtol) | Dimension variable: Tolerances (deviation) |
+| [`DIMLIM`](reference/variables.md#dimlim) | Dimension variable: Limits |
+| [`DIMTP`](reference/variables.md#dimtp) | Dimension variable: Upper value |
+| [`DIMTM`](reference/variables.md#dimtm) | Dimension variable: Lower value |
+| [`DIMTDEC`](reference/variables.md#dimtdec) | Dimension variable: Precision |
+| [`DIMTFAC`](reference/variables.md#dimtfac) | Dimension variable: Scaling for height |
+| [`DIMTOLJ`](reference/variables.md#dimtolj) | Dimension variable: Vertical position |
+| [`DIMTZIN`](reference/variables.md#dimtzin) | Dimension variable: Zero suppression |
+| [`UCSORTHO`](reference/variables.md#ucsortho) | Orthographic views set their orthographic UCS (0/1) |
+| [`UCSFOLLOW`](reference/variables.md#ucsfollow) | Plan view whenever the UCS changes (0/1) |
+| [`UCSDETECT`](reference/variables.md#ucsdetect) | Dynamic UCS on planar faces of solids (0/1) |
+| [`LTSCALE`](reference/variables.md#ltscale) | Global linetype scale factor |
+| [`CELTSCALE`](reference/variables.md#celtscale) | Linetype scale of new objects |
+| [`CELTYPE`](reference/variables.md#celtype) | Linetype of new objects (ByLayer, ByBlock or a loaded linetype) |
+| [`PSLTSCALE`](reference/variables.md#psltscale) | Paper space linetype scaling in layout viewports (0/1) |
+| [`MSLTSCALE`](reference/variables.md#msltscale) | Scale model space linetypes by the annotation scale (0/1) |
+| [`PLINEGEN`](reference/variables.md#plinegen) | Linetype pattern continuous around polyline vertices (0/1) |
+| [`HPNAME`](reference/variables.md#hpname) | Default hatch pattern name |
+| [`HPSCALE`](reference/variables.md#hpscale) | Default hatch pattern scale |
+| [`HPANG`](reference/variables.md#hpang) | Default hatch pattern angle (degrees) |
+| [`HPSPACE`](reference/variables.md#hpspace) | Line spacing of user defined hatches |
+| [`HPASSOC`](reference/variables.md#hpassoc) | New hatches are associative (0/1) |
+| [`HPGAPTOL`](reference/variables.md#hpgaptol) | Gap tolerance of hatch and BOUNDARY boundaries: gaps up to this size are closed (0 = closed only) |
+| [`HPDOUBLE`](reference/variables.md#hpdouble) | User defined hatches are double hatched (0/1) |
+| [`HPISLANDDETECTION`](reference/variables.md#hpislanddetection) | Island detection of new hatches: 0 Normal, 1 Outer, 2 Ignore |
+| [`PEDITACCEPT`](reference/variables.md#peditaccept) | PEDIT converts lines and arcs to polylines without asking (0/1) |
+| [`SPLINETYPE`](reference/variables.md#splinetype) | PEDIT Spline curve: 5 quadratic, 6 cubic B-spline |
+| [`SPLINESEGS`](reference/variables.md#splinesegs) | Segments per span of a spline-fit polyline |

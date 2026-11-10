@@ -4,6 +4,13 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.33.7] — 2026-11-10
+
+### Documentation
+- **System variables reference**: all 94 variables grouped by topic (drawing, display and mouse, saving, coordinate
+  systems, linetypes, hatches, annotation and the 64 dimension variables), with their values and what they control.
+  The command list links each variable to its explanation.
+
 ## [2.33.6] — 2026-11-10
 
 ### Fixed

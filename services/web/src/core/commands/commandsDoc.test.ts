@@ -12,10 +12,12 @@ import { VARIABLE_COMMANDS } from './registry'
 const DOC = fileURLToPath(new URL('../../../../../docs/commands.md', import.meta.url))
 const REF = fileURLToPath(new URL('../../../../../docs/reference/', import.meta.url))
 
-/** Páginas de la referencia (`docs/reference/*.md`): archivo → contenido. */
+/** Páginas de la referencia de comandos (`docs/reference/*.md`): archivo → contenido. `variables.md` va aparte. */
 function referencePages(): Map<string, string> {
-  return new Map(readdirSync(REF).filter((f) => f.endsWith('.md')).map((f) => [f, readFileSync(REF + f, 'utf8')]))
+  return new Map(readdirSync(REF).filter((f) => f.endsWith('.md') && f !== 'variables.md').map((f) => [f, readFileSync(REF + f, 'utf8')]))
 }
+
+const variablesPage = (): string => readFileSync(REF + 'variables.md', 'utf8')
 
 /** Menú y sección de cada comando, como se ven en la barra de menús. */
 function menuPlaces(): Map<string, string> {
@@ -60,6 +62,8 @@ function syncReference(pages: Map<string, string>): Map<string, string> {
 function referenceAnchors(pages: Map<string, string>): Map<string, string> {
   const at = new Map<string, string>()
   for (const [f, md] of pages) for (const m of md.matchAll(/^## (\S+)$/gm)) at.set(m[1], `reference/${f}#${m[1].toLowerCase()}`)
+  // Las variables: una fila por variable en las tablas de variables.md.
+  for (const m of variablesPage().matchAll(/^\| `([A-Z0-9]+)` \|/gm)) if (!at.has(m[1])) at.set(m[1], `reference/variables.md#${m[1].toLowerCase()}`)
   return at
 }
 
@@ -84,7 +88,7 @@ function commandsMarkdown(): string {
   const rest = cmds.filter((c) => !done.has(c.name) && !VARIABLE_COMMANDS.has(c.name))
   md += `## Command-line versions\n\nDash versions run without dialogs, for scripts and power users.\n\n| Command | Aliases | What it does |\n| --- | --- | --- |\n${rest.map(row).join('\n')}\n\n`
   const vars = cmds.filter((c) => VARIABLE_COMMANDS.has(c.name))
-  md += `## System variables\n\nType the name to see or change the value.\n\n| Variable | What it controls |\n| --- | --- |\n${vars.map((c) => `| \`${c.name}\` | ${esc(c.description)} |`).join('\n')}\n`
+  md += `## System variables\n\nType the name to see or change the value. Each one is explained in [System variables](reference/variables.md).\n\n| Variable | What it controls |\n| --- | --- |\n${vars.map((c) => `| ${ref.has(c.name) ? `[\`${c.name}\`](${ref.get(c.name)})` : `\`${c.name}\``} | ${esc(c.description)} |`).join('\n')}\n`
   return md
 }
 
@@ -113,6 +117,16 @@ it('docs/reference: todo comando tiene su sección (las variables van en la tabl
   const missing = makeEngine()
     .engine.getCommands()
     .filter((c) => !VARIABLE_COMMANDS.has(c.name) && !documented.has(c.name))
+    .map((c) => c.name)
+  expect(missing).toEqual([])
+})
+
+it('docs/reference/variables.md explica cada variable', () => {
+  const md = variablesPage()
+  const rows = new Set([...md.matchAll(/^\| `([A-Z0-9]+)` \|/gm)].map((m) => m[1]))
+  const missing = makeEngine()
+    .engine.getCommands()
+    .filter((c) => VARIABLE_COMMANDS.has(c.name) && !rows.has(c.name))
     .map((c) => c.name)
   expect(missing).toEqual([])
 })
