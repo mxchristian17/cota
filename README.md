@@ -16,10 +16,12 @@ no install, no account, no license fee.
 [Getting started](docs/getting-started.md) ·
 [User guide](docs/user-guide.md) ·
 [Command reference](docs/commands.md) ·
-[Self-hosting](docs/self-hosting.md)
+[Self-hosting](docs/self-hosting.md) ·
+[**Sponsor**](https://github.com/sponsors/mxchristian17)
 
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 ![Version](https://img.shields.io/github/v/release/mxchristian17/cota?label=version&color=green)
+[![Sponsor](https://img.shields.io/github/sponsors/mxchristian17?label=sponsor&logo=githubsponsors&color=ea4aaa)](https://github.com/sponsors/mxchristian17)
 ![Commands](https://img.shields.io/badge/commands-240%2B-orange)
 
 ![Cota in action: a part is modeled with typed commands, then its drawing views are generated and dimensioned automatically](docs/images/cota-demo.gif)
@@ -137,7 +139,11 @@ Bug reports, feature requests and pull requests are welcome. Read [CONTRIBUTING.
 
 Cota is free and has no paid edition. If you or your company use it, you can
 [sponsor its development on GitHub](https://github.com/sponsors/mxchristian17): sponsorship pays for the time that
-goes into new features, file compatibility and fixes, and keeps the project independent.
+goes into new features, file compatibility and fixes, and keeps the project independent. Sponsors are thanked in
+[SUPPORTERS.md](SUPPORTERS.md).
+
+Other ways to help, just as valuable: a ⭐ on GitHub, a bug report with the steps to reproduce it, a pull request, or
+telling someone who draws for a living that Cota exists.
 
 ## Privacy
 

@@ -4,6 +4,12 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.35.3] — 2026-11-10
+
+### Documentation
+- **Sponsoring**: a Sponsor link and badge at the top of the README, a "Support the project" section with other ways
+  to help, and `SUPPORTERS.md` to thank sponsors.
+
 ## [2.35.2] — 2026-11-10
 
 ### Fixed
