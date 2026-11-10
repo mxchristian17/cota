@@ -294,6 +294,14 @@ export const DOCS_JS = `(function () {
   var body = document.body
   var root = body.getAttribute('data-root') || './'
 
+  // Una fila de la tabla de comandos con su sección en la referencia (F1 desde la app abre commands/#nombre): se va
+  // directo a la sección.
+  if (location.hash) {
+    var row = document.getElementById(decodeURIComponent(location.hash.slice(1)))
+    var link = row && row.tagName === 'TR' && row.querySelector('td:first-child a[href]')
+    if (link) location.replace(link.href)
+  }
+
   var themeBtn = document.querySelector('.theme-btn')
   if (themeBtn) themeBtn.addEventListener('click', function () {
     var cur = doc.getAttribute('data-theme')

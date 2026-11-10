@@ -38,6 +38,7 @@ import { RealtimeMenu } from './ui/RealtimeMenu'
 import { useStore } from './store/store'
 import { canAutosave } from './core/io/autosave'
 import { sysvars } from './core/commands/sysvars'
+import { docsUrl } from './core/about'
 
 /**
  * ¿Se está editando texto ahora mismo? El foco de Cota vive en la línea de comandos, así que si se
@@ -287,6 +288,11 @@ export default function App() {
         // F10 = rastreo polar (CAD clásico); Shift+F10 sigue siendo el menú contextual.
         e.preventDefault()
         togglePolar()
+      } else if (e.key === 'F1') {
+        // F1 = ayuda: la sección del comando en curso en la referencia, o el inicio de la documentación.
+        e.preventDefault()
+        const name = useStore.getState().engine.activeName
+        window.open(docsUrl(name ? `commands/#${name.toLowerCase()}` : ''), '_blank', 'noopener')
       } else if (e.key === 'F12') {
         // F12 = entrada dinámica (CAD clásico): coordenadas relativas sin '@' tras el primer punto.
         e.preventDefault()

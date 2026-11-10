@@ -250,6 +250,11 @@ export class CommandEngine {
     return this.activeCommand !== null
   }
 
+  /** Nombre del comando en curso (null si no hay): F1 abre su sección de la referencia. */
+  get activeName(): string | null {
+    return this.activeCommand?.name ?? null
+  }
+
   /** Para el menú contextual: el último comando (Repeat), los recientes y las opciones del prompt actual. */
   menuInfo(): { last: string | null; recent: string[]; keywords: string[] } {
     const p = this.pending

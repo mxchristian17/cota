@@ -4,6 +4,12 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.34.0] — 2026-11-10
+
+### Added
+- **F1 opens the help of the command in progress**: during FILLET, F1 opens the FILLET section of the reference;
+  with no command, the documentation home.
+
 ## [2.33.8] — 2026-11-10
 
 ### Documentation

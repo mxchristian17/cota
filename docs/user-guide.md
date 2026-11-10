@@ -376,6 +376,7 @@ published. If you turned full screen on, it comes back with your first click aft
 | <kbd>Esc</kbd> | Close the open dialog; otherwise cancel the command and clear the selection |
 | <kbd>Tab</kbd> | Complete the suggested command |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Command history |
+| <kbd>F1</kbd> | Documentation; during a command, the reference of that command |
 | <kbd>F3</kbd> | Object snap on/off |
 | <kbd>F7</kbd> | Grid on/off |
 | <kbd>F8</kbd> | Ortho on/off |
