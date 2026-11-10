@@ -43,38 +43,38 @@ Every command can be typed in the command line (aliases too) or picked from the 
 
 | Command | Aliases | What it does |
 | --- | --- | --- |
-| `REDRAW` | `REGEN`, `RE`, `R` | Refresh/regenerate the display of all viewports |
-| `ZOOM` | `Z` | Zoom: window, scale (n, nX, nXP), All/Center/Dynamic/Extents/Previous/Scale/Window/Object, Enter = real time |
-| `PAN` | `P` | Real-time pan: drag with the left button (Esc or Enter to exit) |
-| `-PAN` | `-P` | Pan by a displacement or from a base point to a second point |
-| `3DORBIT` | `3DO`, `ORBIT` | Constrained orbit: drag to turn the view around the target, keeping the Z axis up |
-| `3DFORBIT` | — | Free orbit: drag to turn the view in any direction (it may roll) |
-| `3DCORBIT` | — | Continuous orbit: drag and release to keep the view spinning; click to stop |
-| `3DPAN` | — | Real-time pan in a 3D view |
-| `3DZOOM` | — | Real-time zoom in a 3D view |
-| `VIEW` | `V`, `-VIEW`, `-V` | Views: standard (Top/Front/…/NWiso) and named views (?/Delete/Orthographic/Restore/Save/Window) |
-| `PLAN` | — | Plan view of a UCS [Current ucs/Ucs/World] |
-| `PERSPECTIVE` | — | Perspective projection |
-| `ORTHOGRAPHIC` | — | Orthographic projection |
-| `VPORTS` | `VP` | Viewport layout [1/2/3/4] |
-| `MVIEW` | `MV` | Create layout viewports [ON/OFF/Fit/Shadeplot/Lock/Object/Polygonal/2/3/4] |
-| `MSPACE` | `MS` | Switch to model space through a layout viewport |
-| `PSPACE` | `PS` | Switch from a layout viewport back to paper space |
-| `VPMAX` | — | Maximize a layout viewport temporarily (VPMIN restores it) |
-| `VPMIN` | — | Restore the maximized layout viewport |
-| `VPCLIP` | — | Clip a layout viewport with a closed object or polygon [Polygonal/Delete] |
-| `VPLAYER` | — | Layer visibility per layout viewport [?/Freeze/Thaw/Reset/Newfrz/Vpvisdflt] |
-| `VSCURRENT` | `VS` | Set the visual style of the active viewport [2Dwireframe/3Dwireframe/Shaded/shadedEdges/Hidden] |
-| `SHADEMODE` | `SHA`, `-SHADEMODE` | Set the shading of the active viewport [2D wireframe/3D wireframe/Hidden/Flat/Gouraud/fLat+edges/gOuraud+edges] |
-| `FULLSCREEN` | `FS` | Toggle full screen (no browser or system bars); remembered for next time |
-| `CLEANSCREENON` | — | Clean screen: hide toolbars and palettes (Ctrl+0) |
-| `CLEANSCREENOFF` | — | Restore toolbars and palettes (Ctrl+0) |
-| `COMMANDLINE` | — | Show the full command line window (Ctrl+9) |
-| `COMMANDLINEHIDE` | — | Compact command line: input row only (Ctrl+9) |
-| `NAVVCUBE` | — | Show or hide the view cube [ON/OFF] |
-| `UCSICON` | — | UCS icon [ON/OFF/All/Noorigin/ORigin] |
-| `ATTDISP` | — | Attribute visibility [Normal/ON/OFF] |
-| `MOBILEVIEW` | — | Switch to the phone view for the job site (open, orbit, measure, visual styles) [ON/OFF] |
+| [`REDRAW`](reference/view.md#redraw) | `REGEN`, `RE`, `R` | Refresh/regenerate the display of all viewports |
+| [`ZOOM`](reference/view.md#zoom) | `Z` | Zoom: window, scale (n, nX, nXP), All/Center/Dynamic/Extents/Previous/Scale/Window/Object, Enter = real time |
+| [`PAN`](reference/view.md#pan) | `P` | Real-time pan: drag with the left button (Esc or Enter to exit) |
+| [`-PAN`](reference/view.md#-pan) | `-P` | Pan by a displacement or from a base point to a second point |
+| [`3DORBIT`](reference/view.md#3dorbit) | `3DO`, `ORBIT` | Constrained orbit: drag to turn the view around the target, keeping the Z axis up |
+| [`3DFORBIT`](reference/view.md#3dforbit) | — | Free orbit: drag to turn the view in any direction (it may roll) |
+| [`3DCORBIT`](reference/view.md#3dcorbit) | — | Continuous orbit: drag and release to keep the view spinning; click to stop |
+| [`3DPAN`](reference/view.md#3dpan) | — | Real-time pan in a 3D view |
+| [`3DZOOM`](reference/view.md#3dzoom) | — | Real-time zoom in a 3D view |
+| [`VIEW`](reference/view.md#view) | `V`, `-VIEW`, `-V` | Views: standard (Top/Front/…/NWiso) and named views (?/Delete/Orthographic/Restore/Save/Window) |
+| [`PLAN`](reference/view.md#plan) | — | Plan view of a UCS [Current ucs/Ucs/World] |
+| [`PERSPECTIVE`](reference/view.md#perspective) | — | Perspective projection |
+| [`ORTHOGRAPHIC`](reference/view.md#orthographic) | — | Orthographic projection |
+| [`VPORTS`](reference/view.md#vports) | `VP` | Viewport layout [1/2/3/4] |
+| [`MVIEW`](reference/view.md#mview) | `MV` | Create layout viewports [ON/OFF/Fit/Shadeplot/Lock/Object/Polygonal/2/3/4] |
+| [`MSPACE`](reference/view.md#mspace) | `MS` | Switch to model space through a layout viewport |
+| [`PSPACE`](reference/view.md#pspace) | `PS` | Switch from a layout viewport back to paper space |
+| [`VPMAX`](reference/view.md#vpmax) | — | Maximize a layout viewport temporarily (VPMIN restores it) |
+| [`VPMIN`](reference/view.md#vpmin) | — | Restore the maximized layout viewport |
+| [`VPCLIP`](reference/view.md#vpclip) | — | Clip a layout viewport with a closed object or polygon [Polygonal/Delete] |
+| [`VPLAYER`](reference/view.md#vplayer) | — | Layer visibility per layout viewport [?/Freeze/Thaw/Reset/Newfrz/Vpvisdflt] |
+| [`VSCURRENT`](reference/view.md#vscurrent) | `VS` | Set the visual style of the active viewport [2Dwireframe/3Dwireframe/Shaded/shadedEdges/Hidden] |
+| [`SHADEMODE`](reference/view.md#shademode) | `SHA`, `-SHADEMODE` | Set the shading of the active viewport [2D wireframe/3D wireframe/Hidden/Flat/Gouraud/fLat+edges/gOuraud+edges] |
+| [`FULLSCREEN`](reference/view.md#fullscreen) | `FS` | Toggle full screen (no browser or system bars); remembered for next time |
+| [`CLEANSCREENON`](reference/view.md#cleanscreenon) | — | Clean screen: hide toolbars and palettes (Ctrl+0) |
+| [`CLEANSCREENOFF`](reference/view.md#cleanscreenoff) | — | Restore toolbars and palettes (Ctrl+0) |
+| [`COMMANDLINE`](reference/view.md#commandline) | — | Show the full command line window (Ctrl+9) |
+| [`COMMANDLINEHIDE`](reference/view.md#commandlinehide) | — | Compact command line: input row only (Ctrl+9) |
+| [`NAVVCUBE`](reference/view.md#navvcube) | — | Show or hide the view cube [ON/OFF] |
+| [`UCSICON`](reference/view.md#ucsicon) | — | UCS icon [ON/OFF/All/Noorigin/ORigin] |
+| [`ATTDISP`](reference/view.md#attdisp) | — | Attribute visibility [Normal/ON/OFF] |
+| [`MOBILEVIEW`](reference/view.md#mobileview) | — | Switch to the phone view for the job site (open, orbit, measure, visual styles) [ON/OFF] |
 
 ## Insert menu
 
@@ -117,28 +117,28 @@ Every command can be typed in the command line (aliases too) or picked from the 
 
 | Command | Aliases | What it does |
 | --- | --- | --- |
-| `TOOLBAR` | `TO`, `TBCONFIG` | Show or hide toolbars (dialog with the list of toolbars) |
-| `OPTIONS` | `OP` | UI settings: theme and colors (background/grid/crosshair) |
-| `OSNAP` | `OS`, `-OSNAP`, `DDOSNAP` | Configure running object snaps (endpoint, center, quadrant, intersection, …) |
-| `GRID` | — | Show or hide the grid [ON/OFF] (F7) |
-| `UCS` | — | User coordinate system [Face/NAmed/OBject/Previous/View/World/X/Y/Z/ZAxis] |
-| `DIST` | `DI` | Measure distance and angle between two points |
-| `ID` | — | Display the coordinates of a point in the current UCS |
-| `AREA` | `AA` | Area and perimeter of points or of an object [Object/Add area/Subtract area]; Add/Subtract keep a running total |
-| `LIST` | `LI`, `LS` | List the properties of the selected objects: type, layer, points, lengths, areas, volumes |
-| `MASSPROP` | — | Mass properties of solids: volume (mass with density 1), surface area, bounding box and centroid |
-| `DRAWORDER` | `DR` | Change the draw order of objects [Above objects/Under objects/Front/Back] |
-| `TEXTTOFRONT` | — | Bring texts and/or dimensions in front of the other objects [Text/Dimensions/Both] |
-| `GROUP` | `G` | Group the selected objects so they are selected together [Name/Description]; UNGROUP breaks a group |
-| `UNGROUP` | — | Break up the group of a picked object [Name] |
-| `ISOLATEOBJECTS` | `ISOLATE` | Temporarily hide everything except the selected objects (UNISOLATEOBJECTS shows them again) |
-| `HIDEOBJECTS` | — | Temporarily hide the selected objects (UNISOLATEOBJECTS shows them again) |
-| `UNISOLATEOBJECTS` | `UNISOLATE` | Show again the objects hidden by ISOLATEOBJECTS or HIDEOBJECTS |
-| `AGENT` | `AGENTPANEL` | Open or close the modeling agent panel: a conversation with an LLM (your own API key) that runs Cota for you |
-| `COMPACT` | — | Summarize the agent conversation to free its context (the drawing keeps everything built) |
-| `SCRIPT` | `SCR` | Run several commands as one operation (one undo step): type or paste them, load a .scr file or share them as a link |
-| `PROMPT` | `AI` | Generate or edit the model with natural language (LLM). Opens a prompt box. |
-| `ATTSYNC` | — | Synchronize block references with their redefined attributes [?/Name/Select] |
+| [`TOOLBAR`](reference/tools.md#toolbar) | `TO`, `TBCONFIG` | Show or hide toolbars (dialog with the list of toolbars) |
+| [`OPTIONS`](reference/tools.md#options) | `OP` | UI settings: theme and colors (background/grid/crosshair) |
+| [`OSNAP`](reference/tools.md#osnap) | `OS`, `-OSNAP`, `DDOSNAP` | Configure running object snaps (endpoint, center, quadrant, intersection, …) |
+| [`GRID`](reference/tools.md#grid) | — | Show or hide the grid [ON/OFF] (F7) |
+| [`UCS`](reference/tools.md#ucs) | — | User coordinate system [Face/NAmed/OBject/Previous/View/World/X/Y/Z/ZAxis] |
+| [`DIST`](reference/tools.md#dist) | `DI` | Measure distance and angle between two points |
+| [`ID`](reference/tools.md#id) | — | Display the coordinates of a point in the current UCS |
+| [`AREA`](reference/tools.md#area) | `AA` | Area and perimeter of points or of an object [Object/Add area/Subtract area]; Add/Subtract keep a running total |
+| [`LIST`](reference/tools.md#list) | `LI`, `LS` | List the properties of the selected objects: type, layer, points, lengths, areas, volumes |
+| [`MASSPROP`](reference/tools.md#massprop) | — | Mass properties of solids: volume (mass with density 1), surface area, bounding box and centroid |
+| [`DRAWORDER`](reference/tools.md#draworder) | `DR` | Change the draw order of objects [Above objects/Under objects/Front/Back] |
+| [`TEXTTOFRONT`](reference/tools.md#texttofront) | — | Bring texts and/or dimensions in front of the other objects [Text/Dimensions/Both] |
+| [`GROUP`](reference/tools.md#group) | `G` | Group the selected objects so they are selected together [Name/Description]; UNGROUP breaks a group |
+| [`UNGROUP`](reference/tools.md#ungroup) | — | Break up the group of a picked object [Name] |
+| [`ISOLATEOBJECTS`](reference/tools.md#isolateobjects) | `ISOLATE` | Temporarily hide everything except the selected objects (UNISOLATEOBJECTS shows them again) |
+| [`HIDEOBJECTS`](reference/tools.md#hideobjects) | — | Temporarily hide the selected objects (UNISOLATEOBJECTS shows them again) |
+| [`UNISOLATEOBJECTS`](reference/tools.md#unisolateobjects) | `UNISOLATE` | Show again the objects hidden by ISOLATEOBJECTS or HIDEOBJECTS |
+| [`AGENT`](reference/tools.md#agent) | `AGENTPANEL` | Open or close the modeling agent panel: a conversation with an LLM (your own API key) that runs Cota for you |
+| [`COMPACT`](reference/tools.md#compact) | — | Summarize the agent conversation to free its context (the drawing keeps everything built) |
+| [`SCRIPT`](reference/tools.md#script) | `SCR` | Run several commands as one operation (one undo step): type or paste them, load a .scr file or share them as a link |
+| [`PROMPT`](reference/tools.md#prompt) | `AI` | Generate or edit the model with natural language (LLM). Opens a prompt box. |
+| [`ATTSYNC`](reference/tools.md#attsync) | — | Synchronize block references with their redefined attributes [?/Name/Select] |
 
 ## Draw menu
 

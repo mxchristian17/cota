@@ -4,6 +4,13 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.33.4] — 2026-11-10
+
+### Documentation
+- **View and Tools command references**: zoom, pan, views, orbits, visual styles, viewports and layout viewports;
+  measuring and inquiry, groups, isolation, draw order, UCS, object snaps, settings, scripts and the modeling agent.
+  Each command with its prompts, options and a working example.
+
 ## [2.33.3] — 2026-11-10
 
 ### Fixed
