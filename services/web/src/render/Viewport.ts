@@ -400,6 +400,8 @@ export class Viewport {
   /** Escala de anotación con la que se dibujaron las cotas anotativas (cambia con la escala del viewport). */
   private lastAnnoScale: number | undefined = undefined
   private readonly lastPx: [number, number] = [0, 0]
+  /** Último cursor en coordenadas de cliente (para el rayo de los snaps de caras). */
+  private lastClient: [number, number] | null = null
   private boxStartPx: [number, number] | null = null
   /** Ventana de selección abierta por un clic en vacío: espera el clic de la esquina opuesta. */
   private boxPending = false
@@ -985,6 +987,7 @@ export class Viewport {
     const px = this.pxOf(e.clientX, e.clientY)
     this.lastPx[0] = px[0]
     this.lastPx[1] = px[1]
+    this.lastClient = [e.clientX, e.clientY]
     this.updateDucs(e.clientX, e.clientY)
     const raw = this.screenToWorld(e.clientX, e.clientY)
     this.lastWorldRaw.x = raw.x
@@ -1375,6 +1378,26 @@ export class Viewport {
     )
     const out = new THREE.Vector3()
     return ray.intersectPlane(plane, out) ? out : null
+  }
+
+  /**
+   * Trayectoria que sigue el cursor (una sola línea de tracking, polar, EXT o PAR): su origen y la dirección hacia el
+   * cursor. Un número tecleado da el punto a esa distancia sobre ella.
+   */
+  trackPath(): { origin: Pt; dir: Pt } | null {
+    const { type, point } = this.snapResult
+    if (!this.data?.pointPrompt || (type !== 'tracking' && type !== 'extension' && type !== 'parallel') || this.trackLines.length !== 1) return null
+    const o = this.trackLines[0][0]
+    const v = { x: point.x - o.x, y: point.y - o.y, z: point.z - o.z }
+    const len = Math.hypot(v.x, v.y, v.z)
+    return len > 1e-9 ? { origin: o, dir: { x: v.x / len, y: v.y / len, z: v.z / len } } : null
+  }
+
+  /** Rayo del cursor en mundo, para los snaps de caras de sólidos. */
+  private cursorRay(): { o: Vec3; d: Vec3 } | undefined {
+    if (!this.lastClient) return undefined
+    const ray = this.controller.rayFromNdc(...this.ndc(...this.lastClient))
+    return { o: [ray.origin.x, ray.origin.y, ray.origin.z], d: [ray.direction.x, ray.direction.y, ray.direction.z] }
   }
 
   private ndc(clientX: number, clientY: number): [number, number] {
@@ -1782,6 +1805,7 @@ export class Viewport {
       project: (p) => this.controller.project(new THREE.Vector3(p.x, p.y, p.z)),
       depth: (p) => this.controller.camera.position.distanceTo(new THREE.Vector3(p.x, p.y, p.z)),
       acquired: this.osnapAcq,
+      ray: this.cursorRay(),
     })
 
     // INT/APPINT sobre el tramo en curso: con ORTHO la dirección del rubber-band queda fija y se marcan sus cruces
@@ -3288,6 +3312,13 @@ export class Viewport {
         return [[p(-r, 0), p(r, 0)], [p(0, -r), p(0, r)], [p(-r * 0.4, -r * 0.4), p(r * 0.4, r * 0.4)]]
       case 'parallel':
         return [[p(-r, -r * 0.3), p(r * 0.3, r)], [p(-r * 0.3, -r), p(r, r * 0.3)]]
+      case 'faceCenter':
+        // Cuadro con un punto (centro de cara).
+        return [[p(-r, -r), p(r, -r), p(r, r), p(-r, r), p(-r, -r)], [p(-r * 0.2, 0), p(r * 0.2, 0)], [p(0, -r * 0.2), p(0, r * 0.2)]]
+      case 'facePerpendicular':
+        return [[p(-r, -r), p(r, -r)], [p(0, -r), p(0, r)], [p(-r, -r), p(-r * 0.4, -r * 0.4), p(r, -r * 0.4)]]
+      case 'faceNearest':
+        return [[p(-r, -r), p(r, -r), p(-r, r), p(r, r), p(-r, -r)], [p(-r, 0), p(r, 0)]]
       case 'insertion':
         // Dos cuadrados encimados (el marcador del CAD clásico).
         return [[p(-r, 0), p(0, 0), p(0, r), p(-r, r), p(-r, 0)], [p(0, -r), p(r, -r), p(r, 0), p(0, 0), p(0, -r)]]

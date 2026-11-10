@@ -1,5 +1,6 @@
 import { fromVec3, pt, toVec3, type Pt, type Vec3 } from '../math'
-import type { ArcProps, CircleProps, EllipseProps, Entity } from '../document/types'
+import type { ArcProps, CircleProps, EllipseProps, Entity, SolidProps } from '../document/types'
+import { planarFaceNormal, rayFaces, solidTopology, type Topology } from '../editing/topology'
 import { ucsToWorld, worldToUcs, type Ucs } from '../ucs'
 import { snapEdgeMidpoint, solidCenters, solidQuadrants, solidSnapEdges, solidVertices } from '../editing/solid'
 import { ellipseMinorVec, ellipseParamSweep, ellipsePointAt, ellipsePoints, ellipseQuadrants, isEllipseArc } from '../geom/ellipse'
@@ -39,6 +40,10 @@ export type SnapType =
   | 'parallel'
   /** Punto de inserción de bloques y textos (INS). */
   | 'insertion'
+  /** Snaps de caras de sólidos (3DOSNAP): centro de una cara plana, perpendicular a ella y punto sobre ella. */
+  | 'faceCenter'
+  | 'facePerpendicular'
+  | 'faceNearest'
   | 'grid'
   /** Captura sobre una línea de alineación del object snap tracking (no es un running osnap). */
   | 'tracking'
@@ -92,6 +97,8 @@ export interface SnapSettings {
   explicitOsnap?: boolean
   /** Rectas y arcos adquiridos para EXT y PAR. */
   acquired?: Acquisition[]
+  /** Rayo del cursor en mundo (origen y dirección unitaria): para los snaps de caras. */
+  ray?: { o: Vec3; d: Vec3 }
 }
 
 /** Tipos de candidato de object snap (todos menos la grilla y el tracking). */
@@ -113,6 +120,9 @@ const PRIORITY: Record<Kind, number> = {
   node: 4,
   perpendicular: 3,
   tangent: 2,
+  faceCenter: 1,
+  facePerpendicular: 1,
+  faceNearest: 1,
   extension: 1,
   parallel: 1,
   nearest: 1,
@@ -123,6 +133,9 @@ const PRIORITY: Record<Kind, number> = {
  * Si el usuario tildó PER/TAN los quiere: ganan al CEN disparado desde la misma curva (D3).
  */
 const OBJECT_PRIORITY: Partial<Record<Kind, number>> = {
+  // Las de cara se disparan con el cursor en cualquier lugar de la cara: pierden con lo que da una arista.
+  faceCenter: -1,
+  facePerpendicular: -1,
   perpendicular: 4,
   tangent: 3,
   center: 2,
@@ -442,6 +455,23 @@ export function computeSnap(cursor: Pt, entities: Entity[], s: SnapSettings): Sn
       }
     }
 
+    /** 3DOSNAP: la cara del sólido bajo el cursor (la primera que corta el rayo) da su centro, el pie de la perpendicular y el punto. */
+    const faceSnaps = (p: SolidProps): void => {
+      const topo = solidTopology(p)
+      const hit = topo && s.ray ? rayFaces(topo, s.ray.o, s.ray.d)[0] : undefined
+      if (!topo || !hit) return
+      // Disparo al borde del umbral: lo que da una arista cercana (END, MID, CEN…) gana.
+      if (s.osnap.faceNearest) cands.push({ point: fromVec3(hit.point), type: 'faceNearest', tier: 3, d: thr, owner })
+      const n = planarFaceNormal(topo, hit.face)
+      if (!n) return
+      if (s.osnap.faceCenter) addObj(fromVec3(faceCentroid(topo, hit.face)), 'faceCenter', thr)
+      if (s.osnap.facePerpendicular && s.base) {
+        const b = toVec3(s.base)
+        const k = dot3(sub3(s.base, fromVec3(hit.point)), n)
+        addObj(fromVec3([b[0] - n[0] * k, b[1] - n[1] * k, b[2] - n[2] * k]), 'facePerpendicular', thr)
+      }
+    }
+
     /** GCEN de un contorno cerrado: nivel 1 sobre el centroide, nivel 2 desde el borde. */
     const geometricCenter = (c: Vec3 | null, segs: [Pt, Pt][]): void => {
       if (!c || !s.osnap.geometricCenter) return
@@ -558,6 +588,7 @@ export function computeSnap(cursor: Pt, entities: Entity[], s: SnapSettings): Sn
       if (e.type === 'SOLID3D') {
         for (const c of solidCenters(e.props)) add(fromVec3(c), 'center') // centros de cilindro/cono/esfera
         for (const q of solidQuadrants(e.props)) add(fromVec3(q), 'quadrant') // cuadrantes de bordes curvos
+        if (s.ray && (s.osnap.faceCenter || s.osnap.facePerpendicular || s.osnap.faceNearest)) faceSnaps(e.props)
         // Aristas reales (no el facetado): MID de rectas y arcos; CEN/QUA/TAN/PER de arcos y círculos; PER en rectas.
         for (const ed of solidSnapEdges(e.props)) {
           if (ed.iso) continue
@@ -769,4 +800,29 @@ function sampledSpan(e: Entity, a: Pt, b: Pt): boolean {
     if (same(va, a) && same(vb, b)) return Math.abs(bulgeAt(p, i)) > 1e-12
   }
   return true
+}
+
+const centroids = new WeakMap<Topology, Map<number, Vec3>>()
+
+/** Centroide (por área) de una cara de la topología. */
+function faceCentroid(topo: Topology, face: number): Vec3 {
+  let m = centroids.get(topo)
+  if (!m) centroids.set(topo, (m = new Map()))
+  const hit = m.get(face)
+  if (hit) return hit
+  let [ax, ay, az, area] = [0, 0, 0, 0]
+  topo.tris.forEach((t, i) => {
+    if (topo.triFace[i] !== face) return
+    const [A, B, C] = t.map((k) => topo.verts[k])
+    const u: Vec3 = [B[0] - A[0], B[1] - A[1], B[2] - A[2]]
+    const v: Vec3 = [C[0] - A[0], C[1] - A[1], C[2] - A[2]]
+    const w = Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]) / 2
+    ax += ((A[0] + B[0] + C[0]) / 3) * w
+    ay += ((A[1] + B[1] + C[1]) / 3) * w
+    az += ((A[2] + B[2] + C[2]) / 3) * w
+    area += w
+  })
+  const c: Vec3 = area > 0 ? [ax / area, ay / area, az / area] : topo.verts[0]
+  m.set(face, c)
+  return c
 }

@@ -24,6 +24,9 @@ export const OSNAP_KINDS: OsnapKind[] = [
   'extension',
   'parallel',
   'insertion',
+  'faceCenter',
+  'facePerpendicular',
+  'faceNearest',
 ]
 
 export const OSNAP_LABELS: Record<OsnapKind, string> = {
@@ -41,6 +44,9 @@ export const OSNAP_LABELS: Record<OsnapKind, string> = {
   extension: 'Extension',
   parallel: 'Parallel',
   insertion: 'Insertion',
+  faceCenter: 'Center of face (3D)',
+  facePerpendicular: 'Perpendicular to face (3D)',
+  faceNearest: 'Nearest to face (3D)',
 }
 
 /** Defaults estilo CAD clásico: los más usados activos; GCEN/perp/tangent/nearest/node bajo demanda. */
@@ -60,6 +66,10 @@ export const DEFAULT_OSNAP: OsnapConfig = {
   extension: true,
   parallel: false,
   insertion: false,
+  // Los snaps de caras (3DOSNAP del CAD clásico) bajo demanda.
+  faceCenter: false,
+  facePerpendicular: false,
+  faceNearest: false,
 }
 
 /** Config con un único snap activo (para overrides de un solo uso, estilo CAD clásico). */
@@ -106,6 +116,9 @@ const OVERRIDE_ALIASES: Record<string, OsnapOverride> = {
   parallel: 'parallel',
   ins: 'insertion',
   insertion: 'insertion',
+  zcen: 'faceCenter',
+  zper: 'facePerpendicular',
+  znea: 'faceNearest',
   non: 'none',
   none: 'none',
 }

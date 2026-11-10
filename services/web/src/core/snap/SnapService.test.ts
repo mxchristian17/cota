@@ -22,6 +22,9 @@ const ALL_ON: OsnapConfig = {
   extension: false,
   parallel: false,
   insertion: false,
+  faceCenter: false,
+  facePerpendicular: false,
+  faceNearest: false,
 }
 const ALL_OFF: OsnapConfig = {
   endpoint: false,
@@ -38,6 +41,9 @@ const ALL_OFF: OsnapConfig = {
   extension: false,
   parallel: false,
   insertion: false,
+  faceCenter: false,
+  facePerpendicular: false,
+  faceNearest: false,
 }
 
 const line: LineEntity = {

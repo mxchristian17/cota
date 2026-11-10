@@ -1390,6 +1390,7 @@ export const useStore = create<AppState>((set, get) => {
     viewPlane: () => get().activeViewport?.viewPlane() ?? null,
     isDynInput: () => get().dynInput,
     currentCursor: () => get().cursor,
+    trackPath: () => get().activeViewport?.trackPath() ?? null,
     currentUcs: () => get().ucs,
     currentSelection: () => get().selection,
     onSelectionChange: (ids) => set({ selection: ids }),

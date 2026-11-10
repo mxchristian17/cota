@@ -36,6 +36,8 @@ export const rectangleCommand: Command = {
     for (;;) {
       const r = await ctx.getPoint(size ? 'Specify other corner point (side of the rectangle): ' : 'Specify other corner point or [Dimensions]: ', {
         base: o,
+        // Esquina opuesta: ORTHO no la alinea con la primera (la dejaría en una línea), como en el CAD clásico.
+        corner: true,
         keywords: size ? [] : ['Dimensions'],
         preview: (c) => {
           const [du, dv] = local(c)

@@ -170,3 +170,15 @@ describe('EXT, PAR, INS y splines', () => {
 function settings(c: Pt) {
   return { gridSnap: false, gridStep: 10, esnap: true, ucs: WORLD_UCS, osnap: DEFAULT_OSNAP, base: null, cursorPx: [c.x * 10, -c.y * 10] as [number, number], pixelThreshold: 10, project: (p: Pt): [number, number] => [p.x * 10, -p.y * 10] }
 }
+
+describe('snaps de caras (3DOSNAP)', () => {
+  // Mirando desde arriba (rayo hacia −Z) sobre la cara superior de la caja (z = 4).
+  const ray = (x: number, y: number) => ({ o: [x, y, 100] as Vec3, d: [0, 0, -1] as Vec3 })
+  const top = (x: number, y: number, osnap: OsnapConfig, base: Pt | null = null) =>
+    computeSnap(pt(x, y, 4), [box], { ...settings(pt(x, y, 4)), osnap, base, ray: ray(x, y) })
+  it('centro de la cara bajo el cursor, perpendicular a ella desde el punto base y punto sobre ella', () => {
+    near(top(2, 2, singleOsnap('faceCenter')), 'faceCenter', [5, 3, 4])
+    near(top(2, 2, singleOsnap('facePerpendicular'), pt(7, 1, 20)), 'facePerpendicular', [7, 1, 4])
+    near(top(2, 2, singleOsnap('faceNearest')), 'faceNearest', [2, 2, 4])
+  })
+})

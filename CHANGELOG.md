@@ -4,6 +4,21 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.30.0] — 2026-11-09
+
+### Added
+- **Face snaps on 3D solids** (as classic CAD's 3D object snaps): center of face, perpendicular to face and nearest to
+  face, in the OSNAP menu (off by default) and as typed overrides `ZCEN`, `ZPER` and `ZNEA`.
+- **Typed distance along a tracking path**: while the cursor follows a tracking alignment, an extension (EXT), a
+  parallel (PAR) or a polar ray, typing a number gives the point at that distance along it, at any point prompt (the
+  start of a polyline, the center of a circle, a corner of a rectangle...), with or without a previous point.
+
+### Fixed
+- **ORTHO with rectangles and boxes**: the opposite corner of RECTANG and BOX no longer snaps to the first one's axis
+  (the preview collapsed into a line); lines and other commands still follow ORTHO.
+- **Tracking in other UCS**: the crossing of an alignment path with an object now works in any UCS and view, not only
+  in plan.
+
 ## [2.29.0] — 2026-11-09
 
 ### Added

@@ -60,16 +60,31 @@ function lineLineClosest(o1: Pt, d1: Pt, o2: Pt, d2: Pt): Pt | null {
   return pt((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, (p1.z + p2.z) / 2)
 }
 
-/** Cruce de la recta (o,d) con el segmento a→b en el plano XY (null si no se cruzan). */
-function lineSegmentXY(o: Pt, d: Pt, a: Pt, b: Pt): Pt | null {
-  const rx = b.x - a.x
-  const ry = b.y - a.y
-  // a + u·r = o + t·d  →  u = (dx·(oy−ay) − dy·(ox−ax)) / (dx·ry − dy·rx)
-  const denom = d.x * ry - d.y * rx
+/**
+ * Cruce de la recta (o,d) con el segmento a→b. En 3D (cualquier UCS): los puntos más cercanos de ambas, si casi se
+ * tocan. Si no se tocan en el espacio pero ambos están en planos XY (planta), el cruce en XY, como hasta ahora.
+ */
+function lineSegmentCross(o: Pt, d: Pt, a: Pt, b: Pt): Pt | null {
+  const r = sub(b, a)
+  const w = sub(o, a)
+  const dd = dot(d, d)
+  const rr = dot(r, r)
+  const dr = dot(d, r)
+  const den = dd * rr - dr * dr
+  if (rr > 0 && den > 1e-12 * dd * rr) {
+    const t = (dr * dot(r, w) - rr * dot(d, w)) / den
+    const u = (dd * dot(r, w) - dr * dot(d, w)) / den
+    const p = add(o, d, t)
+    const q = add(a, r, u)
+    if (u >= -1e-9 && u <= 1 + 1e-9 && Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) <= 1e-6 * (1 + Math.sqrt(rr))) return q
+  }
+  if (Math.abs(d.z) > 1e-9) return null
+  // a + u·r = o + t·d en XY  →  u = (dx·(oy−ay) − dy·(ox−ax)) / (dx·ry − dy·rx)
+  const denom = d.x * r.y - d.y * r.x
   if (Math.abs(denom) < 1e-9) return null
   const u = (d.x * (o.y - a.y) - d.y * (o.x - a.x)) / denom
   if (u < 0 || u > 1) return null
-  return pt(a.x + u * rx, a.y + u * ry, a.z + u * (b.z - a.z))
+  return pt(a.x + u * r.x, a.y + u * r.y, a.z + u * r.z)
 }
 
 interface Align {
@@ -125,7 +140,7 @@ export function computeTracking(cursor: Pt, tracked: Pt[], s: TrackingSettings):
     let bestHit: { p: Pt; d: number } | null = null
     for (const e of s.entities) {
       for (const [a, b] of segmentsOfEntity(e)) {
-        const hit = lineSegmentXY(best.origin, best.dir, a, b)
+        const hit = lineSegmentCross(best.origin, best.dir, a, b)
         if (!hit) continue
         const d = pxDist(hit, s)
         if (d <= s.pixelThreshold && (!bestHit || d < bestHit.d)) bestHit = { p: hit, d }

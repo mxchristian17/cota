@@ -68,3 +68,16 @@ describe('computeTracking (OTRACK)', () => {
     expect(r!.point.x).toBeCloseTo(10)
   })
 })
+
+describe('tracking en otra UCS', () => {
+  it('la alineación vertical de la UCS FRONT cruza un objeto del plano XZ', () => {
+    // Alineación desde 0,0,0 en dirección Z (eje Y de la UCS FRONT) y una línea horizontal a z = 5 del plano XZ.
+    const wall: Entity = { id: 'w', type: 'LINE', layer: '0', props: { start: [-10, 0, 5], end: [10, 0, 5] } }
+    const project = (p: Pt): [number, number] => [p.x * 10, -p.z * 10]
+    const r = computeTracking(pt(0.05, 0, 5.05), [pt(0, 0, 0)], {
+      cursorPx: [0.5, -50.5], project, pixelThreshold: 10, axes: [pt(1, 0, 0), pt(0, 0, 1)], entities: [wall], lineLength: 100,
+    })
+    expect(r?.point.z).toBeCloseTo(5, 9)
+    expect(r?.point.x).toBeCloseTo(0, 9)
+  })
+})

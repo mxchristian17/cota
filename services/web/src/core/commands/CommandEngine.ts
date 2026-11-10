@@ -57,6 +57,8 @@ export interface CommandEngineDeps {
   /** Entrada dinámica (F12): coordenadas tecleadas relativas al punto anterior sin `@`. */
   isDynInput?: () => boolean
   currentCursor: () => Pt
+  /** Trayectoria de tracking que sigue el cursor (OTRACK, polar, EXT, PAR): origen y dirección unitaria. */
+  trackPath?: () => { origin: Pt; dir: Pt } | null
   currentUcs: () => Ucs
   currentSelection: () => string[]
   onSelectionChange: (ids: string[]) => void
@@ -1009,9 +1011,20 @@ export class CommandEngine {
     }
 
     if (pending.type === 'point') {
+      // Sobre una trayectoria de tracking (alineación de un punto adquirido, prolongación EXT, paralela PAR, polar), un
+      // número da el punto a esa distancia del origen de la trayectoria, haya o no punto base (CAD clásico): así se
+      // empieza una polilínea, el centro de un círculo o la esquina de un rectángulo a una distancia de una referencia.
+      const num = parseNumber(trimmed)
+      const path = num !== null ? this.deps.trackPath?.() : null
+      if (num !== null && path) {
+        const tp = { x: path.origin.x + path.dir.x * num, y: path.origin.y + path.dir.y * num, z: path.origin.z + path.dir.z * num }
+        this.lastPoint = tp
+        this.pending = null
+        pending.resolve({ kind: 'point', point: tp })
+        return
+      }
       // Direct distance entry: número simple + punto base -> distancia en la
       // dirección que marca el cursor (o el eje ortogonal si ORTHO está activo).
-      const num = parseNumber(trimmed)
       if (num !== null && pending.base) {
         const dd = this.directDistancePoint(pending.base, num)
         if (dd === null) {

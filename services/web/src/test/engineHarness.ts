@@ -8,7 +8,7 @@ import { resetMemory } from '../core/commands/memory'
 import { resetDimSession } from '../core/commands/impl/dim'
 import { resetMatchSettings } from '../core/commands/impl/matchprop'
 import type { ViewName, VisualStyle } from '../core/view'
-import type { Vec3 } from '../core/math'
+import type { Pt, Vec3 } from '../core/math'
 import { solidMesh } from '../render/csg'
 
 /**
@@ -28,6 +28,9 @@ export function makeEngine() {
   /** Normal de la vista hacia el observador (undefined = planta, cae en `constructionNormal`). */
   let facing: Vec3 | undefined
   const views: ViewName[] = []
+  /** Trayectoria de tracking simulada (la que el viewport reportaría bajo el cursor). */
+  let track: { origin: Pt; dir: Pt } | null = null
+  let ortho = false
   let ucs: Ucs = { ...WORLD_UCS }
   let ucsName: string | null = 'World'
   const history: Ucs[] = []
@@ -83,8 +86,9 @@ export function makeEngine() {
   const engine = new CommandEngine({
     doc,
     currentLayerId: () => clayer,
-    isOrtho: () => false,
+    isOrtho: () => ortho,
     currentCursor: () => ({ x: 0, y: 0, z: 0 }),
+    trackPath: () => track,
     currentUcs: () => ucs,
     currentSelection: () => selection,
     onSelectionChange: (ids) => (selection = ids),
@@ -99,6 +103,8 @@ export function makeEngine() {
   registerDefaultCommands(engine)
   const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
   return {
+    setTrackPath: (p: { origin: Pt; dir: Pt } | null) => (track = p),
+    setOrtho: (on: boolean) => (ortho = on),
     doc,
     engine,
     prints,

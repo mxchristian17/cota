@@ -101,6 +101,8 @@ export const boxCommand: Command = {
     if (p1.kind !== 'point') return
     const p2 = await ctx.getPoint('Specify opposite corner: ', {
       base: p1.point,
+      corner: true, // ORTHO no la alinea con la primera esquina
+
       preview: (cursor) => [
         {
           kind: 'polyline',
