@@ -688,10 +688,96 @@ export function edgeMidpoint(e: TopoEdge): Vec3 {
   return e.pts[0]
 }
 
-/** Tangente de salida de una arista abierta en su extremo (`end` = 0 inicio, 1 fin), hacia afuera. */
+/**
+ * Tangente de salida de una arista abierta en su extremo (`end` = 0 inicio, 1 fin), hacia afuera. En una curva
+ * facetada es la del círculo por los tres últimos puntos: la del último tramo queda girada medio paso y el
+ * empalme que termina ahí mordía la cara vecina.
+ */
 export function endTangent(e: TopoEdge, end: 0 | 1): Vec3 {
   const n = e.pts.length
-  return end === 0 ? vnorm(vsub(e.pts[0], e.pts[1])) : vnorm(vsub(e.pts[n - 1], e.pts[n - 2]))
+  const [a, b] = end === 0 ? [e.pts[0], e.pts[1]] : [e.pts[n - 1], e.pts[n - 2]]
+  const chord = vnorm(vsub(a, b))
+  const circ = endCircle(e, end)
+  if (!circ) return chord
+  // Velocidad del giro alrededor del eje en el extremo.
+  const t = vnorm(vcross(circ.axis, vsub(a, circ.center)))
+  // Sólo corrige el facetado: un quiebre mayor no es un arco y se deja la cuerda.
+  return vdot(t, chord) > Math.SQRT1_2 ? t : chord
+}
+
+/** Círculo que sigue una arista facetada más allá de su extremo `end`. */
+export interface EndCircle {
+  center: Vec3
+  /** Eje unitario: girar alrededor de él con ángulo positivo sale de la arista por ese extremo. */
+  axis: Vec3
+  /** Ángulo del último tramo visto desde el centro (el paso del facetado). */
+  step: number
+}
+
+/** Círculo por tres puntos; `null` si están alineados. */
+function circumcircle(a: Vec3, b: Vec3, c: Vec3): { center: Vec3; axis: Vec3 } | null {
+  const [u, w] = [vsub(b, a), vsub(c, a)]
+  const nrm = vcross(u, w)
+  const nn = vdot(nrm, nrm)
+  if (nn < 1e-12 * vdot(u, u) * vdot(w, w)) return null
+  const rel = vscale(vadd(vscale(vcross(w, nrm), vdot(u, u)), vscale(vcross(nrm, u), vdot(w, w))), 1 / (2 * nn))
+  return { center: vadd(a, rel), axis: vnorm(nrm) }
+}
+
+/**
+ * Círculo de mínimos cuadrados por todos los puntos de una curva plana; `null` si no es plana o algún punto se
+ * aparta más del 1 % del radio (no es un arco de círculo).
+ */
+function fitCircle(pts: Vec3[]): { center: Vec3; axis: Vec3 } | null {
+  const n = pts.length
+  const cen = vscale(pts.reduce(vadd, [0, 0, 0] as Vec3), 1 / n)
+  const rel = pts.map((p) => vsub(p, cen))
+  let normal: Vec3 = [0, 0, 0]
+  for (let i = 0; i + 1 < n; i++) normal = vadd(normal, vcross(rel[i], rel[i + 1]))
+  if (vlen(normal) < 1e-12) return null
+  const axis = vnorm(normal)
+  const u = vnorm(vsub(rel[0], vscale(axis, vdot(rel[0], axis))))
+  const v = vcross(axis, u)
+  // Ajuste algebraico en el plano (los puntos están centrados, así que las sumas simples se anulan).
+  let [suu, svv, suv, suuu, svvv, suuv, suvv] = [0, 0, 0, 0, 0, 0, 0]
+  for (const p of rel) {
+    const [x, y] = [vdot(p, u), vdot(p, v)]
+    suu += x * x
+    svv += y * y
+    suv += x * y
+    suuu += x * x * x
+    svvv += y * y * y
+    suuv += x * x * y
+    suvv += x * y * y
+  }
+  const det = suu * svv - suv * suv
+  if (det < 1e-12 * (suu + svv) * (suu + svv)) return null
+  const [bx, by] = [suuu + suvv, suuv + svvv]
+  const cx = (bx * svv - by * suv) / (2 * det)
+  const cy = (by * suu - bx * suv) / (2 * det)
+  const center = vadd(cen, vadd(vscale(u, cx), vscale(v, cy)))
+  const r = Math.sqrt(cx * cx + cy * cy + (suu + svv) / n)
+  const tol = r * 1e-2
+  const fits = pts.every((p) => Math.abs(vdist(p, center) - r) <= tol && Math.abs(vdot(vsub(p, cen), axis)) <= tol)
+  return fits ? { center, axis } : null
+}
+
+/**
+ * Círculo que sigue una curva facetada más allá de su extremo; `null` en una recta o con puntos alineados. Si la
+ * curva entera es circular, su círculo (los puntos de un corte plano de la malla traen el ruido del facetado y
+ * tres vecinos dan un círculo muy distinto); si no, el de los tres últimos puntos.
+ */
+export function endCircle(e: TopoEdge, end: 0 | 1): EndCircle | null {
+  const n = e.pts.length
+  if (e.kind === 'line' || n < 3) return null
+  const [a, b, c] = end === 0 ? [e.pts[0], e.pts[1], e.pts[2]] : [e.pts[n - 1], e.pts[n - 2], e.pts[n - 3]]
+  const circ = fitCircle(e.pts) ?? circumcircle(a, b, c)
+  if (!circ) return null
+  // De `b` a `a` se gira en sentido positivo alrededor del eje: seguir girando sale de la arista.
+  const [rb, ra] = [vnorm(vsub(b, circ.center)), vnorm(vsub(a, circ.center))]
+  const axis = vdot(vcross(circ.axis, ra), vsub(a, b)) < 0 ? vscale(circ.axis, -1) : circ.axis
+  const step = Math.acos(Math.max(-1, Math.min(1, vdot(rb, ra))))
+  return step > 1e-9 ? { center: circ.center, axis, step } : null
 }
 
 /** Aristas tangentes encadenadas a `start` (opción Chain): comparten extremo y siguen sin quiebre vivo. */

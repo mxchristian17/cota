@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import '../../render/csg'
 import type { SolidProps } from '../document/types'
-import { edgeChain, edgeLoop, edgeMidpoint, nearestEdge, rayEdge, solidTopology } from './topology'
+import { edgeChain, edgeLoop, edgeMidpoint, endTangent, nearestEdge, rayEdge, solidTopology } from './topology'
 
 const box: SolidProps = { op: 'BOX', origin: [0, 0, 0], width: 10, depth: 10, height: 10 }
 const cyl: SolidProps = { op: 'CYLINDER', base: [0, 0, 0], radius: 5, height: 10, segments: 48 }
@@ -94,3 +94,29 @@ describe('picking de aristas como el pickbox del CAD clásico (revisión 2026-10
   })
 })
 
+describe('tangente en el extremo de una arista facetada', () => {
+  it('arco de esfera menos caja: la del círculo, no la del último tramo (girada medio paso)', () => {
+    const cut: SolidProps = {
+      op: 'SUBTRACT',
+      operands: [
+        { op: 'SPHERE', center: [0, 0, 0], radius: 10, segments: 48 },
+        { op: 'BOX', origin: [0, 0, 0], width: 20, depth: 20, height: 20 },
+      ],
+    }
+    const t = solidTopology(cut)
+    if (!t) throw new Error('sin topología')
+    // El arco de la pared x=0 (y² + z² = 100) termina en (0, 0, 10): la tangente de salida es exactamente −y.
+    const arc = t.edges.find((e) => !e.closed && e.pts.every((q) => Math.abs(q[0]) < 1e-6 && Math.abs(Math.hypot(q[1], q[2]) - 10) < 1e-3))
+    if (!arc) throw new Error('sin arco')
+    const end = arc.pts[0][2] > arc.pts[arc.pts.length - 1][2] ? 0 : 1
+    const out = endTangent(arc, end)
+    expect(out[1]).toBeCloseTo(-1, 4)
+    expect(Math.abs(out[2])).toBeLessThan(1e-3)
+    // Una arista recta sigue dando su propia dirección.
+    const line = t.edges.find((e) => e.kind === 'line')
+    if (!line) throw new Error('sin recta')
+    const [a, b] = [line.pts[line.pts.length - 2], line.pts[line.pts.length - 1]]
+    const d = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])
+    expect(endTangent(line, 1)).toEqual([(b[0] - a[0]) / d, (b[1] - a[1]) / d, (b[2] - a[2]) / d])
+  })
+})
