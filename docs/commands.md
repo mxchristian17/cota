@@ -177,37 +177,37 @@ Every command can be typed in the command line (aliases too) or picked from the 
 
 | Command | Aliases | What it does |
 | --- | --- | --- |
-| `DIM` | — | Smart dimension: pick an object (line → linear/aligned, arc → radius, circle → diameter) [Angular/Baseline/Continue/Ordinate/aLign/LAyer/Undo] |
-| `QDIM` | — | Quick dimension: chain the selected geometry [Continuous/Staggered/Baseline/Ordinate/Radius/Diameter] |
-| `AUTODIM` | `ADIM` | Dimension a part automatically: overall sizes, steps, hole positions, diameters and radii |
-| `DIMLINEAR` | `DLI`, `DIMLIN` | Linear dimension (horizontal, vertical or rotated) [Mtext/Text/Angle/Horizontal/Vertical/Rotated] |
-| `DIMALIGNED` | `DAL`, `DIMALI` | Aligned dimension [Mtext/Text/Angle] |
-| `DIMARC` | `DAR` | Arc length dimension [Mtext/Text/Angle/Partial] |
-| `DIMORDINATE` | `DOR` | Ordinate dimension (X or Y datum from the UCS origin) [Xdatum/Ydatum/Mtext/Text/Angle] |
-| `DIMRADIUS` | `DRA`, `DIMRAD` | Radius dimension of an arc or circle [Mtext/Text/Angle] |
-| `DIMJOGGED` | `DJO`, `JOG` | Jogged radius dimension (center location override) [Mtext/Text/Angle] |
-| `DIMDIAMETER` | `DDI`, `DIMDIA` | Diameter dimension of an arc or circle [Mtext/Text/Angle] |
-| `DIMANGULAR` | `DAN` | Angular dimension: two lines, an arc, a circle or a vertex and two points [Mtext/Text/Angle] |
-| `DIMBASELINE` | `DBA`, `DIMBASE` | Baseline dimensions from the last (or a selected) dimension, spaced by DIMDLI [Select/Undo] |
-| `DIMCONTINUE` | `DCO`, `DIMCONT` | Continued dimensions from the last (or a selected) dimension [Select/Undo] |
-| `DIMSPACE` | — | Space parallel linear or angular dimensions evenly (0 aligns them) |
-| `DIMBREAK` | — | Break dimension and extension lines where they cross other objects (Auto/Manual/Remove) |
-| `MLEADER` | `MLD` | Multileader with text (fields allowed), block or no content [leader Landing first/Content first/Options] |
-| `QLEADER` | `LE` | Quick leader: points and text (creates a multileader) |
-| `LEADER` | `LEAD` | Leader with annotation text (see MLEADER) |
-| `MLEADEREDIT` | `MLE` | Add or remove leaders of a multileader [Add leader/Remove leaders] |
-| `MLEADERALIGN` | `MLA` | Align multileaders along a direction from a base multileader (current spacing) |
-| `DIMCENTER` | `DCE`, `CENTERMARK`, `CM` | Center mark (and center lines with DIMCEN < 0) of an arc or circle |
-| `CENTERLINE` | — | Associative center line between two lines |
-| `THREAD` | `COSMETICTHREAD` | Cosmetic thread (ISO/IRAM): 3/4 arc on a circle or thread texture on a cylindrical face, nearest standard size and optional leader |
-| `DIMINSPECT` | — | Add or remove inspection information (label, value, inspection rate) on dimensions |
-| `DIMJOGLINE` | `DJL` | Add or remove a jog line on a linear or aligned dimension |
-| `DIMEDIT` | `DED`, `DIMED` | Edit dimension text and extension lines: Home, New text, Rotate text, Oblique extension lines |
-| `DIMTEDIT` | `DIMTED` | Move or rotate dimension text: new location, Left, Right, Center, Home or Angle |
-| `DIMOVERRIDE` | `DOV`, `DIMOVER` | Override dimension variables on selected dimensions, or Clear their overrides |
-| `DIMREASSOCIATE` | `DRE` | Associate the definition points of dimensions with geometry (pick a point on an object; Enter skips) |
-| `DIMDISASSOCIATE` | `DDA` | Remove the associativity of the selected dimensions |
-| `DIMREGEN` | — | Update all associative dimensions |
+| [`DIM`](reference/dimension.md#dim) | — | Smart dimension: pick an object (line → linear/aligned, arc → radius, circle → diameter) [Angular/Baseline/Continue/Ordinate/aLign/LAyer/Undo] |
+| [`QDIM`](reference/dimension.md#qdim) | — | Quick dimension: chain the selected geometry [Continuous/Staggered/Baseline/Ordinate/Radius/Diameter] |
+| [`AUTODIM`](reference/dimension.md#autodim) | `ADIM` | Dimension a part automatically: overall sizes, steps, hole positions, diameters and radii |
+| [`DIMLINEAR`](reference/dimension.md#dimlinear) | `DLI`, `DIMLIN` | Linear dimension (horizontal, vertical or rotated) [Mtext/Text/Angle/Horizontal/Vertical/Rotated] |
+| [`DIMALIGNED`](reference/dimension.md#dimaligned) | `DAL`, `DIMALI` | Aligned dimension [Mtext/Text/Angle] |
+| [`DIMARC`](reference/dimension.md#dimarc) | `DAR` | Arc length dimension [Mtext/Text/Angle/Partial] |
+| [`DIMORDINATE`](reference/dimension.md#dimordinate) | `DOR` | Ordinate dimension (X or Y datum from the UCS origin) [Xdatum/Ydatum/Mtext/Text/Angle] |
+| [`DIMRADIUS`](reference/dimension.md#dimradius) | `DRA`, `DIMRAD` | Radius dimension of an arc or circle [Mtext/Text/Angle] |
+| [`DIMJOGGED`](reference/dimension.md#dimjogged) | `DJO`, `JOG` | Jogged radius dimension (center location override) [Mtext/Text/Angle] |
+| [`DIMDIAMETER`](reference/dimension.md#dimdiameter) | `DDI`, `DIMDIA` | Diameter dimension of an arc or circle [Mtext/Text/Angle] |
+| [`DIMANGULAR`](reference/dimension.md#dimangular) | `DAN` | Angular dimension: two lines, an arc, a circle or a vertex and two points [Mtext/Text/Angle] |
+| [`DIMBASELINE`](reference/dimension.md#dimbaseline) | `DBA`, `DIMBASE` | Baseline dimensions from the last (or a selected) dimension, spaced by DIMDLI [Select/Undo] |
+| [`DIMCONTINUE`](reference/dimension.md#dimcontinue) | `DCO`, `DIMCONT` | Continued dimensions from the last (or a selected) dimension [Select/Undo] |
+| [`DIMSPACE`](reference/dimension.md#dimspace) | — | Space parallel linear or angular dimensions evenly (0 aligns them) |
+| [`DIMBREAK`](reference/dimension.md#dimbreak) | — | Break dimension and extension lines where they cross other objects (Auto/Manual/Remove) |
+| [`MLEADER`](reference/dimension.md#mleader) | `MLD` | Multileader with text (fields allowed), block or no content [leader Landing first/Content first/Options] |
+| [`QLEADER`](reference/dimension.md#qleader) | `LE` | Quick leader: points and text (creates a multileader) |
+| [`LEADER`](reference/dimension.md#leader) | `LEAD` | Leader with annotation text (see MLEADER) |
+| [`MLEADEREDIT`](reference/dimension.md#mleaderedit) | `MLE` | Add or remove leaders of a multileader [Add leader/Remove leaders] |
+| [`MLEADERALIGN`](reference/dimension.md#mleaderalign) | `MLA` | Align multileaders along a direction from a base multileader (current spacing) |
+| [`DIMCENTER`](reference/dimension.md#dimcenter) | `DCE`, `CENTERMARK`, `CM` | Center mark (and center lines with DIMCEN < 0) of an arc or circle |
+| [`CENTERLINE`](reference/dimension.md#centerline) | — | Associative center line between two lines |
+| [`THREAD`](reference/dimension.md#thread) | `COSMETICTHREAD` | Cosmetic thread (ISO/IRAM): 3/4 arc on a circle or thread texture on a cylindrical face, nearest standard size and optional leader |
+| [`DIMINSPECT`](reference/dimension.md#diminspect) | — | Add or remove inspection information (label, value, inspection rate) on dimensions |
+| [`DIMJOGLINE`](reference/dimension.md#dimjogline) | `DJL` | Add or remove a jog line on a linear or aligned dimension |
+| [`DIMEDIT`](reference/dimension.md#dimedit) | `DED`, `DIMED` | Edit dimension text and extension lines: Home, New text, Rotate text, Oblique extension lines |
+| [`DIMTEDIT`](reference/dimension.md#dimtedit) | `DIMTED` | Move or rotate dimension text: new location, Left, Right, Center, Home or Angle |
+| [`DIMOVERRIDE`](reference/dimension.md#dimoverride) | `DOV`, `DIMOVER` | Override dimension variables on selected dimensions, or Clear their overrides |
+| [`DIMREASSOCIATE`](reference/dimension.md#dimreassociate) | `DRE` | Associate the definition points of dimensions with geometry (pick a point on an object; Enter skips) |
+| [`DIMDISASSOCIATE`](reference/dimension.md#dimdisassociate) | `DDA` | Remove the associativity of the selected dimensions |
+| [`DIMREGEN`](reference/dimension.md#dimregen) | — | Update all associative dimensions |
 
 ## Modify menu
 

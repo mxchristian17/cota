@@ -2,7 +2,7 @@ import { paperPerModel } from '../../layout/scale'
 import { parseProxyId } from '../../layout/transspatial'
 import { toVec3, type Pt, type Vec3 } from '../../math'
 import type { DimAssocRef, DimensionEntity, DimensionProps, DimType, Entity } from '../../document/types'
-import { dimDisplay, dimScaleFactor, formatDim, hAxes, planeAxes } from '../../dimension/dimGeometry'
+import { dimDisplay, dimScaleFactor, fixLinearRotation, formatDim, hAxes, planeAxes } from '../../dimension/dimGeometry'
 import { arcEndpoints } from '../../geom/arc'
 import { bulgeArc, bulgeAt, polylineSpans } from '../../geom/polyline'
 import type { PreviewShape } from '../../preview'
@@ -579,7 +579,13 @@ function chained(prev: DimensionProps, p: Vec3, baseline: boolean, k: number): D
     const rad = baseline ? r + step : r
     return { ...prev, angMode: 'points', points: [c, first, p], textPos: add(c, scl(mid, rad)), textAt: undefined, textOverride: null, assoc: undefined }
   }
-  // LINEAR / ALIGNED: misma dirección; la base se aleja DIMDLI del objeto.
+  // LINEAR / ALIGNED: misma dirección; la base se aleja DIMDLI del objeto. Una lineal sin rotación decide H/V por
+  // dónde está su línea de cota respecto de sus puntos: la cadena fija la orientación de la anterior (si no, una
+  // cota continua a la derecha de una horizontal quedaba vertical y medía 0).
+  if (prev.dimType === 'LINEAR' && prev.rotation === undefined) {
+    prev = { ...prev }
+    fixLinearRotation(prev)
+  }
   const [a, b] = prev.points
   const n = prev.normal ?? [0, 0, 1]
   const d = norm(sub(b, a))

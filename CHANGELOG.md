@@ -4,6 +4,18 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.33.3] — 2026-11-10
+
+### Fixed
+- **DIMCONTINUE and DIMBASELINE** on horizontal or vertical linear dimensions: the new dimensions of the chain could
+  turn perpendicular and read 0. They now keep the direction of the dimension they continue.
+
+### Documentation
+- **Dimension command reference**: all 31 commands of the Dimension menu (smart and quick dimensions, automatic
+  dimensioning, linear, aligned, arc length, ordinate, radius, jogged, diameter, angular, baseline and continue,
+  spacing and breaks, multileaders and leaders, center marks and lines, threads, inspection, jog lines and the
+  dimension editing tools), each with its prompts, options and a working example.
+
 ## [2.33.2] — 2026-11-10
 
 ### Documentation

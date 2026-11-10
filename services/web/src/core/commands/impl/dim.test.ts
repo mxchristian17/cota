@@ -115,6 +115,15 @@ describe('DIMBASELINE / DIMCONTINUE / DIM / QDIM', () => {
     expect(c1.textPos[1]).toBeCloseTo(-10, 9) // misma línea de cota
   })
 
+  it('las cotas lineales de una cadena miden lo mismo que se ve (horizontal como la base, no 0)', async () => {
+    const h = makeEngine()
+    await h.run('DIMLINEAR', '#0,0', '#30,0', '#15,-10')
+    await h.run('DIMCONTINUE', '#60,0', '#100,0', '')
+    await h.run('DIMLINEAR', '#0,50', '#0,80', '#-10,65')
+    await h.run('DIMBASELINE', '#0,120', '')
+    expect(dims(h).map((d) => formatDim(d))).toEqual(['30', '30', '40', '30', '70'])
+  })
+
   it('DIMBASELINE: desde el primer origen, cada una a DIMDLI de la anterior; Undo quita la última', async () => {
     const h = makeEngine()
     await h.run('DIMLINEAR', '#0,0', '#10,0', '#5,-10')
