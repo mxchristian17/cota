@@ -237,9 +237,9 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | [`CHAMFER`](reference/modify.md#chamfer) | `CHA` | Bevel the edges of objects |
 | [`FILLET`](reference/modify.md#fillet) | `F` | Round and fillet the edges of objects |
 | [`ALIGN`](reference/modify.md#align) | `AL` | Align objects with other objects using source/destination point pairs |
-| [`UNION`](reference/modify.md#union) | `UNI` | Boolean union of solids |
-| [`SUBTRACT`](reference/modify.md#subtract) | `SU` | Boolean subtraction of solids |
-| [`INTERSECT`](reference/modify.md#intersect) | `IN` | Boolean intersection of solids |
+| [`UNION`](reference/modify.md#union) | `UNI` | Boolean union of solids or coplanar regions |
+| [`SUBTRACT`](reference/modify.md#subtract) | `SU` | Boolean subtraction of solids or coplanar regions |
+| [`INTERSECT`](reference/modify.md#intersect) | `IN` | Boolean intersection of solids or coplanar regions |
 | [`SLICE`](reference/modify.md#slice) | `SL` | Slice solids with a plane, keeping one side or both |
 | [`FILLETEDGE`](reference/modify.md#filletedge) | — | Round and fillet the edges of solid objects |
 | [`CHAMFEREDGE`](reference/modify.md#chamferedge) | — | Bevel the edges of solid objects |

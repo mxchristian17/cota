@@ -17,6 +17,7 @@ from the Help dialog.
 | [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) | 0.7 | MIT |
 | [Zustand](https://github.com/pmndrs/zustand) | 5.0 | MIT |
 | [acad-ts](https://github.com/node-projects/acad-ts) (TypeScript port of [ACadSharp](https://github.com/DomCR/ACadSharp)), loaded when a DWG is opened | 3.6.0 | MIT |
+| [polygon-clipping](https://github.com/mfogel/polygon-clipping) (uses [splaytree](https://github.com/w8r/splay-tree) 3.2, MIT, and [robust-predicates](https://github.com/mourner/robust-predicates) 3.0, public domain) | 0.15.7 | MIT |
 
 ### OpenCascade for STEP/IGES (loaded on demand)
 

@@ -511,13 +511,13 @@ ALIGN L "" 0,0 0,0 30,0 30,40 "" Y
 
 ## UNION
 
-Combines two or more solids into one.
+Combines two or more solids into one, or two or more coplanar regions into one region.
 
 **Aliases** `UNI` · **Menu** Modify › Solid editing
 
 **Steps**
 
-1. `Select objects:` at least two solids, then <kbd>Enter</kbd>.
+1. `Select objects:` at least two solids or regions, then <kbd>Enter</kbd>.
 
 **Example**
 
@@ -530,10 +530,13 @@ UNION ALL ""
 **Notes**
 
 - Object snaps work on the real edges of the result, including the circles where solids meet.
+- Solids are combined with solids and regions with regions, in the same command. Only regions in the same plane are
+  combined; regions in different planes are combined plane by plane.
+- A region result keeps exact arcs: the outline of two overlapping circles has its centers and quadrants.
 
 ## SUBTRACT
 
-Removes the volume of some solids from others: holes, pockets, slots.
+Removes the volume of some solids from others (holes, pockets, slots), or the area of some regions from others.
 
 **Aliases** `SU` · **Menu** Modify › Solid editing
 
@@ -556,16 +559,19 @@ SUBTRACT 1,1,10 "" L ""
 **Notes**
 
 - Several solids to subtract from are first combined into one.
+- Regions work the same way, in their plane: a rectangle region minus a circle region is a region with a hole. A
+  region can then be measured with AREA or turned into a solid with EXTRUDE.
+- When nothing is left, Cota prints `Null region created - deleted.` and the regions are deleted.
 
 ## INTERSECT
 
-Keeps only the volume common to all the selected solids.
+Keeps only the volume common to all the selected solids, or the area common to coplanar regions.
 
 **Aliases** `IN` · **Menu** Modify › Solid editing
 
 **Steps**
 
-1. `Select objects:` at least two solids, then <kbd>Enter</kbd>.
+1. `Select objects:` at least two solids or regions, then <kbd>Enter</kbd>.
 
 **Example**: the lens shared by two spheres.
 
@@ -574,6 +580,11 @@ SPHERE 0,0,0 20
 SPHERE 25,0,0 20
 INTERSECT ALL ""
 ```
+
+**Notes**
+
+- With regions, the result is the area they share, with exact arcs. Regions that do not overlap give
+  `Null region created - deleted.`
 
 ## SLICE
 

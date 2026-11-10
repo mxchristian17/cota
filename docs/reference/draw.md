@@ -596,7 +596,8 @@ combine with UNION, SUBTRACT and INTERSECT or turn into solids.
 
 **Notes**
 
-- One region per closed outline, as in classic CAD: a circle inside a rectangle gives two regions.
+- One region per closed outline, as in classic CAD: a circle inside a rectangle gives two regions. SUBTRACT the
+  circle from the rectangle to get a region with a hole; UNION and INTERSECT combine regions too.
 - Regions work in the XY plane of the current UCS.
 - A region keeps arcs exact. AREA › Object, LIST and the Properties palette show its area and perimeter.
 - EXPLODE turns a region back into lines and arcs.
