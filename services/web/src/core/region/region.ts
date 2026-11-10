@@ -1,7 +1,7 @@
 import type { Vec3 } from '../math'
 import type { HatchLoop, PolylineEntity, PolylineProps, RegionEntity, RegionProps } from '../document/types'
 import { keepCommon } from '../document/common'
-import { hatchArea, hatchFrame, loopPoints } from '../hatch/geometry'
+import { hatchArea, hatchFrame, hatchRegions, hatchRings, loopPoints } from '../hatch/geometry'
 import { bulgeArc, bulgeAt, polylineSpans } from '../geom/polyline'
 
 /**
@@ -104,4 +104,12 @@ export function regionSegments(e: RegionEntity): number[][] {
     for (let i = 0; i < v.length; i++) out.push([...v[i], ...v[(i + 1) % v.length]])
   }
   return out
+}
+
+/** Cada contorno de la región con sus agujeros, como polilíneas cerradas (para EXTRUDE y REVOLVE). */
+export function regionParts(p: RegionProps): Array<{ outer: PolylineProps; holes: PolylineProps[] }> {
+  const rings = hatchRings(p)
+  if (rings.length !== p.loops.length) return []
+  const pl = (r: (typeof rings)[number]): PolylineProps => loopPolyline(p.loops[rings.indexOf(r)], p.normal)
+  return hatchRegions(rings).map((g) => ({ outer: pl(g.outer), holes: g.holes.map(pl) }))
 }

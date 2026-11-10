@@ -1,5 +1,6 @@
 import { profileArcs, profileOf, profileNormal } from '../../editing/extrude'
-import type { SolidProps } from '../../document/types'
+import type { PolylineProps, RegionProps, SolidProps } from '../../document/types'
+import { regionParts } from '../../region/region'
 import type { Vec3 } from '../../math'
 import type { Command } from '../types'
 import { askDistance, askNumber, fmt } from '../ask'
@@ -9,8 +10,46 @@ import type { Entity } from '../../document/types'
 import { DEFAULT_SEGMENTS, viewZ } from './primitives'
 import { heightPreview, signedHeight } from '../height'
 
-/** Perfil extruible: un círculo se vuelve CYLINDER paramétrico (conserva su centro). */
-type Extrudable = { id: string; profile?: Vec3[]; arcs?: Array<[number, number]>; circle?: { center: Vec3; radius: number; normal: Vec3 } }
+/**
+ * Perfil extruible: un círculo se vuelve CYLINDER paramétrico (conserva su centro). Una región lleva cada contorno con
+ * sus agujeros (`profile` es el de su primer contorno, para la base y el eje).
+ */
+type Extrudable = {
+  id: string
+  profile?: Vec3[]
+  arcs?: Array<[number, number]>
+  circle?: { center: Vec3; radius: number; normal: Vec3 }
+  region?: Array<{ outer: Extrudable; holes: Extrudable[] }>
+}
+
+/** Perfil de una polilínea cerrada (un lazo de una región). */
+function loopItem(id: string, p: PolylineProps): Extrudable | null {
+  const e: Entity = { id, type: 'POLYLINE', layer: '', props: p }
+  const profile = profileOf(e)
+  const arcs = profileArcs(e)
+  return profile ? { id, profile, ...(arcs.length ? { arcs } : {}) } : null
+}
+
+/** La región como perfiles: cada contorno con sus agujeros. */
+function regionItem(id: string, r: RegionProps): Extrudable | null {
+  const parts = regionParts(r).map((g) => ({ outer: loopItem(id, g.outer), holes: g.holes.map((h) => loopItem(id, h)) }))
+  if (!parts.length || parts.some((g) => !g.outer || g.holes.some((h) => !h))) return null
+  const region = parts as Array<{ outer: Extrudable; holes: Extrudable[] }>
+  return { id, profile: region[0].outer.profile, region }
+}
+
+/** Sólido de un perfil con `f`; el de una región es cada contorno menos sus agujeros (y la unión de los contornos). */
+function build(it: Extrudable, f: (x: Extrudable, hole: boolean) => SolidProps | null): SolidProps | null {
+  if (!it.region) return f(it, false)
+  const parts: SolidProps[] = []
+  for (const { outer, holes } of it.region) {
+    const o = f(outer, false)
+    const hs = holes.map((h) => f(h, true))
+    if (!o || hs.some((h) => !h)) return null
+    parts.push(hs.length ? { op: 'SUBTRACT', operands: [o, ...(hs as SolidProps[])] } : o)
+  }
+  return parts.length === 1 ? parts[0] : { op: 'UNION', operands: parts }
+}
 
 /** Orienta `axis` para que la extrusión positiva vaya hacia el lado de la vista actual (intuitivo). */
 function orientAxis(axis: Vec3, towards: Vec3): Vec3 {
@@ -35,12 +74,17 @@ export const extrudeCommand: Command = {
         items.push({ id, circle: { center: e.props.center, radius: e.props.radius, normal: e.props.normal } })
         continue
       }
+      if (e.type === 'REGION') {
+        const r = regionItem(id, e.props)
+        if (r) items.push(r)
+        continue
+      }
       const p = profileOf(e)
       const arcs = profileArcs(e)
       if (p) items.push({ id, profile: p, ...(arcs.length ? { arcs } : {}) })
     }
     if (items.length === 0) {
-      ctx.print('No closed profile selected (use RECTANGLE, closed PLINE or CIRCLE).')
+      ctx.print('No closed profile selected (use RECTANGLE, closed PLINE, CIRCLE or REGION).')
       return
     }
 
@@ -61,7 +105,8 @@ export const extrudeCommand: Command = {
         measure: (p) => signedHeight(ctx, c0, axisOf(items[0], viewZ(ctx)), p),
         preview: heightPreview(ctx, c0, () => axisOf(items[0], viewZ(ctx)), (h) =>
           items.flatMap((it) => {
-            const props = solidFor(it, h, taper, viewZ(ctx))
+            // Con inclinación, los agujeros se abren mientras el contorno se cierra (las paredes acompañan a la región).
+            const props = build(it, (x, hole) => solidFor(x, h, hole ? -taper : taper, viewZ(ctx)))
             return props ? [props] : []
           }),
         ),
@@ -84,7 +129,7 @@ export const extrudeCommand: Command = {
           base: p1.point,
           preview: (c) => {
             const d = sub([c.x, c.y, c.z], from)
-            return Math.hypot(...d) < 1e-9 ? [] : items.map((it) => ({ kind: 'solid' as const, props: alongDirection(ringOf(it), d) }))
+            return Math.hypot(...d) < 1e-9 ? [] : items.map((it) => ({ kind: 'solid' as const, props: build(it, (x) => alongDirection(ringOf(x), d))! }))
           },
         })
         if (p2.kind !== 'point') return
@@ -93,7 +138,7 @@ export const extrudeCommand: Command = {
           ctx.print('The direction cannot have zero length.')
           continue
         }
-        made = items.map((it) => alongDirection(ringOf(it), d))
+        made = items.map((it) => build(it, (x) => alongDirection(ringOf(x), d))!)
         break
       }
       if (r.kind === 'keyword' && r.keyword === 'Path') {
@@ -104,7 +149,7 @@ export const extrudeCommand: Command = {
           ctx.print('The path must be a line, polyline, arc or spline.')
           continue
         }
-        const swept = items.map((it) => alongPath(ringOf(it), path.points, path.smooth))
+        const swept = items.map((it) => build(it, (x) => alongPath(ringOf(x), path.points, path.smooth)))
         if (swept.some((x) => !x)) {
           ctx.print('The path lies in the plane of the profile: it cannot be extruded along it.')
           continue
@@ -116,7 +161,7 @@ export const extrudeCommand: Command = {
         ctx.print('Invalid height.')
         continue
       }
-      const out = items.map((it) => solidFor(it, r.value, taper, viewZ(ctx)))
+      const out = items.map((it) => build(it, (x, hole) => solidFor(x, r.value, hole ? -taper : taper, viewZ(ctx))))
       if (out.some((x) => !x)) {
         ctx.print('The taper angle is too large for that height: the profile would vanish.')
         continue

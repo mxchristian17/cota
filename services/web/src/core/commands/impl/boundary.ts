@@ -18,6 +18,7 @@ export const boundaryCommand: Command = {
   async run(ctx) {
     let set: Entity[] | null = null // conjunto de contorno: null = todo lo visible
     let islands = true
+    let asRegion = false
     for (;;) {
       const r = await ctx.getPoint('Specify internal point or [Advanced options]: ', { base: null, keywords: ['Advanced options'] })
       if (r.kind === 'keyword') {
@@ -34,7 +35,7 @@ export const boundaryCommand: Command = {
           if (y) islands = y === 'Yes'
         } else if (k === 'Object type') {
           const t = await askKeyword(ctx, 'Enter type of boundary object [Region/Polyline] <Polyline>: ', ['Region', 'Polyline'], 'Polyline')
-          if (t === 'Region') ctx.print('Regions are not available yet: the boundary is created as a closed polyline.')
+          if (t) asRegion = t === 'Region'
         } else if (k === 'Gap tolerance') {
           const cur = ctx.doc.vars.HPGAPTOL ?? 0
           const v = await askNumber(ctx, `Specify a gap tolerance value <${fmt(cur)}>: `, { def: cur, check: (x) => (x >= 0 ? null : 'Requires a non-negative number.') })
@@ -49,9 +50,11 @@ export const boundaryCommand: Command = {
         continue
       }
       for (const loop of res.loops) {
-        ctx.doc.addEntity({ type: 'POLYLINE', layer: ctx.currentLayerId(), props: { vertices: loop.vertices, ...(loop.bulges ? { bulges: loop.bulges } : {}), closed: true } })
+        if (asRegion) ctx.doc.addEntity({ type: 'REGION', layer: ctx.currentLayerId(), props: { loops: [loop] } })
+        else ctx.doc.addEntity({ type: 'POLYLINE', layer: ctx.currentLayerId(), props: { vertices: loop.vertices, ...(loop.bulges ? { bulges: loop.bulges } : {}), closed: true } })
       }
-      ctx.print(`BOUNDARY created ${res.loops.length} polyline${res.loops.length === 1 ? '' : 's'}`)
+      const what = asRegion ? 'region' : 'polyline'
+      ctx.print(`BOUNDARY created ${res.loops.length} ${what}${res.loops.length === 1 ? '' : 's'}`)
     }
   },
 }

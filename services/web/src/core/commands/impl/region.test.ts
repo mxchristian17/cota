@@ -1,8 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { makeEngine } from '../../../test/engineHarness'
-import type { RegionProps } from '../../document/types'
+import type { HatchProps, RegionProps } from '../../document/types'
+import { hatchArea } from '../../hatch/geometry'
 import { regionArea, regionPerimeter } from '../../region/region'
 import { exportDxf, importDxf } from '../../io/dxf'
+import { solidGeometry, triangleSoup } from '../../../render/csg'
+import type { SolidProps } from '../../document/types'
+
+/** Volumen de la malla del sólido (teorema de la divergencia). */
+function volume(p: SolidProps): number {
+  const s = triangleSoup(solidGeometry(p))
+  let v = 0
+  for (let i = 0; i + 8 < s.length; i += 9) {
+    const [ax, ay, az, bx, by, bz, cx, cy, cz] = Array.from(s.subarray(i, i + 9))
+    v += ax * (by * cz - bz * cy) - ay * (bx * cz - bz * cx) + az * (bx * cy - by * cx)
+  }
+  return Math.abs(v / 6)
+}
 
 const regions = (h: ReturnType<typeof makeEngine>): RegionProps[] => h.ofType('REGION').map((e) => e.props as RegionProps)
 
@@ -143,6 +157,89 @@ describe('REGION', () => {
       await k.run('INTERSECT', 'ALL', '')
       expect(regionArea(regions(k)[0])).toBeCloseTo(25, 9)
       expect(regions(k)[0].loops[0].vertices.length).toBe(4)
+    })
+  })
+
+  describe('sólidos desde regiones', () => {
+    /** Región de un rectángulo con un agujero redondo (SUBTRACT con clics). */
+    async function plate(h: ReturnType<typeof makeEngine>, x0: number, y0: number, w: number, d: number, cx: number, cy: number, r: number): Promise<void> {
+      await h.run('RECTANG', `#${x0},${y0}`, `#${x0 + w},${y0 + d}`)
+      await h.run('REGION', 'L', '')
+      await h.run('CIRCLE', `#${cx},${cy}`, String(r))
+      await h.run('REGION', 'L', '')
+      const [rect, circ] = h.ofType('REGION')
+      await h.run('SUBTRACT')
+      await h.click(x0, y0, rect.id)
+      await h.run('')
+      await h.click(cx + r, cy, circ.id)
+      await h.run('')
+    }
+
+    it('EXTRUDE de una región con agujero: el sólido sale con el agujero', async () => {
+      const h = makeEngine()
+      await plate(h, 0, 0, 100, 50, 50, 25, 10)
+      await h.run('EXTRUDE', 'ALL', '', '10')
+      expect(h.ofType('REGION').length).toBe(0)
+      const solid = h.ofType('SOLID3D')[0].props as SolidProps
+      const exact = (5000 - 100 * Math.PI) * 10
+      expect(Math.abs(volume(solid) - exact) / exact).toBeLessThan(0.002)
+    })
+
+    it('REVOLVE de una región con agujero (Pappus: 2π·x̄·A)', async () => {
+      const h = makeEngine()
+      await plate(h, 10, 0, 10, 10, 15, 5, 2)
+      await h.run('REVOLVE', 'ALL', '', 'Y', '360')
+      const solid = h.ofType('SOLID3D')[0].props as SolidProps
+      const exact = 2 * Math.PI * 15 * (100 - 4 * Math.PI)
+      expect(Math.abs(volume(solid) - exact) / exact).toBeLessThan(0.01)
+    })
+  })
+
+  describe('contornos y sombreados con regiones', () => {
+    it('BOUNDARY ▸ Object type ▸ Region crea regiones (contorno e isla)', async () => {
+      const h = makeEngine()
+      await h.run('RECTANG', '#0,0', '#100,100')
+      await h.run('CIRCLE', '#50,50', '10')
+      await h.run('BOUNDARY', 'A', 'O', 'R', '#5,5', '')
+      expect(h.prints).toContain('BOUNDARY created 2 regions')
+      expect(regions(h).map(regionArea).sort((a, b) => a - b)[1]).toBeCloseTo(10000, 6)
+    })
+
+    it('HATCH ▸ Select objects toma la región con su agujero; un punto interno ve sus bordes', async () => {
+      const h = makeEngine()
+      await h.run('RECTANG', '#0,0', '#100,50')
+      await h.run('CIRCLE', '#50,25', '10')
+      await h.run('REGION', 'ALL', '')
+      await h.run('UNION', 'ALL', '') // un círculo adentro del rectángulo: la unión es el rectángulo
+      await h.run('CIRCLE', '#50,25', '10')
+      await h.run('REGION', 'L', '')
+      const [rect, circ] = h.ofType('REGION')
+      await h.run('SUBTRACT')
+      await h.click(0, 0, rect.id)
+      await h.run('')
+      await h.click(60, 25, circ.id)
+      await h.run('')
+      const plate = regions(h)[0]
+      await h.run('HATCH', 'S', 'ALL', '', '')
+      const hatch = h.ofType('HATCH')[0].props as HatchProps
+      expect(hatchArea(hatch)).toBeCloseTo(regionArea(plate), 6)
+      await h.run('ERASE', 'L', '')
+      await h.run('HATCH')
+      await h.click(5, 5)
+      await h.run('')
+      expect(hatchArea(h.ofType('HATCH')[0].props as HatchProps)).toBeCloseTo(5000 - 100 * Math.PI, 1)
+    })
+
+    it('-HATCHEDIT ▸ recreate Boundary ▸ Region', async () => {
+      const h = makeEngine()
+      await h.run('RECTANG', '#0,0', '#100,50')
+      await h.run('HATCH')
+      await h.click(10, 10)
+      await h.run('')
+      h.setSelection([h.ofType('HATCH')[0].id])
+      await h.run('-HATCHEDIT', 'B', 'R', 'N', '')
+      expect(regions(h).length).toBe(1)
+      expect(regionArea(regions(h)[0])).toBeCloseTo(5000, 6)
     })
   })
 })

@@ -1,5 +1,6 @@
 import { toVec3, type Pt, type Vec3 } from '../../math'
-import type { Entity } from '../../document/types'
+import type { Entity, PolylineProps, SolidProps } from '../../document/types'
+import { regionParts } from '../../region/region'
 import { profileOf } from '../../editing/extrude'
 import { polylinePoints } from '../../geom/polyline'
 import { revolveProfile } from '../../editing/revolve'
@@ -25,6 +26,20 @@ function revolveProfileOf(e: Entity): Vec3[] | null {
     })
   }
   return profileOf(e)
+}
+
+/** Contornos a revolucionar: el del perfil o, en una región, cada contorno con sus agujeros. */
+type RevolvePart = { outer: Vec3[]; holes: Vec3[][] }
+
+function profilesOf(e: Entity): RevolvePart[] | null {
+  if (e.type !== 'REGION') {
+    const p = revolveProfileOf(e)
+    return p ? [{ outer: p, holes: [] }] : null
+  }
+  const ring = (p: PolylineProps): Vec3[] | null => revolveProfileOf({ id: e.id, type: 'POLYLINE', layer: e.layer, props: p })
+  const parts = regionParts(e.props).map((g) => ({ outer: ring(g.outer), holes: g.holes.map(ring) }))
+  if (!parts.length || parts.some((g) => !g.outer || g.holes.some((h) => !h))) return null
+  return parts as RevolvePart[]
 }
 
 /** Eje tomado de un objeto: una línea o el tramo de polilínea más cercano al punto marcado. */
@@ -92,10 +107,10 @@ export const revolveCommand: Command = {
     if (ids === null || ids.length === 0) return
     const items = ids
       .map((id) => ({ id, e: ctx.doc.getEntity(id) }))
-      .map(({ id, e }) => ({ id, profile: e ? revolveProfileOf(e) : null }))
-      .filter((x): x is { id: string; profile: Vec3[] } => x.profile !== null)
+      .map(({ id, e }) => ({ id, parts: e ? profilesOf(e) : null }))
+      .filter((x): x is { id: string; parts: RevolvePart[] } => x.parts !== null)
     if (items.length === 0) {
-      ctx.print('No closed profile selected (use RECTANGLE, closed PLINE, POLYGON, CIRCLE or ELLIPSE).')
+      ctx.print('No closed profile selected (use RECTANGLE, closed PLINE, POLYGON, CIRCLE, ELLIPSE or REGION).')
       return
     }
     ctx.app.clearSelection() // la selección de perfiles no debe tragarse el objeto del eje
@@ -126,12 +141,26 @@ export const revolveCommand: Command = {
     const angle = Math.max(-360, Math.min(360, deg)) * DEG * (reverse ? -1 : 1)
     let n = 0
     for (const it of items) {
-      const res = revolveProfile(it.profile, start, end, angle, startDeg * DEG, DEFAULT_SEGMENTS)
-      if ('error' in res) {
-        ctx.print(res.error)
+      // Una región: cada contorno revolucionado menos sus agujeros revolucionados.
+      const one = (profile: Vec3[]) => revolveProfile(profile, start, end, angle, startDeg * DEG, DEFAULT_SEGMENTS)
+      const solids: SolidProps[] = []
+      let error = ''
+      for (const part of it.parts) {
+        const res = [part.outer, ...part.holes].map(one)
+        const bad = res.find((x) => 'error' in x)
+        if (bad && 'error' in bad) {
+          error = bad.error
+          break
+        }
+        const ok = res.map((x) => ('props' in x ? x.props : null)) as SolidProps[]
+        solids.push(ok.length > 1 ? { op: 'SUBTRACT', operands: ok } : ok[0])
+      }
+      if (error || !solids.length) {
+        ctx.print(error || 'Invalid profile.')
         continue
       }
-      ctx.doc.addEntity({ type: 'SOLID3D', layer: ctx.currentLayerId(), props: res.props })
+      const props: SolidProps = solids.length > 1 ? { op: 'UNION', operands: solids } : solids[0]
+      ctx.doc.addEntity({ type: 'SOLID3D', layer: ctx.currentLayerId(), props })
       ctx.doc.removeEntity(it.id)
       n++
     }

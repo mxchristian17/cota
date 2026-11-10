@@ -781,7 +781,7 @@ its boundary.
 **Notes**
 
 - `-HATCHEDIT` does it from the command line: `Enter hatch option [Disassociate/Style/Properties/Origin/recreate
-  Boundary] <eXit>:`. `recreate Boundary` draws a new polyline around the hatch.
+  Boundary] <eXit>:`. `recreate Boundary` draws a new polyline or region around the hatch.
 
 ## ATTEDIT
 

@@ -278,15 +278,14 @@ export const dashHatchCommand: Command = {
 }
 
 /** Polilíneas que reproducen los lazos del sombreado (`recreate Boundary`). */
-function recreateBoundary(ctx: CommandContext, h: HatchEntity): string[] {
-  return h.props.loops.map(
-    (l) =>
-      ctx.doc.addEntity({
-        type: 'POLYLINE',
-        layer: h.layer,
-        props: { vertices: l.vertices.map((v) => [...v] as Vec3), closed: true, ...(l.bulges ? { bulges: [...l.bulges] } : {}), ...(h.props.normal ? { normal: h.props.normal } : {}) },
-      }).id,
-  )
+function recreateBoundary(ctx: CommandContext, h: HatchEntity, region = false): string[] {
+  return h.props.loops.map((l) => {
+    const n = h.props.normal ? { normal: [...h.props.normal] as Vec3 } : {}
+    const loop = { vertices: l.vertices.map((v) => [...v] as Vec3), ...(l.bulges ? { bulges: [...l.bulges] } : {}) }
+    return region
+      ? ctx.doc.addEntity({ type: 'REGION', layer: h.layer, props: { loops: [loop], ...n } }).id
+      : ctx.doc.addEntity({ type: 'POLYLINE', layer: h.layer, props: { ...loop, closed: true, ...n } }).id
+  })
 }
 
 /** Recalcula los lazos de un sombreado con su contorno (tras cambiar el estilo de islas). */
@@ -345,10 +344,9 @@ function runHatchEdit(cli: boolean) {
         } else if (k === 'recreate Boundary') {
           const t = await askKeyword(ctx, 'Enter type of boundary object [Region/Polyline] <Polyline>: ', ['Region', 'Polyline'], 'Polyline')
           if (!t) continue
-          if (t === 'Region') ctx.print('Regions are not supported: a polyline is created.')
           const re = await askKeyword(ctx, 'Reassociate hatch with new boundary? [Yes/No] <N>: ', ['Yes', 'No'], 'No')
           for (const h of live) {
-            const made = recreateBoundary(ctx, h)
+            const made = recreateBoundary(ctx, h, t === 'Region')
             if (re === 'Yes') {
               h.props.assoc = { ids: made, objects: made }
               ctx.doc.forgetHatch(h.id)

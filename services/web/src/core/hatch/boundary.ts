@@ -1,9 +1,10 @@
 import type { Vec3 } from '../math'
+import { regionPolylines } from '../region/region'
 import type { Entity, HatchIsland, HatchLoop } from '../document/types'
 import { curveOf, primPoint, type Curve, type Prim } from '../geom/curve'
 import { textCorners } from '../geom/text'
 import { attdefText } from '../geom/text'
-import { pointInRing, ringArea, type P2, type Ring } from './geometry'
+import { loopPoints, pointInRing, ringArea, type P2, type Ring } from './geometry'
 
 /**
  * Contorno de un sombreado, como el *Pick internal point* del CAD clásico: con las curvas del plano
@@ -57,10 +58,13 @@ function collect(entities: Entity[], z: number, tol: number): { segs: Seg[]; src
       for (let i = 0; i < 4; i++) segs.push({ a: [c[i][0], c[i][1]], b: [c[(i + 1) % 4][0], c[(i + 1) % 4][1]], src: srcs.length - 1 })
       continue
     }
-    const c = curveOf(e)
-    if (!c) continue
-    if (!onPlane(c.start) || !onPlane(c.end) || !onPlane(c.pointAt(c.n / 2))) continue
-    addCurve(c, e.id, segs, srcs)
+    // Una región delimita con todos sus lazos, como polilíneas cerradas.
+    const curves = e.type === 'REGION' ? regionPolylines(e).map(curveOf) : [curveOf(e)]
+    for (const c of curves) {
+      if (!c) continue
+      if (!onPlane(c.start) || !onPlane(c.end) || !onPlane(c.pointAt(c.n / 2))) continue
+      addCurve(c, e.id, segs, srcs)
+    }
   }
   return { segs, srcs }
 }
@@ -473,6 +477,11 @@ export function loopOfCurve(c: Curve): HatchLoop | null {
 export function boundaryFromObjects(entities: Entity[], island: HatchIsland): BoundaryResult | null {
   const items: Array<{ id: string; loop: HatchLoop; ring: Ring }> = []
   for (const e of entities) {
+    if (e.type === 'REGION') {
+      // Una región aporta todos sus lazos (contornos y agujeros).
+      for (const loop of e.props.loops) items.push({ id: e.id, loop, ring: loopPoints(loop, e.props.normal).map((q) => [q[0], q[1]] as P2) })
+      continue
+    }
     const c = curveOf(e)
     const loop = c && loopOfCurve(c)
     if (!loop || !c) continue

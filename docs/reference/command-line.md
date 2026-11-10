@@ -98,7 +98,7 @@ Creates a hatch from the command line, with all its settings as options.
 | Option | What it does |
 | --- | --- |
 | `Properties` | `Enter a pattern name or [?/Solid/User defined]`, then the scale and angle (`Specify a scale for the pattern`, `Specify an angle for the pattern`); for User defined, the angle and `Specify spacing between the lines`. |
-| `Select objects` | Hatch the inside of selected closed objects. |
+| `Select objects` | Hatch the inside of selected closed objects and regions (with their holes). |
 | `Advanced` | `Enter an option [Island detection/Style/Associativity] <exit>:` island style `[Ignore/Outer/Normal]` and associativity. |
 | `Origin` | `Enter an option [Use current origin/Set new origin]`: where the pattern starts. |
 | `Undo` | Removes the last area picked. |
@@ -129,7 +129,7 @@ Edits a hatch from the command line.
 | `Style` | `Enter hatching style [Ignore/Outer/Normal]`. |
 | `Properties` | Pattern, scale and angle, as in -HATCH. |
 | `Origin` | `Specify new origin point:` |
-| `recreate Boundary` | Draws a new closed polyline around the hatch (`Enter type of boundary object [Region/Polyline] <Polyline>:`; regions are not available yet). |
+| `recreate Boundary` | Draws a new closed polyline around the hatch (`Enter type of boundary object [Region/Polyline] <Polyline>:`), or a region with `Region`. |
 
 ## -OPEN
 

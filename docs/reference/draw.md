@@ -526,7 +526,7 @@ the drawing with the pattern, scale, angle and island settings; click inside the
 
 | Option | What it does |
 | --- | --- |
-| `Select objects` | Hatches the inside of closed objects you select (circles, closed polylines, rectangles…) instead of finding the boundary from a point. |
+| `Select objects` | Hatches the inside of closed objects you select (circles, closed polylines, rectangles, regions with their holes…) instead of finding the boundary from a point. |
 | `Undo` | Removes the last area picked. |
 | `seTtings` | Points to the Hatch Creation panel, where the settings are. |
 
@@ -568,7 +568,7 @@ can extrude, offset or measure.
 | --- | --- |
 | `Boundary set` | `Specify candidate set for boundary [New/Everything] <Everything>:` `New` limits the search to objects you select; `Everything` uses all visible objects. |
 | `Island detection` | `Do you want island detection? [Yes/No]:` with Yes, closed objects inside the area also get their outline. |
-| `Object type` | `Enter type of boundary object [Region/Polyline] <Polyline>:` regions are not available yet, so the outline is always a polyline. |
+| `Object type` | `Enter type of boundary object [Region/Polyline] <Polyline>:` with `Region`, each outline is created as a region instead of a closed polyline. |
 | `Gap tolerance` | `Specify a gap tolerance value`: gaps up to this size between the boundary objects are closed (`HPGAPTOL`). |
 
 **Example**: the outline of a shape whose corner does not quite close.
@@ -623,8 +623,8 @@ optionally with a taper.
 
 **Steps**
 
-1. `Select objects to extrude:` closed polylines, rectangles, polygons, circles and ellipses. <kbd>Enter</kbd>
-   ends the selection.
+1. `Select objects to extrude:` closed polylines, rectangles, polygons, circles, ellipses and regions. A region
+   with holes gives a solid with those holes through it. <kbd>Enter</kbd> ends the selection.
 2. `Specify height of extrusion or [Direction/Path/Taper angle]:` type the height, or move the cursor to see the
    solid grow and click. A negative height extrudes to the other side of the profile.
 
@@ -659,7 +659,7 @@ Creates a solid by revolving closed profiles around an axis: shafts, pulleys, ri
 
 **Steps**
 
-1. `Select objects to revolve:` closed profiles.
+1. `Select objects to revolve:` closed profiles or regions (a region's holes are revolved out of the solid).
 2. `Specify axis start point or define axis by [Object/X/Y/Z] <Object>:` the first point of the axis, then
    `Specify axis endpoint:`.
 3. `Specify angle of revolution or [STart angle/Reverse] <360>:` 360 makes a full solid of revolution.
