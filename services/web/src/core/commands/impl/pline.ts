@@ -60,6 +60,13 @@ export const plineCommand: Command = {
 
     const commit = (closed: boolean): void => {
       if (verts.length < 2) return
+      // Terminar sobre el punto inicial (p. ej. con un arco que vuelve al inicio) la deja cerrada, no abierta con dos
+      // vértices superpuestos: el último tramo pasa a ser el de cierre (su curvatura y su ancho se conservan).
+      const [a, b] = [verts[0], verts[verts.length - 1]]
+      if (!closed && verts.length > 2 && Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) <= 1e-9 * (1 + Math.hypot(...a))) {
+        verts.pop()
+        closed = true
+      }
       const wide = widths.some(([a, b]) => a > 0 || b > 0)
       ctx.doc.addEntity({
         type: 'POLYLINE',
@@ -167,7 +174,8 @@ export const plineCommand: Command = {
       }
 
       // --- Modo arco -------------------------------------------------------
-      const keywords = ['Angle', 'CEnter', 'CLose', 'Direction', 'Halfwidth', 'Line', 'Radius', 'Second', 'Undo', 'Width']
+      // CLose antes que CEnter: «C» cierra, como en el modo recto (CE sigue pidiendo el centro).
+      const keywords = ['Angle', 'CLose', 'CEnter', 'Direction', 'Halfwidth', 'Line', 'Radius', 'Second', 'Undo', 'Width']
       const r: PointResult = await ctx.getPoint(
         'Specify endpoint of arc or [Angle/CEnter/CLose/Direction/Halfwidth/Line/Radius/Second pt/Undo/Width]: ',
         {

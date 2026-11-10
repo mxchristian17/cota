@@ -169,6 +169,19 @@ describe('PEDIT', () => {
     resetSysvars()
   })
 
+  it('PLINE: «C» cierra en modo arco y terminar sobre el inicio la deja cerrada', async () => {
+    const h = makeEngine()
+    await h.run('PLINE', '0,0', '#10,0', 'A', '#20,10', 'C')
+    const p = h.ofType('POLYLINE')[0].props as PolylineProps
+    expect(p.closed).toBe(true)
+    expect(p.vertices.length).toBe(3)
+    expect(Math.abs(p.bulges?.[2] ?? 0)).toBeGreaterThan(0.1) // el cierre es un arco
+    await h.run('PLINE', '0,20', '#10,20', 'A', '#10,30', 'L', '#0,20', '')
+    const q = h.ofType('POLYLINE')[1].props as PolylineProps
+    expect(q.closed).toBe(true)
+    expect(q.vertices.length).toBe(3)
+  })
+
   it('PLINE con Width y Halfwidth; EXPLODE la deja en líneas y arcos', async () => {
     resetSysvars()
     const h = makeEngine()

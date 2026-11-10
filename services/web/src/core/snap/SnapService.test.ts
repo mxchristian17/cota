@@ -19,6 +19,9 @@ const ALL_ON: OsnapConfig = {
   tangent: true,
   nearest: true,
   node: true,
+  extension: false,
+  parallel: false,
+  insertion: false,
 }
 const ALL_OFF: OsnapConfig = {
   endpoint: false,
@@ -32,6 +35,9 @@ const ALL_OFF: OsnapConfig = {
   tangent: false,
   nearest: false,
   node: false,
+  extension: false,
+  parallel: false,
+  insertion: false,
 }
 
 const line: LineEntity = {

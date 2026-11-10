@@ -1,5 +1,6 @@
 import type { Vec3 } from '../math'
-import type { BoxProps, EdgeBlendProps, RevolveProps, SolidLeaf, SolidProps, TorusProps } from '../document/types'
+import type { ArcProps, BoxProps, EdgeBlendProps, ExtrudeProps, RevolveProps, SolidLeaf, SolidProps, TorusProps } from '../document/types'
+import { arcBasis } from '../geom/arc'
 import { isFullRevolve, openProfile, revolveAngle, revolveFrame, revolvePoint } from './revolve'
 import { nearestEdge, solidTopology } from './topology'
 import { vdist, vdot, vsub } from '../geom/vec3'
@@ -285,9 +286,9 @@ function leafVertices(leaf: SolidLeaf): Vec3[] {
     case 'EXTRUDE': {
       const off = vscale(axisOf(leaf), leaf.height)
       const out: Vec3[] = []
-      for (const v of leaf.profile) {
-        out.push(v)
-        out.push(vadd(v, off))
+      for (const i of extrudeCorners(leaf)) {
+        out.push(leaf.profile[i])
+        out.push(vadd(leaf.profile[i], off))
       }
       return out
     }
@@ -317,6 +318,227 @@ function leafVertices(leaf: SolidLeaf): Vec3[] {
     case 'LOFT':
       return []
   }
+}
+
+/** Puntos del perfil de `[i, j]` (`j` puede pasar del final: vuelve al principio). */
+function profileRun(profile: Vec3[], [i, j]: [number, number]): Vec3[] {
+  const n = profile.length
+  return Array.from({ length: j - i + 1 }, (_, k) => profile[(i + k) % n])
+}
+
+/** Tramos curvos del perfil que siguen siendo arcos (un STRETCH que los deformó los vuelve polígono). */
+function extrudeArcs(leaf: ExtrudeProps): Array<{ run: [number, number]; arc: ArcProps }> {
+  const n = leaf.profile.length
+  const out: Array<{ run: [number, number]; arc: ArcProps }> = []
+  for (const run of leaf.arcs ?? []) {
+    if (!(run[0] >= 0 && run[1] > run[0] + 1 && run[1] <= run[0] + n)) continue
+    const arc = fitArc(profileRun(leaf.profile, run), false)
+    if (arc) out.push({ run, arc })
+  }
+  return out
+}
+
+/** Índices del perfil que son esquinas reales (no puntos intermedios del teselado de un arco). */
+function extrudeCorners(leaf: ExtrudeProps): number[] {
+  const n = leaf.profile.length
+  const inner = new Set<number>()
+  for (const { run } of extrudeArcs(leaf)) for (let k = run[0] + 1; k < run[1]; k++) inner.add(k % n)
+  return Array.from({ length: n }, (_, i) => i).filter((i) => !inner.has(i))
+}
+
+/**
+ * Arista de un sólido para los object snaps: recta, arco o circunferencia (con su geometría exacta: CEN, QUA, MID,
+ * TAN, PER) o curva genérica. `iso`: isolínea de una superficie curva (generatriz de un cilindro), sólo para NEA/INT.
+ */
+export interface SnapEdge {
+  pts: Vec3[]
+  closed: boolean
+  arc?: ArcProps
+  iso?: boolean
+}
+
+/**
+ * Arco (o circunferencia, con barrido nulo) que pasa por los puntos de un teselado, o null si no lo son: todos a la
+ * misma distancia de un centro, en un plano y con tramos cortos (un polígono regular no es un círculo).
+ */
+export function fitArc(pts: Vec3[], closed: boolean, exact: (v: Vec3) => Vec3 = (v) => exactish(v), loose = false): ArcProps | null {
+  const ring = closed && pts.length > 1 && vdist(pts[0], pts[pts.length - 1]) < 1e-9 ? pts.slice(0, -1) : pts
+  const n = ring.length
+  if (n < (closed ? 6 : 3)) return null
+  const g = vscale(ring.reduce(vadd, [0, 0, 0] as Vec3), 1 / n)
+  let nrm: Vec3 = [0, 0, 0]
+  if (closed) for (let i = 0; i < n; i++) nrm = vadd(nrm, vcross(vsub(ring[i], g), vsub(ring[(i + 1) % n], g)))
+  else nrm = vcross(vsub(ring[0], ring[Math.floor(n / 2)]), vsub(ring[n - 1], ring[Math.floor(n / 2)]))
+  if (Math.hypot(...nrm) < 1e-12) return null
+  nrm = vnorm(nrm)
+  // Centro por mínimos cuadrados en el plano (Kåsa): el facetado de un corte de esfera reparte mal los puntos.
+  const { u, v } = arcBasis(nrm)
+  let [sxx, sxy, syy, sx, sy, sxz, syz, sz] = [0, 0, 0, 0, 0, 0, 0, 0]
+  for (const q of ring) {
+    const d = vsub(q, g)
+    const [x, y] = [vdot(d, u), vdot(d, v)]
+    const z = x * x + y * y
+    sxx += x * x
+    sxy += x * y
+    syy += y * y
+    sx += x
+    sy += y
+    sxz += x * z
+    syz += y * z
+    sz += z
+  }
+  // [sxx sxy sx; sxy syy sy; sx sy n]·[2a 2b c] = [sxz syz sz]
+  const det = sxx * (syy * n - sy * sy) - sxy * (sxy * n - sy * sx) + sx * (sxy * sy - syy * sx)
+  if (Math.abs(det) < 1e-18) return null
+  const A = (sxz * (syy * n - sy * sy) - sxy * (syz * n - sy * sz) + sx * (syz * sy - syy * sz)) / det
+  const B = (sxx * (syz * n - sy * sz) - sxz * (sxy * n - sy * sx) + sx * (sxy * sz - syz * sx)) / det
+  const c = exact(vadd(g, vadd(vscale(u, A / 2), vscale(v, B / 2))))
+  const r = ring.reduce((t, q) => t + vdist(q, c), 0) / n
+  if (!(r > 1e-9)) return null
+  // Con `loose` (aristas de una malla CSG), 5 %: el corte de una esfera facetada no cae sobre el círculo teórico.
+  const tol = Math.max(r * (loose ? 5e-2 : 1e-2), 1e-9)
+  const segs = closed ? n : n - 1
+  for (let i = 0; i < n; i++) {
+    const q = ring[i]
+    if (Math.abs(vdist(q, c) - r) > tol || Math.abs(vdot(vsub(q, c), nrm)) > tol) return null
+    if (i < segs && vdist(q, ring[(i + 1) % n]) > r * 0.53) return null // más de ~30° por tramo: es un polígono
+  }
+  if (closed) return { center: c, radius: r, startAngle: 0, endAngle: 0, normal: nrm }
+  // El sentido: del primer punto al último pasando por el del medio (antihorario alrededor de la normal).
+  const ang = (q: Vec3): number => Math.atan2(vdot(vsub(q, c), v), vdot(vsub(q, c), u))
+  const [a0, am, a1] = [ang(ring[0]), ang(ring[Math.floor(n / 2)]), ang(ring[n - 1])]
+  const ccw = (x: number) => ((x % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)
+  if (ccw(am - a0) > ccw(a1 - a0)) return { center: c, radius: r, startAngle: a1, endAngle: a0, normal: nrm }
+  return { center: c, radius: r, startAngle: a0, endAngle: a1, normal: nrm }
+}
+
+/**
+ * Un círculo de la malla de una booleana que cae sobre una esfera o un cilindro de las primitivas toma su geometría
+ * exacta: el centro sobre el eje (o la proyección del centro de la esfera) y el radio teórico.
+ */
+function exactCircle(arc: ArcProps, p: SolidProps): ArcProps {
+  const n = arc.normal ?? [0, 0, 1]
+  for (const leaf of solidLeaves(p)) {
+    let S: Vec3 | null = null
+    let R = 0
+    if (leaf.op === 'SPHERE') [S, R] = [leaf.center, leaf.radius]
+    else if (leaf.op === 'CYLINDER' && Math.abs(vdot(axisOf(leaf), n)) > 1 - 1e-6) [S, R] = [leaf.base, leaf.radius]
+    if (!S) continue
+    const c = vsub(S, vscale(n, vdot(vsub(S, arc.center), n)))
+    const r = leaf.op === 'SPHERE' ? Math.sqrt(Math.max(0, R * R - vdist(S, c) ** 2)) : R
+    if (vdist(c, arc.center) <= arc.radius * 5e-2 && Math.abs(r - arc.radius) <= arc.radius * 5e-2) return { ...arc, center: c.map(cleanNumber) as Vec3, radius: r }
+  }
+  return arc
+}
+
+/** Aristas de una polilínea del wireframe: un arco si lo es; si no, cada tramo recto. */
+function polyEdges(poly: Vec3[], iso = false): SnapEdge[] {
+  if (poly.length < 2) return []
+  const closed = poly.length > 3 && vdist(poly[0], poly[poly.length - 1]) < 1e-9
+  const arc = fitArc(poly, closed)
+  if (arc || iso) return [{ pts: poly, closed, ...(arc ? { arc } : {}), ...(iso ? { iso } : {}) }]
+  return poly.slice(1).map((q, i) => ({ pts: [poly[i], q], closed: false }))
+}
+
+/** Aristas de una extrusión: los arcos del perfil siguen siendo arcos, abajo y arriba. */
+function extrudeEdges(leaf: ExtrudeProps): SnapEdge[] {
+  const P = leaf.profile
+  const n = P.length
+  if (n < 2) return []
+  const off = vscale(axisOf(leaf), leaf.height)
+  const arcs = new Map(extrudeArcs(leaf).map((a) => [a.run[0], a]))
+  const corners = extrudeCorners(leaf)
+  const out: SnapEdge[] = []
+  for (const shift of [[0, 0, 0] as Vec3, off]) {
+    const at = (v: Vec3): Vec3 => vadd(v, shift)
+    for (let k = 0; k < corners.length; k++) {
+      const i = corners[k]
+      const a = arcs.get(i) ?? arcs.get(i + n)
+      if (a) {
+        const pts = profileRun(P, a.run).map(at)
+        out.push({ pts, closed: false, arc: { ...a.arc, center: at(a.arc.center) } })
+      } else out.push({ pts: [at(P[i]), at(P[corners[(k + 1) % corners.length]])], closed: false })
+    }
+  }
+  for (const i of corners) out.push({ pts: [P[i], vadd(P[i], off)], closed: false })
+  return out
+}
+
+function leafSnapEdges(leaf: SolidLeaf): SnapEdge[] {
+  if (leaf.op === 'EXTRUDE') return extrudeEdges(leaf)
+  const wire = leafWireframe(leaf)
+  // Generatrices del cilindro/cono y recorrido del barrido: líneas de dibujo, no aristas.
+  const iso = (poly: Vec3[]): boolean => ((leaf.op === 'CYLINDER' || leaf.op === 'CONE') && poly.length === 2) || leaf.op === 'SWEEP'
+  return wire.flatMap((poly) => polyEdges(poly, iso(poly)))
+}
+
+/**
+ * Las rectas de la malla de una booleana quedan cortadas donde tocaban las primitivas (dos cajas unidas: la arista de
+ * arriba en x = 10, con tramos nulos). Se descartan los nulos y se unen las rectas alineadas que sólo se tocan entre sí.
+ */
+function joinCollinear(edges: SnapEdge[]): SnapEdge[] {
+  const key = (v: Vec3) => v.map((x) => x.toFixed(6)).join(',')
+  const tol = (a: Vec3, b: Vec3) => 1e-9 * (1 + Math.hypot(...a) + Math.hypot(...b))
+  let list = edges.filter((e) => e.arc || e.closed || vdist(e.pts[0], e.pts[e.pts.length - 1]) > tol(e.pts[0], e.pts[e.pts.length - 1]))
+  for (let changed = true; changed; ) {
+    changed = false
+    const at = new Map<string, number[]>()
+    list.forEach((e, i) => {
+      if (e.closed) return
+      for (const v of [e.pts[0], e.pts[e.pts.length - 1]]) at.set(key(v), [...(at.get(key(v)) ?? []), i])
+    })
+    for (const [, ids] of at) {
+      if (ids.length !== 2 || ids[0] === ids[1]) continue
+      const [e, f] = ids.map((i) => list[i])
+      if (e.arc || f.arc || e.pts.length !== 2 || f.pts.length !== 2) continue
+      const shared = [e.pts[0], e.pts[1]].find((v) => f.pts.some((w) => key(w) === key(v)))!
+      const a = e.pts.find((v) => key(v) !== key(shared)) ?? e.pts[0]
+      const b = f.pts.find((v) => key(v) !== key(shared)) ?? f.pts[0]
+      const d1 = vnorm(vsub(shared, a))
+      const d2 = vnorm(vsub(b, shared))
+      if (vdot(d1, d2) < 1 - 1e-9) continue
+      list = [...list.filter((_, i) => i !== ids[0] && i !== ids[1]), { pts: [a, b], closed: false }]
+      changed = true
+      break
+    }
+  }
+  return list
+}
+
+const edgeCache = new Map<string, SnapEdge[]>()
+
+/** Aristas del sólido para los object snaps: las de la hoja o, en booleanas/empalmes, las del resultado. */
+export function solidSnapEdges(p: SolidProps): SnapEdge[] {
+  const key = JSON.stringify(p)
+  const hit = edgeCache.get(key)
+  if (hit) return hit
+  let out: SnapEdge[]
+  const shape = isLeaf(p) ? null : resultShape(p)
+  if (isLeaf(p)) out = leafSnapEdges(p)
+  else if (!shape) out = solidLeaves(p).flatMap(leafSnapEdges)
+  else {
+    out = joinCollinear(
+      shape.edges.map((e) => {
+        const fit = e.kind === 'line' ? null : fitArc(e.pts, e.closed, shape.exact, true)
+        const arc = fit && exactCircle(fit, p)
+        return { pts: e.closed ? [...e.pts, e.pts[0]] : e.pts, closed: e.closed, ...(arc ? { arc } : {}) }
+      }),
+    )
+  }
+  if (edgeCache.size > 50) edgeCache.clear()
+  edgeCache.set(key, out)
+  return out
+}
+
+/** Punto medio (por longitud) de una arista abierta. */
+export function snapEdgeMidpoint(pts: Vec3[]): Vec3 {
+  const lens = pts.slice(1).map((q, i) => vdist(pts[i], q))
+  let half = lens.reduce((t, l) => t + l, 0) / 2
+  for (let k = 0; k < lens.length; k++) {
+    if (half <= lens[k] || k === lens.length - 1) return vadd(pts[k], vscale(vsub(pts[k + 1], pts[k]), lens[k] > 0 ? Math.min(1, half / lens[k]) : 0))
+    half -= lens[k]
+  }
+  return pts[0]
 }
 
 /** Vértices del perfil más lejos/cerca del eje y más arriba/abajo: sus circunferencias son las del wireframe. */
@@ -382,7 +604,7 @@ export function solidVertices(p: SolidProps): Vec3[] {
   if (!shape) return solidLeaves(p).flatMap(leafVertices)
   const seen = new Set<string>()
   const out: Vec3[] = []
-  for (const e of shape.edges) {
+  for (const e of solidSnapEdges(p)) {
     if (e.closed) continue
     for (const v of [e.pts[0], e.pts[e.pts.length - 1]]) {
       const k = v.join(',')
@@ -561,7 +783,7 @@ function leafWireframe(leaf: SolidLeaf): Vec3[][] {
       const off = vscale(axisOf(leaf), leaf.height)
       const top = base.map((v) => vadd(v, off))
       const polys: Vec3[][] = [[...base, base[0]], [...top, top[0]]]
-      for (let i = 0; i < base.length; i++) polys.push([base[i], top[i]])
+      for (const i of extrudeCorners(leaf)) polys.push([base[i], top[i]])
       return polys
     }
     case 'BOX': {

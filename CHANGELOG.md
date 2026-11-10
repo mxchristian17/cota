@@ -4,6 +4,28 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.29.0] — 2026-11-09
+
+### Added
+- **Object snaps on the real edges of 3D solids**: midpoint, center, quadrant, tangent and perpendicular now work on
+  the edges of solids, from any camera and UCS, including solids made with UNION/SUBTRACT/INTERSECT, FILLETEDGE and
+  CHAMFEREDGE. Hovering a circular or arc edge snaps to its center (e.g. the hole of a box minus a cylinder, the cut
+  of a sphere, a fillet). When two snap points fall on the same pixel, the one closer to the camera wins.
+- **Extruded polylines keep their arcs**: a polyline with arc segments extruded into a solid keeps those arcs as true
+  arcs: center, quadrants and midpoint snaps on its top and bottom edges, and no fake endpoints along the curve.
+- **New object snaps**: Extension (EXT, on by default: pause on the end of a line or arc and follow its extension,
+  also to its crossing with other objects or another extension), Parallel (PAR: pause on a line, then draw parallel
+  to it from the base point) and Insertion (INS: insertion point of blocks and texts). They are in the OSNAP menu and
+  can be typed as one-shot overrides, as can NON (no snap for the next point).
+- **Point modifiers**: `M2P` (or `MTP`) gives the midpoint between two points and `FROM` a base point plus an offset
+  (`@dx,dy`), at any point prompt.
+
+### Fixed
+- **PLINE close with arcs**: typing `C` in arc mode closes the polyline (it used to ask for a center). A polyline that
+  ends on its start point (for example with an arc back to the start) is saved as closed, so it can be extruded.
+- **Spline snaps**: nearest, intersection and perpendicular now follow the drawn curve instead of the polygon through
+  its points; only the ends are endpoints.
+
 ## [2.28.4] — 2026-11-06
 
 ### Fixed

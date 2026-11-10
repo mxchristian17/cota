@@ -1,8 +1,36 @@
 import type { Vec3 } from '../math'
-import type { Entity } from '../document/types'
+import type { Entity, PolylineProps } from '../document/types'
 import { ellipsePoints } from '../geom/ellipse'
-import { tessellateArc } from '../geom/arc'
-import { polylinePoints } from '../geom/polyline'
+import { arcSegmentCount, tessellateArc } from '../geom/arc'
+import { bulgeAngle, bulgeArc, bulgeAt, polylinePoints, polylineSpans } from '../geom/polyline'
+
+/** Polilínea cerrada, o abierta que termina donde empieza (p. ej. con un arco que vuelve al primer punto). */
+export function closesOnItself(p: PolylineProps): boolean {
+  const v = p.vertices
+  if (p.closed) return v.length >= 2
+  if (v.length < 3) return false
+  const [a, b] = [v[0], v[v.length - 1]]
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) <= 1e-9 * (1 + Math.hypot(a[0], a[1], a[2]))
+}
+
+/**
+ * Tramos curvos del perfil de `profileOf` (índices `[i, j]` sobre sus puntos, ver `ExtrudeProps.arcs`): la extrusión
+ * los guarda para que sus aristas sigan siendo arcos (centro, cuadrantes, punto medio).
+ */
+export function profileArcs(e: Entity): Array<[number, number]> {
+  if (e.type !== 'POLYLINE' || !closesOnItself(e.props)) return []
+  const p = e.props
+  const out: Array<[number, number]> = []
+  let idx = 0
+  for (const [i, j] of polylineSpans(p)) {
+    const b = bulgeAt(p, i)
+    // Igual que `polylinePoints`: un arco de n tramos deja n − 1 puntos intermedios.
+    const n = bulgeArc(p.vertices[i], p.vertices[j], b, p.normal) ? arcSegmentCount(Math.abs(bulgeAngle(b))) : 1
+    if (n > 1) out.push([idx, idx + n])
+    idx += n
+  }
+  return out
+}
 
 /**
  * Extrae el polígono base de un perfil 2D cerrado apto para extrusión.
@@ -39,7 +67,7 @@ export function profileOf(e: Entity): Vec3[] | null {
       ]
     }
     case 'POLYLINE': {
-      if (!e.props.closed || e.props.vertices.length < 2) return null
+      if (!closesOnItself(e.props)) return null
       // Los tramos curvos (bulge) se teselan: el perfil conserva sus arcos (en su plano).
       const pts = polylinePoints(e.props).map((v) => [v[0], v[1], v[2]] as Vec3)
       const [a, b] = [pts[0], pts[pts.length - 1]]

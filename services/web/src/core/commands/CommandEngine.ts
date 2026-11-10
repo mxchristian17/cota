@@ -11,7 +11,7 @@ import { expandGroups } from '../document/groups'
 import { sysvars } from './sysvars'
 import { parseCoordinate, parseNumber } from './coords'
 import { matchOsnapOverride } from '../snap/osnap'
-import type { OsnapKind } from '../snap/osnap'
+import type { OsnapOverride } from '../snap/osnap'
 import { matchKeyword } from './keywords'
 import { reportError } from '../errors'
 import type {
@@ -162,7 +162,7 @@ export class CommandEngine {
   /** Base de lo relativo: la del prompt; sin ella, `@` sigue siendo relativo al último punto (LASTPOINT). */
   private relBase = (base: Pt | null, text: string): Pt | null => base ?? (text.startsWith('@') ? this.lastPoint : null)
   /** Override de snap de un solo uso (tecleado en el prompt: cen/end/mid/…). */
-  private osnapOverrideKind: OsnapKind | null = null
+  private osnapOverrideKind: OsnapOverride | null = null
   /** Historial de comandos ejecutados (para recuperar con ↑/↓) y repetir con Enter. */
   private history: string[] = []
   private lastCmdName: string | null = null
@@ -279,7 +279,7 @@ export class CommandEngine {
   }
 
   /** Override de snap de un solo uso activo (o null). Lo consume la próxima captura. */
-  osnapOverride(): OsnapKind | null {
+  osnapOverride(): OsnapOverride | null {
     return this.osnapOverrideKind
   }
 
@@ -676,6 +676,27 @@ export class CommandEngine {
     })
   }
 
+  /**
+   * M2P: pide dos puntos y da su punto medio. FROM: pide un punto base y un desplazamiento (`@dx,dy` relativo a la
+   * base, o un clic). El resultado responde el prompt de punto que estaba pendiente; Esc cancela el comando.
+   */
+  private async pointModifier(outer: Extract<Pending, { type: 'point' }>, kind: 'm2p' | 'from'): Promise<void> {
+    const prompt = this.currentPrompt
+    const ask = (msg: string, base: Pt | null): Promise<PointResult> => this.requestPoint(msg, { base, snapEntities: outer.snapEntities })
+    const a = await ask(kind === 'm2p' ? 'First point of mid: ' : 'Base point: ', null)
+    const b = a.kind === 'point' ? await ask(kind === 'm2p' ? 'Second point of mid: ' : '<Offset>: ', a.point) : a
+    if (a.kind !== 'point' || b.kind !== 'point') {
+      this.pending = null
+      this.setPrompt(prompt)
+      outer.resolve({ kind: 'cancel' })
+      return
+    }
+    const p = kind === 'm2p' ? { x: (a.point.x + b.point.x) / 2, y: (a.point.y + b.point.y) / 2, z: (a.point.z + b.point.z) / 2 } : b.point
+    this.lastPoint = p
+    this.setPrompt(prompt)
+    outer.resolve({ kind: 'point', point: p })
+  }
+
   private requestAngle(prompt: string, opts: GetAngleOptions): Promise<AngleResult> {
     return new Promise<AngleResult>((resolve) => {
       this.pending = {
@@ -962,6 +983,12 @@ export class CommandEngine {
     if (kw) {
       this.pending = null
       pending.resolve({ kind: 'keyword', keyword: kw })
+      return
+    }
+
+    // Modificadores de punto del CAD clásico: M2P/MTP (medio entre dos puntos) y FROM (punto base + desplazamiento).
+    if (pending.type === 'point' && /^(m2p|mtp|from|fro)$/i.test(trimmed)) {
+      void this.pointModifier(pending, /^m/i.test(trimmed) ? 'm2p' : 'from')
       return
     }
 

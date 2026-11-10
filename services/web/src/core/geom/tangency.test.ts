@@ -130,7 +130,7 @@ describe('LINE con primer punto diferido (el bug: TAN sólo andaba para terminar
     const { computeSnap } = await import('../snap/SnapService')
     const { WORLD_UCS } = await import('../ucs')
     const circle = { id: 'c', type: 'CIRCLE' as const, layer: '0', props: { center: [0, 0, 0] as Vec3, radius: 5, normal: [0, 0, 1] as Vec3 } }
-    const off = { endpoint: false, midpoint: false, center: true, geometricCenter: false, quadrant: false, intersection: false, apparentIntersection: false, perpendicular: false, tangent: true, nearest: false, node: false }
+    const off = { endpoint: false, midpoint: false, center: true, geometricCenter: false, quadrant: false, intersection: false, apparentIntersection: false, perpendicular: false, tangent: true, nearest: false, node: false, extension: false, parallel: false, insertion: false }
     const r = computeSnap({ x: 3, y: 4.2, z: 0 }, [circle], {
       gridSnap: false, gridStep: 10, esnap: true, ucs: WORLD_UCS, osnap: off, base: null,
       cursorPx: [3, 4.2], pixelThreshold: 5, project: (p) => [p.x, p.y],

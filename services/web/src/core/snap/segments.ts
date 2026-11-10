@@ -1,4 +1,5 @@
 import { lineSpan } from '../geom/xline'
+import { splineCurve } from '../geom/curve'
 import { imageRing } from '../geom/image'
 import { fromVec3, pt, type Pt } from '../math'
 import type { Entity } from '../document/types'
@@ -31,8 +32,11 @@ export function endpointsOfEntity(e: Entity): Pt[] {
       return arcEndpoints(e.props).map(fromVec3)
     case 'POLYLINE':
       return e.props.vertices.map(fromVec3)
-    case 'SPLINE':
-      return e.props.controlPoints.map(fromVec3)
+    case 'SPLINE': {
+      // Extremos de la curva; los puntos de ajuste intermedios dan NODE, no END.
+      const cp = e.props.controlPoints
+      return cp.length ? [fromVec3(cp[0]), fromVec3(cp[cp.length - 1])] : []
+    }
     case 'SOLID3D':
       return solidVertices(e.props).map(fromVec3)
     case 'MESH3D':
@@ -74,8 +78,8 @@ export function segmentsOfEntity(e: Entity): [Pt, Pt][] {
     const v = polylinePoints(e.props).map(fromVec3) // ya viene cerrada si corresponde
     for (let i = 0; i < v.length - 1; i++) segs.push([v[i], v[i + 1]])
   } else if (e.type === 'SPLINE') {
-    const v = e.props.controlPoints.map(fromVec3)
-    for (let i = 0; i < v.length - 1; i++) segs.push([v[i], v[i + 1]])
+    // La curva (como se dibuja), no la poligonal de sus puntos: NEA, INT y PER caen sobre ella.
+    for (const q of splineCurve(e.props.controlPoints, e.props.degree)?.prims ?? []) if (q.k === 'L') segs.push([fromVec3(q.a), fromVec3(q.b)])
   } else if (e.type === 'SOLID3D') {
     for (const poly of solidSnapWireframe(e.props)) {
       const v = poly.map(fromVec3)

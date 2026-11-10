@@ -1,4 +1,4 @@
-import { profileOf, profileNormal } from '../../editing/extrude'
+import { profileArcs, profileOf, profileNormal } from '../../editing/extrude'
 import type { SolidProps } from '../../document/types'
 import type { Vec3 } from '../../math'
 import type { Command } from '../types'
@@ -10,7 +10,7 @@ import { DEFAULT_SEGMENTS, viewZ } from './primitives'
 import { heightPreview, signedHeight } from '../height'
 
 /** Perfil extruible: un círculo se vuelve CYLINDER paramétrico (conserva su centro). */
-type Extrudable = { id: string; profile?: Vec3[]; circle?: { center: Vec3; radius: number; normal: Vec3 } }
+type Extrudable = { id: string; profile?: Vec3[]; arcs?: Array<[number, number]>; circle?: { center: Vec3; radius: number; normal: Vec3 } }
 
 /** Orienta `axis` para que la extrusión positiva vaya hacia el lado de la vista actual (intuitivo). */
 function orientAxis(axis: Vec3, towards: Vec3): Vec3 {
@@ -36,7 +36,8 @@ export const extrudeCommand: Command = {
         continue
       }
       const p = profileOf(e)
-      if (p) items.push({ id, profile: p })
+      const arcs = profileArcs(e)
+      if (p) items.push({ id, profile: p, ...(arcs.length ? { arcs } : {}) })
     }
     if (items.length === 0) {
       ctx.print('No closed profile selected (use RECTANGLE, closed PLINE or CIRCLE).')
@@ -151,7 +152,7 @@ function solidFor(it: Extrudable, h: number, taper: number, view: Vec3): SolidPr
   // Un círculo extruido = cilindro paramétrico (centro conservado, render liso, sin facetado en snaps).
   return it.circle
     ? { op: 'CYLINDER', base: it.circle.center, radius: it.circle.radius, height: h, segments: DEFAULT_SEGMENTS, axis: orientAxis(it.circle.normal, view) }
-    : { op: 'EXTRUDE', profile: it.profile as Vec3[], height: h, axis: orientAxis(profileNormal(it.profile as Vec3[]), view) }
+    : { op: 'EXTRUDE', profile: it.profile as Vec3[], height: h, axis: orientAxis(profileNormal(it.profile as Vec3[]), view), ...(it.arcs ? { arcs: it.arcs } : {}) }
 }
 
 /** Contorno del perfil como polígono (un círculo, muestreado). */

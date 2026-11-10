@@ -223,6 +223,11 @@ export interface ExtrudeProps {
   height: number
   /** Eje de extrusión (normal del plano del perfil). Ausente = +Z mundo (compat. con dibujos previos). */
   axis?: Vec3
+  /**
+   * Tramos del perfil que son arcos (teselados): pares `[i, j]` de índices, de `profile[i]` a `profile[j]` (`j` puede
+   * valer `profile.length`: el arco que cierra en el primer vértice). Dan CEN/QUA/MID reales a las aristas curvas.
+   */
+  arcs?: Array<[number, number]>
 }
 
 /** Caja paramétrica: esquina mínima `origin` y extensión en +X/+Y/+Z. */

@@ -12,9 +12,9 @@ import type { AttDisp, BlockDef, DimensionEntity, Entity, Layer, MeshEntity, Sol
 import { PREVIEW_COLORS, type PreviewShape } from '../core/preview'
 import { expandEntities } from '../core/editing/block'
 import { entityOutline } from '../core/editing/bounds'
-import { computeSnap, type SnapResult, type SnapType } from '../core/snap/SnapService'
+import { computeSnap, type Acquisition, type SnapResult, type SnapType } from '../core/snap/SnapService'
 import { computeTracking } from '../core/snap/tracking'
-import { singleOsnap, type OsnapConfig, type OsnapKind } from '../core/snap/osnap'
+import { singleOsnap, type OsnapConfig, type OsnapOverride } from '../core/snap/osnap'
 import { segmentsOfEntity } from '../core/snap/segments'
 import { dimDisplay } from '../core/dimension/dimGeometry'
 import { isWorldUcs, ORTHO_UCS, orthoUcs, sameUcs, ucsZ, WORLD_UCS, type OrthoUcsName, type Ucs } from '../core/ucs'
@@ -73,7 +73,7 @@ export interface ViewportData {
   ucs: Ucs
   osnap: OsnapConfig
   /** Override de snap de un solo uso (cen/end/mid/…), o null. */
-  osnapOverride: OsnapKind | null
+  osnapOverride: OsnapOverride | null
   /** Punto base del prompt activo (rubber-band), para perpendicular/tangent. */
   snapBase: Pt | null
   /** Hay un prompt esperando un punto/distancia → activar object snap y previsualización. */
@@ -423,6 +423,11 @@ export class Viewport {
   private ucs: Ucs = { ...WORLD_UCS }
   /** Puntos adquiridos para el object snap tracking (máx. 3, como el CAD clásico). */
   private tracked: Pt[] = []
+  /** Rectas/arcos adquiridos para EXT y PAR, y la pausa en curso sobre uno. */
+  private osnapAcq: Acquisition[] = []
+  private acqKey = ''
+  private acqSince = 0
+  private acqDone = false
   /** Líneas de alineación vigentes (se dibujan punteadas mientras el tracking captura). */
   private trackLines: [Pt, Pt][] = []
   /** Hover sostenido sobre un snap: clave del punto, instante inicial y si ya se consumió. */
@@ -989,6 +994,7 @@ export class Viewport {
     const snapped = this.needSnap() ? this.snapAt(raw) : { point: raw, type: null as SnapType | null }
     this.snapResult = snapped
     this.updateTrackingAcquisition()
+    this.updateOsnapAcquisition()
     this.lastWorld.x = snapped.point.x
     this.lastWorld.y = snapped.point.y
     this.lastWorld.z = snapped.point.z
@@ -1736,7 +1742,9 @@ export class Viewport {
     }
     if (!this.snapList) {
       const own = hidden.size ? this.entities().filter((e) => !hidden.has(e.layer)) : this.entities()
-      this.snapList = own.concat(d.snapExtras ?? [], d.snapLive ?? [])
+      // Los bloques llegan expandidos; el INSERT original va además sólo para su punto de inserción (INS).
+      const inserts = d.entities.filter((e) => e.type === 'INSERT' && !hidden.has(e.layer))
+      this.snapList = own.concat(d.snapExtras ?? [], d.snapLive ?? [], inserts)
     }
     const all = this.snapList
     // Culling espacial: solo las entidades cuya esfera proyectada cae cerca del cursor (clave para
@@ -1773,6 +1781,7 @@ export class Viewport {
       pixelThreshold: this.touchAim ? 24 : 10,
       project: (p) => this.controller.project(new THREE.Vector3(p.x, p.y, p.z)),
       depth: (p) => this.controller.camera.position.distanceTo(new THREE.Vector3(p.x, p.y, p.z)),
+      acquired: this.osnapAcq,
     })
 
     // INT/APPINT sobre el tramo en curso: con ORTHO la dirección del rubber-band queda fija y se marcan sus cruces
@@ -1817,6 +1826,7 @@ export class Viewport {
         return { point: track.point, type: 'tracking' }
       }
     }
+    this.trackLines = result.lines ?? [] // la prolongación (EXT) o la paralela (PAR)
     return result
   }
 
@@ -1960,8 +1970,50 @@ export class Viewport {
     place(this.fillLight, 0.6, -0.5, 0.4)
   }
 
+  /**
+   * EXT y PAR (CAD clásico): detenerse (~500 ms) sobre el extremo de una recta o de un arco adquiere su prolongación;
+   * sobre una recta, con punto base, adquiere su dirección para la paralela. Detenerse otra vez lo libera.
+   */
+  private updateOsnapAcquisition(): void {
+    const d = this.data
+    const os = d?.osnapOverride ? singleOsnap(d.osnapOverride) : d?.osnap
+    if (!d?.pointPrompt || !os || !(os.extension || os.parallel) || !(d.esnap || d.osnapOverride)) return
+    const { type, point, under } = this.snapResult
+    let acq: Acquisition | null = null
+    const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
+    if (under && os.extension && type === 'endpoint') {
+      if (under.seg) {
+        const [a, b] = under.seg
+        acq = dist(point, b) <= dist(point, a) ? { kind: 'extension', from: a, to: b } : { kind: 'extension', from: b, to: a }
+      } else if (under.arc) acq = { kind: 'arcExtension', arc: under.arc, at: point }
+    } else if (under?.seg && os.parallel && d.snapBase && (type === null || type === 'nearest' || type === 'grid')) {
+      acq = { kind: 'parallel', a: under.seg[0], b: under.seg[1] }
+    }
+    const keyOf = (q: Acquisition): string =>
+      q.kind === 'arcExtension' ? `a${q.arc.center.join(',')}|${q.arc.radius}|${q.at.x},${q.at.y},${q.at.z}` : q.kind === 'extension' ? `e${q.to.x},${q.to.y},${q.to.z}|${q.from.x},${q.from.y},${q.from.z}` : `p${q.a.x},${q.a.y},${q.a.z}|${q.b.x},${q.b.y},${q.b.z}`
+    const key = acq ? keyOf(acq) : ''
+    const now = performance.now()
+    if (key !== this.acqKey) {
+      this.acqKey = key
+      this.acqSince = now
+      this.acqDone = false
+      return
+    }
+    if (!acq || this.acqDone || now - this.acqSince < 500) return
+    this.acqDone = true
+    const i = this.osnapAcq.findIndex((q) => keyOf(q) === key)
+    if (i >= 0) this.osnapAcq.splice(i, 1)
+    else {
+      this.osnapAcq.push(acq)
+      if (this.osnapAcq.length > 4) this.osnapAcq.shift()
+    }
+    this.invalidate()
+  }
+
   /** Limpia los puntos adquiridos (al terminar el comando o con ESC). */
   clearTracking(): void {
+    this.osnapAcq = []
+    this.acqKey = ''
     if (this.tracked.length === 0 && this.trackLines.length === 0) return
     this.tracked = []
     this.trackLines = []
@@ -3232,6 +3284,13 @@ export class Viewport {
       }
       case 'nearest':
         return [[p(-r, -r), p(r, -r), p(-r, r), p(r, r), p(-r, -r)]]
+      case 'extension':
+        return [[p(-r, 0), p(r, 0)], [p(0, -r), p(0, r)], [p(-r * 0.4, -r * 0.4), p(r * 0.4, r * 0.4)]]
+      case 'parallel':
+        return [[p(-r, -r * 0.3), p(r * 0.3, r)], [p(-r * 0.3, -r), p(r, r * 0.3)]]
+      case 'insertion':
+        // Dos cuadrados encimados (el marcador del CAD clásico).
+        return [[p(-r, 0), p(0, 0), p(0, r), p(-r, r), p(-r, 0)], [p(0, -r), p(r, -r), p(r, 0), p(0, 0), p(0, -r)]]
       case 'grid':
         return [[p(-r, 0), p(r, 0)], [p(0, -r), p(0, r)]]
     }
@@ -3264,6 +3323,22 @@ export class Viewport {
         const line = new THREE.Line(geom, this.trackMaterial)
         line.computeLineDistances() // necesario para el punteado
         this.snapGroup.add(line)
+      }
+    }
+    // Marcas de lo adquirido para EXT ("+" en el extremo) y PAR (el símbolo sobre la recta).
+    if (this.data?.pointPrompt) {
+      for (const q of this.osnapAcq) {
+        const at = q.kind === 'parallel' ? { x: (q.a.x + q.b.x) / 2, y: (q.a.y + q.b.y) / 2, z: (q.a.z + q.b.z) / 2 } : q.kind === 'extension' ? q.to : q.at
+        for (const seg of this.glyphPoints(q.kind === 'parallel' ? 'parallel' : 'tracking', at, 4 * this.controller.worldPerPxAt(at))) {
+          this.snapGroup.add(new THREE.Line(this.localGeometry(seg.map((p) => new THREE.Vector3(p.x, p.y, p.z))), this.snapMaterial))
+        }
+      }
+      if (!(this.data.otrack || this.data.polarAng)) {
+        for (const [a, b] of this.trackLines) {
+          const line = new THREE.Line(this.localGeometry([new THREE.Vector3(a.x, a.y, a.z), new THREE.Vector3(b.x, b.y, b.z)]), this.trackMaterial)
+          line.computeLineDistances()
+          this.snapGroup.add(line)
+        }
       }
     }
     const { type, point } = this.snapResult
@@ -3470,6 +3545,7 @@ export class Viewport {
         this.hoverConsumed = false
       }
       this.updateTrackingAcquisition()
+    this.updateOsnapAcquisition()
       // Al terminar el comando (se cierra el prompt de punto) se sueltan los puntos adquiridos,
       // como hace el CAD clásico: el tracking vive dentro de una operación.
       if (this.lastPointPrompt && !prompting) this.clearTracking()

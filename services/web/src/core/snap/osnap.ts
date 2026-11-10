@@ -3,6 +3,9 @@ import type { SnapType } from './SnapService'
 /** Tipos de object snap configurables (todos menos `grid` y el tracking, que tiene su propio toggle). */
 export type OsnapKind = Exclude<SnapType, 'grid' | 'tracking'>
 
+/** Override tecleado para la próxima captura: un snap, o `none` (NON: ninguno). */
+export type OsnapOverride = OsnapKind | 'none'
+
 export type OsnapConfig = Record<OsnapKind, boolean>
 
 /** Orden de presentación en el diálogo. */
@@ -18,6 +21,9 @@ export const OSNAP_KINDS: OsnapKind[] = [
   'tangent',
   'nearest',
   'node',
+  'extension',
+  'parallel',
+  'insertion',
 ]
 
 export const OSNAP_LABELS: Record<OsnapKind, string> = {
@@ -32,6 +38,9 @@ export const OSNAP_LABELS: Record<OsnapKind, string> = {
   tangent: 'Tangent',
   nearest: 'Nearest',
   node: 'Node',
+  extension: 'Extension',
+  parallel: 'Parallel',
+  insertion: 'Insertion',
 }
 
 /** Defaults estilo CAD clásico: los más usados activos; GCEN/perp/tangent/nearest/node bajo demanda. */
@@ -47,17 +56,21 @@ export const DEFAULT_OSNAP: OsnapConfig = {
   tangent: false,
   nearest: false,
   node: false,
+  // EXT viene activo como en el CAD clásico: sólo actúa al detenerse sobre un extremo.
+  extension: true,
+  parallel: false,
+  insertion: false,
 }
 
 /** Config con un único snap activo (para overrides de un solo uso, estilo CAD clásico). */
-export function singleOsnap(kind: OsnapKind): OsnapConfig {
+export function singleOsnap(kind: OsnapOverride): OsnapConfig {
   const out = {} as OsnapConfig
   for (const k of OSNAP_KINDS) out[k] = k === kind
   return out
 }
 
 /** Alias tecleables en el prompt para forzar un snap puntual (una sola captura). */
-const OVERRIDE_ALIASES: Record<string, OsnapKind> = {
+const OVERRIDE_ALIASES: Record<string, OsnapOverride> = {
   end: 'endpoint',
   endp: 'endpoint',
   endpoint: 'endpoint',
@@ -87,10 +100,18 @@ const OVERRIDE_ALIASES: Record<string, OsnapKind> = {
   nea: 'nearest',
   near: 'nearest',
   nearest: 'nearest',
+  ext: 'extension',
+  extension: 'extension',
+  par: 'parallel',
+  parallel: 'parallel',
+  ins: 'insertion',
+  insertion: 'insertion',
+  non: 'none',
+  none: 'none',
 }
 
 /** Resuelve un texto (p. ej. "cen", "end") a un override de snap, o null. */
-export function matchOsnapOverride(text: string): OsnapKind | null {
+export function matchOsnapOverride(text: string): OsnapOverride | null {
   return OVERRIDE_ALIASES[text.trim().toLowerCase()] ?? null
 }
 
