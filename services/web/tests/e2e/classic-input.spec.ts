@@ -153,10 +153,13 @@ test.describe('Cota: command line like classic CAD', () => {
     await page.keyboard.press('Space')
     await expect(page.getByText('** MOVE **')).toHaveCount(1)
     await cmd('@0,10')
-    expect(await st(page, "const l = s.doc.entities[0].props; return [l.start, l.end]")).toEqual([[0, 10, 0], [40, 10, 0]])
+    // Se espera cada paso (el CI lento apretaba Espacio antes de que el grip quedara activo).
+    await expect.poll(() => st(page, "const l = s.doc.entities[0].props; return [l.start, l.end]")).toEqual([[0, 10, 0], [40, 10, 0]])
     const [g2x, g2y] = await scr(0, 10)
     await page.mouse.click(g2x, g2y)
+    await expect(page.getByText('** STRETCH **')).toHaveCount(2) // el historial guarda también el del primer ciclo
     await page.keyboard.press('Space')
+    await expect(page.getByText('** MOVE **')).toHaveCount(2)
     await page.keyboard.press('Space')
     await expect(page.getByText('** ROTATE **')).toHaveCount(1)
     await cmd('90')
