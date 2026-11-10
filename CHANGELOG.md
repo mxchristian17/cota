@@ -4,6 +4,26 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.35.0] — 2026-11-10
+
+### Added
+- **Regions**: flat areas with an outline and holes, the 2D counterpart of solids.
+  - `REGION` (`REG`) turns each closed object into a region: closed polylines, circles, ellipses, rectangles and
+    closed splines, and chains of lines, arcs and open polylines that close end to end. The source objects are
+    deleted, as in classic CAD.
+  - `UNION`, `SUBTRACT` and `INTERSECT` combine regions in the same plane. Arcs stay exact: the outline of two
+    overlapping circles keeps its centers and quadrants, and areas match the formulas.
+  - `EXTRUDE` and `REVOLVE` turn a region into a solid with its holes through it.
+  - `MASSPROP` gives the section properties of a region in the current UCS: area, perimeter, centroid, moments and
+    product of inertia, radii of gyration and principal moments with their directions.
+  - `BOUNDARY` › Object type › Region and `-HATCHEDIT` › recreate Boundary › Region create regions. `HATCH` › Select
+    objects hatches a region with its holes, and regions act as boundaries for internal points.
+  - Regions show their face in the shaded styles. They give object snaps on their lines and arcs, and work with
+    MOVE, COPY, ROTATE, SCALE, MIRROR, ARRAY, blocks, grips, `AREA`, `LIST`, the Properties palette (area and
+    perimeter), `EXPLODE` (back to lines and arcs) and `UCS` › Object.
+  - DXF and DWG files get each outline of a region as a closed polyline; PDF plots its outline.
+- New dependency: polygon-clipping 0.15.7 (MIT).
+
 ## [2.34.2] — 2026-11-10
 
 ### Fixed
