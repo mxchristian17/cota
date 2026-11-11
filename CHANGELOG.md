@@ -4,6 +4,17 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.35.5] — 2026-11-11
+
+### Documentation
+- **New README demo**: a slider-crank mechanism modeled with typed commands (crank, rod end with its spherical
+  bearing, connecting rod and the assembly on its base plate), and a new 3D model image.
+- **Three new reference models in `examples/`**, each with a screenshot and how it was built:
+  - a slider-crank with two ISO 12240-4 rod ends (GE 10 E spherical plain bearings), ISO 4017/4032/7089 fasteners and
+    finished edges (chamfers and fillets);
+  - a splice of two IPE 100 beams (EN 10365) with end plates and four M10 bolts;
+  - a disc brake.
+
 ## [2.35.4] — 2026-11-11
 
 ### Fixed

@@ -94,3 +94,91 @@ two Ø13 mounting holes at ±55 and a Ø6 lubrication hole.
 9. **Dimensions in the Front UCS:** `DIMLINEAR 0,0 0,70 …`, `DIMLINEAR 0,0 80,0 …` and the Ø20 with
    `DIMLINEAR 20,40 @20,0 T ⌀<> …`.
 10. **Text "SOPORTE" on the plate:** `TEXT` with the dynamic UCS (click on the front face).
+
+## Slider-crank with rod ends — 3D assembly
+
+| File | What it is |
+| --- | --- |
+| `biela-manivela.cota` | The assembly: 27 solids on Spanish-named layers (`BANCADA`, `MANIVELA`, `BIELA`, `CABEZAS`, `ARO_INT`…) |
+| `biela-manivela.png` | Isometric view, shaded with edges |
+
+**What it is:** an in-line slider-crank, crank radius 50 and connecting rod 200 between centers (L/r = 4), shown with
+the crank at 60°. The rod has a rod end with a spherical plain bearing at each end, bolted to the crank and to a
+slider that runs on two Ø12 guide shafts.
+
+**Parts and sizes (mm):**
+- **Rod ends:** ISO 12240-4, dimension series E, type F (female thread M10): d 10, d2 29 (eye), C1 7 (eye width),
+  h1 43 (center to end of shank), l3 20 (thread length), d5 19 with W 17 wrench flats. Source: Schaeffler catalogue
+  HG 1, rod ends GIR..-DO, pp. 266–267 (row d = 10).
+- **Spherical plain bearing:** GE 10 E (ISO 12240-1): d 10, D 19, B 9, C 6, dk 16, r min 0.3. Source: SKF catalogue of
+  spherical plain bearings, pp. 104–105. The inner ring is a Ø16 sphere minus two caps at ±4.5 and a Ø10 bore; its
+  sphere-to-face edges carry the catalogue's 0.3 edge radius (`FILLETEDGE R 0.3`, *Loop*).
+- **Fasteners:** ISO 4017 M10×40 hex bolts (s 16, k 6.4, 30° chamfer on the head), ISO 4032 M10 nuts (s 16, m 8.4,
+  30° chamfer on both faces), ISO 7089 washers (10.5/20/2), ISO 4035 M10 jam nuts (s 16, m 5) on the rod, and
+  Ø12 × 3 spacers against the inner rings (abutment 11.7–13.2 from the bearing table).
+- **Crank:** 10 thick, Ø40 hub on a Ø20 shaft, Ø24 boss at the crank pin, R1 rounded outline, C0.5 on the holes.
+- **Rod:** Ø14 bar with M10 ends screwed 18 into the rod ends; C0.5 on the shoulders, C1 at the thread starts.
+- **Slider and frame:** 60 × 50 × 30 slider with two Ø12 bores and an M10 tapped hole; 410 × 140 × 12 base plate
+  (R5 corners, C1 top edge), shaft support and guide supports with R2–R3 corners, C1 top edges and C0.5–C1 on the
+  holes; C0.5 on the ends of the guide shafts, C1 on the crank shaft.
+
+**How it was made** (everything typed in the command line):
+
+1. **Layers:** one per part family, `-LAYER M <name> C <#rrggbb> <name> ↵`.
+2. **Blocks:** `BOX #-80,-70,-12 #330,70,-12 12` (base plate), `BOX` + `CYLINDER` + `SUBTRACT` for the supports and the
+   slider. Horizontal bores with the *Axis endpoint* option: `CYLINDER #99,-15,35 6 A #116,-15,35`.
+3. **Crank from regions:** `CIRCLE` R20 and R12 at the hub and the pin, a `PLINE` along the two outer tangents,
+   `REGION`, `UNION`, `EXTRUDE 10`, then `SUBTRACT` the Ø20 and Ø10.5 holes.
+4. **Bearing:** `SPHERE` R8, `SUBTRACT` two `BOX`es (the caps) and a `CYLINDER` (the bore); outer ring: `CYLINDER`
+   R9.5 × 6 minus the `SPHERE`.
+5. **Rod end housing:** built at the origin along +X (eye, neck and collar `CYLINDER`s, `UNION`, flats and thread hole
+   with `SUBTRACT`), then `ROTATE` and `MOVE` to each pin.
+6. **Hex heads and nuts:** `POLYGON 6 … C 8` + `EXTRUDE`; the 30° chamfer subtracts a ring made of a `CYLINDER` minus a
+   truncated `CONE` (base radius, top radius, *Axis endpoint*). Jam nuts are drawn in `UCS ZA` along the rod.
+7. **Finishing:** `FILLETEDGE R …` and `CHAMFEREDGE D … …` picking each edge (or the tangent *Chain* of the crank
+   outline).
+8. View: `-VIEW SEISO`, `VSCURRENT shadedEdges`.
+
+## Bolted splice of two IPE 100 beams — 3D assembly
+
+| File | What it is |
+| --- | --- |
+| `empalme-ipe100.cota` | The splice: two beams, two end plates and four bolt sets (20 solids) |
+| `empalme-ipe100.png` | Isometric view, shaded with edges |
+
+**What it is:** two IPE 100 beams joined end to end with 200 × 100 × 10 end plates and four M10 bolts.
+
+**Parts and sizes (mm):**
+- **IPE 100** (EN 10365): h 100, b 55, tw 4.1, tf 5.7, r 7. `MASSPROP` of the section region gives area 1032.32 mm²
+  and moments of inertia 1 710 121 mm⁴ (strong axis) and 159 187 mm⁴ (weak axis), the same as the published tables
+  (10.3 cm², 171 cm⁴, 15.9 cm⁴).
+- **End plates:** 200 × 100 × 10 with four Ø11 holes at ±30 / ±80 (ISO 273 medium clearance for M10). Edge distance 20
+  ≥ 1.2·d0 and gauge 60 ≥ 2.4·d0, the minimums of EN 1993-1-8, table 3.3.
+- **Bolts:** ISO 4017 M10×40, ISO 4032 nuts, two ISO 7089 washers each. Grip 24, so 7.6 of thread shows past the nut.
+
+**How it was made:**
+
+1. **Plates:** `BOX` with the four holes as `CYLINDER … A …` cutters and `SUBTRACT`.
+2. **Profile on the plate face:** `UCS #0,-10,0 ↵`, `UCS X 90`, `PLAN ↵`, then the outline typed with `PLINE`, using
+   `A` (tangent arc) at the four root radii and `L` back to lines:
+   `PLINE -27.5,-50 27.5,-50 27.5,-44.3 9.05,-44.3 A 2.05,-37.3 L 2.05,37.3 A 9.05,44.3 L 27.5,44.3 27.5,50 -27.5,50
+   -27.5,44.3 -9.05,44.3 A -2.05,37.3 L -2.05,-37.3 A -9.05,-44.3 L -27.5,-44.3 C`.
+3. **Section and beam:** `REGION L ↵`, `MASSPROP L ↵` (section properties), `EXTRUDE L ↵ 400`. The other beam is the
+   same profile in the UCS of the other plate, extruded −400.
+4. **Bolts:** hexagons drawn in `UCS X 90` and extruded, shanks with `CYLINDER … A …`, washers and nut holes with
+   `SUBTRACT`. `THREAD` on a shank adds the M10 (P 1.5) thread texture and its leader.
+
+## Disc brake — 3D assembly
+
+| File | What it is |
+| --- | --- |
+| `freno-disco.cota` | Vented and cross-drilled disc, hub with five studs, caliper with four pistons, pads, bracket and bolts (23 solids) |
+| `freno-disco.png` | Isometric view, shaded with edges |
+
+**What it is:** a Ø300 × 28 ventilated brake disc (36 radial vanes, cross-drilled in staggered groups of three every
+30°) on a hub with five studs on a Ø114.3 circle, and a four-piston caliper over the friction ring.
+
+**How it was made:** the disc is a `PLINE` profile turned with `REVOLVE … Z 360`; the vanes and holes are `BOX` and
+`CYLINDER` cutters repeated with `ARRAY P`, joined with `UNION` and removed with `SUBTRACT`. Hub, studs, caliper, pads
+and bracket are revolved profiles too (`REVOLVE … ST <start angle> <angle>` for the partial ones), and the bolts are
+`POLYGON 6` + `EXTRUDE` joined to their shanks.

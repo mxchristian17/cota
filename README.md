@@ -24,7 +24,7 @@ no install, no account, no license fee.
 [![Sponsor](https://img.shields.io/github/sponsors/mxchristian17?label=sponsor&logo=githubsponsors&color=ea4aaa)](https://github.com/sponsors/mxchristian17)
 ![Commands](https://img.shields.io/badge/commands-240%2B-orange)
 
-![Cota in action: a part is modeled with typed commands, then its drawing views are generated and dimensioned automatically](docs/images/cota-demo.gif)
+![Cota in action: a slider-crank mechanism is modeled with typed commands: the crank from a profile with fillets, a rod end with its spherical bearing, the connecting rod with jam nuts, and the assembly on its base plate](docs/images/cota-demo.gif)
 
 </div>
 
