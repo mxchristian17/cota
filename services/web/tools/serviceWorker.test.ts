@@ -15,6 +15,14 @@ describe('service worker de la app instalable', () => {
     expect(src).toContain("req.mode === 'navigate'")
   })
 
+  it('el núcleo de sólidos no se precarga: se guarda al usarlo en su caché, que borra sólo otra versión del núcleo', () => {
+    const occt = serviceWorkerSource('abc123', ['./'], '5.17.1')
+    expect(occt).toContain("const OCCT_CACHE = 'occt-5.17.1'")
+    expect(occt).toContain("const OCCT_PATH = 'occt/5.17.1/'")
+    expect(occt).toContain("k.startsWith('occt-') && k !== OCCT_CACHE")
+    expect(() => new Function(occt)).not.toThrow()
+  })
+
   it('es JavaScript válido', () => {
     expect(() => new Function(src)).not.toThrow()
   })

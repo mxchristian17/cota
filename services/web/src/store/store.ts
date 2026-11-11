@@ -96,7 +96,8 @@ import { solidThreads, threadViewItems } from '../core/thread/geometry'
 import { parseScript } from '../core/commands/script'
 import type { ScriptResult } from '../core/commands/CommandEngine'
 import { solidTopology } from '../core/editing/topology'
-import { solidMesh, solidMeshWithSurfaces } from '../render/csg'
+import { onSolidsChanged, solidMesh, solidMeshWithSurfaces } from '../render/csg'
+import { onKernelMessage } from '../render/occtKernel'
 import { parseStl } from '../core/io/stl'
 import { requestViewGen } from '../ui/ViewGenDialog'
 import { DRAWING_TEMPLATE_EXT, drawingFromTemplate, makeTemplate, parseTemplate as parseDrawingTemplate, readDefaultTemplate, writeDefaultTemplate, type DrawingTemplate } from '../core/io/drawingTemplate'
@@ -757,6 +758,23 @@ export const useStore = create<AppState>((set, get) => {
   }
 
   const print = (line: string) => set((s) => ({ output: [...s.output, line].slice(-MAX_OUTPUT) }))
+  // Núcleo de sólidos exacto: cuando llegan sus resultados se redibuja con la geometría nueva (el primero enseguida;
+  // mientras siguen llegando, a lo sumo cada 0,75 s o el doble de lo que tardó el último redibujo) y sus fallas se avisan.
+  let kernelRedraw: ReturnType<typeof setTimeout> | null = null
+  let kernelRedrawAt = 0
+  let kernelRedrawCost = 0
+  const redrawSolids = () => {
+    kernelRedraw = null
+    kernelRedrawAt = performance.now()
+    get().redraw()
+    requestAnimationFrame(() => requestAnimationFrame(() => (kernelRedrawCost = performance.now() - kernelRedrawAt)))
+  }
+  onSolidsChanged(() => {
+    if (kernelRedraw) return
+    const gap = Math.max(750, 2 * kernelRedrawCost)
+    kernelRedraw = setTimeout(redrawSolids, Math.max(0, kernelRedrawAt + gap - performance.now()))
+  })
+  onKernelMessage((line) => print(line))
   const bump = () => {
     doc.updateAssociativeDims() // las cotas asociativas siguen a la geometría
     doc.updateAssociativeHatches() // y los sombreados asociativos a su contorno
@@ -2576,9 +2594,11 @@ export const useStore = create<AppState>((set, get) => {
     openOptions: () => set({ optionsOpen: true }),
     closeOptions: () => set({ optionsOpen: false }),
     setSysvars: (patch) => {
+      const kernel = sysvars.SOLIDKERNEL
       applySysvars(patch as Record<string, unknown>)
       set((s) => ({ sysvarRev: s.sysvarRev + 1 }))
       saveConfig()
+      if (sysvars.SOLIDKERNEL !== kernel) get().redraw() // los sólidos se rehacen con el otro núcleo
     },
     setOsnap: (kind, value) => {
       set((s) => ({ osnap: { ...s.osnap, [kind]: value } }))

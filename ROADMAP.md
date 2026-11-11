@@ -23,7 +23,8 @@ discussion.
 | Status | Item |
 |---|---|
 | next | EXTRUDE with a live solid preview; the height follows the side of the cursor. |
-| next | **Robust fillets and chamfers on any edge selection**: today a sphere with a box subtracted fails when only some edges are rounded (concave blends overflow the sphere, mixed corners). Evaluate an exact B-rep kernel (OpenCascade compiled to WebAssembly, loaded only for 3D solids) for booleans, fillets and chamfers instead of mesh-based tools. |
+| done | **Exact solid kernel**: booleans, fillets and chamfers of 3D solids are built with an exact B-rep kernel (OpenCascade compiled to WebAssembly, loaded only for 3D solids, `SOLIDKERNEL`), so any subset of edges of a sphere cut by a box rounds cleanly and a sphere–plane circle is one edge; the mesh stays as the fallback (2.39.0). |
+| next | **Exact topology**: edges, faces and snaps of solids taken from the B-rep instead of the mesh, exact projected views, STEP export and exact mass properties. |
 | planned | Per-object lineweight (ByLayer by default) and a toggle to show lineweights in the model. |
 | planned | Isolate / hide objects and quick select from the context menu. |
 | done | **Edit a block by double-clicking it**: the block definition opens in the Block Editor (`BEDIT`, `BSAVE`, `BCLOSE`), as in the classic block editor, and saving updates every insert of that block (2.37.0). |

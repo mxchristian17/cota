@@ -17,6 +17,7 @@ from the Help dialog.
 | [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) | 0.7 | MIT |
 | [Zustand](https://github.com/pmndrs/zustand) | 5.0 | MIT |
 | [acad-ts](https://github.com/node-projects/acad-ts) (TypeScript port of [ACadSharp](https://github.com/DomCR/ACadSharp)), loaded when a DWG is opened | 3.6.0 | MIT |
+| [occt-wasm](https://github.com/andymai/occt-wasm) TypeScript wrapper, in the solid kernel's Worker (the OpenCascade module itself is below) | 5.17.1 | MIT |
 | [polygon-clipping](https://github.com/mfogel/polygon-clipping) (uses [splaytree](https://github.com/w8r/splay-tree) 3.2, MIT, and [robust-predicates](https://github.com/mourner/robust-predicates) 3.0, public domain) | 0.15.7 | MIT |
 
 ### OpenCascade for STEP/IGES (loaded on demand)
@@ -27,6 +28,30 @@ build of [Open CASCADE Technology](https://dev.opencascade.org), as a separate, 
 Public License 2.1 (OCCT with its LGPL exception); their license texts ship in the package
 (`node_modules/occt-import-js/dist/license.*.txt`). The module is not part of the rest of the app and can be
 replaced with any compatible build of the same version.
+
+### OpenCascade solid kernel (loaded on demand)
+
+3D solids are evaluated with an exact B-rep kernel: [Open CASCADE Technology](https://dev.opencascade.org) 8.0.1
+compiled to WebAssembly by [occt-wasm](https://github.com/andymai/occt-wasm) 5.17.1. It runs in its own Web Worker
+and is downloaded only when a drawing has solids that need it.
+
+- **The module** (`occt/5.17.1/occt-wasm.wasm` and its Emscripten loader `occt/5.17.1/occt-wasm.js` in the build) is
+  licensed under the GNU Lesser General Public License 2.1 with the
+  [Open CASCADE exception](https://dev.opencascade.org/resources/licensing). It is shipped unmodified, as separate
+  files that Cota loads by URL, so it can be replaced with any compatible build of the same version: put your own
+  `occt-wasm.wasm` and `occt-wasm.js` in that folder. The license texts and a README ship next to it
+  (`occt/5.17.1/LICENSE_LGPL_21.txt`, `OCCT_LGPL_EXCEPTION.txt`, `README.txt`; source:
+  [`services/web/vendor/occt/`](services/web/vendor/occt/)).
+- **Its source code**: occt-wasm [v5.17.1](https://github.com/andymai/occt-wasm/tree/v5.17.1) (build scripts and C++
+  facade) and the OCCT fork it pins as a submodule,
+  [andymai/OCCT@c7f60ff](https://github.com/andymai/OCCT/tree/c7f60ffe85f28c67358d1771454044f0521f2fdd) (OCCT 8.0.1
+  plus fixes). Each release attaches both as `cota-occt-source-5.17.1.tar.gz`, built by
+  [`services/web/tools/occt-source.sh`](services/web/tools/occt-source.sh).
+- **The TypeScript wrapper** of occt-wasm, bundled into the kernel's Web Worker, is MIT-licensed (its text is in
+  `THIRD_PARTY_LICENSES.txt`).
+
+This software is based on facilities provided by the Open CASCADE Technology software. `SOLIDKERNEL MESH` turns the
+kernel off; solids are then evaluated with triangle meshes only.
 
 ### Hershey Simplex stroke font
 

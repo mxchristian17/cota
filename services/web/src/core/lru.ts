@@ -23,6 +23,10 @@ export class LruCache<K, V> {
     while (this.map.size > this.max) this.map.delete(this.map.keys().next().value as K)
   }
 
+  delete(key: K): void {
+    this.map.delete(key)
+  }
+
   clear(): void {
     this.map.clear()
   }

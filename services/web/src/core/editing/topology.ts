@@ -11,6 +11,8 @@ import { LruCache } from '../lru'
 
 /** Ángulo por debajo del cual dos facetas vecinas pertenecen a la misma cara suave. */
 const SMOOTH_COS = Math.cos((25 * Math.PI) / 180)
+/** Diedro casi llano (< 3°): arista tangente. */
+const TANGENT_COS = Math.cos((3 * Math.PI) / 180)
 
 /** Arista viva entre dos caras suaves: polilínea ordenada con las normales de ambas caras por tramo. */
 export interface TopoEdge {
@@ -228,6 +230,7 @@ function planarGroups(
   verts: Vec3[],
   tolPlane: number,
   triSurf: number[],
+  strictSurf = false,
 ): { group: number[]; groupN: Vec3[] } {
   const group = new Array<number>(tris.length).fill(-1)
   const groupN: Vec3[] = []
@@ -249,7 +252,9 @@ function planarGroups(
         if (!onPlane || (area[nb] > tiny && vdot(triN[nb], n0) <= 0)) continue
         // De otra superficie, sólo si es el mismo plano (dos caras al ras): dos empalmes que llegan tangentes a una
         // esfera tienen facetas casi coplanares y quedaban en una misma cara, sin la arista entre ellos.
-        if (triSurf[nb] !== triSurf[seed] && area[nb] > tiny && vdot(triN[nb], n0) < 1 - 1e-6) continue
+        // Con caras exactas (núcleo B-rep) cada triángulo es de su cara: nunca se mezclan superficies (una astilla de un
+        // empalme junto a un plano quedaba en la cara del plano y la arista entre ellos salía dentada).
+        if (triSurf[nb] !== triSurf[seed] && (strictSurf || (area[nb] > tiny && vdot(triN[nb], n0) < 1 - 1e-6))) continue
         group[nb] = g
         stack.push(nb)
       }
@@ -388,7 +393,10 @@ function splitAtCorners(c: RawChain, verts: Vec3[]): RawChain[] {
   const isBreak = (i: number): boolean => {
     const s = c.segs[(i + n - 1) % n]
     const t = c.segs[i]
-    return s.convex !== t.convex || vdot(segDir(verts, s.a, s.b), segDir(verts, t.a, t.b)) < SMOOTH_COS
+    // En una arista tangente (empalme que llega a una cara) las dos normales casi coinciden y el signo de la
+    // convexidad es ruido: ahí no se corta.
+    const tangent = vdot(s.na, s.nb) > TANGENT_COS && vdot(t.na, t.nb) > TANGENT_COS
+    return (s.convex !== t.convex && !tangent) || vdot(segDir(verts, s.a, s.b), segDir(verts, t.a, t.b)) < SMOOTH_COS
   }
   const breaks: number[] = []
   for (let i = c.closed ? 0 : 1; i < n; i++) if (isBreak(i)) breaks.push(i)
@@ -441,6 +449,8 @@ export function buildTopology(
   positions: ArrayLike<number>,
   surf?: ArrayLike<number> | null,
   surfShapes?: ReadonlyMap<number, SurfShape>,
+  /** `surf` viene de caras exactas (núcleo B-rep): las caras de la topología son exactamente esas. */
+  strictSurf = false,
 ): Topology {
   let lo: Vec3 = [Infinity, Infinity, Infinity]
   let hi: Vec3 = [-Infinity, -Infinity, -Infinity]
@@ -484,7 +494,7 @@ export function buildTopology(
     adj[h.t].push(g.t)
     adj[g.t].push(h.t)
   }
-  const { group, groupN } = planarGroups(tris, triN, area, adj, verts, Math.max(diag * 1e-4, 1e-9), triSurf)
+  const { group, groupN } = planarGroups(tris, triN, area, adj, verts, Math.max(diag * 1e-4, 1e-9), triSurf, strictSurf && !!surf)
 
   const groupSurf: number[] = []
   tris.forEach((_, t) => {
@@ -954,7 +964,7 @@ function pointTriangleDistance(p: Vec3, a: Vec3, b: Vec3, c: Vec3): number {
 
 type Mesher = (
   p: SolidProps,
-) => ArrayLike<number> | { positions: ArrayLike<number>; surf?: ArrayLike<number> | null; shapes?: ReadonlyMap<number, SurfShape> }
+) => ArrayLike<number> | { positions: ArrayLike<number>; surf?: ArrayLike<number> | null; shapes?: ReadonlyMap<number, SurfShape>; exact?: boolean }
 let mesher: Mesher | null = null
 /** Por contenido; holgado para modelos con cientos de sólidos (ver `LruCache`). */
 const cache = new LruCache<string, Topology>(4000)
@@ -965,6 +975,16 @@ export function registerSolidMesher(fn: Mesher): void {
   cache.clear()
 }
 
+/** Olvida la topología de un sólido (por su clave `JSON.stringify(props)`): su malla cambió (llegó la del núcleo exacto). */
+export function forgetSolidTopology(key: string): void {
+  cache.delete(key)
+}
+
+/** Olvida todas las topologías (cambió el núcleo de sólidos). */
+export function forgetAllSolidTopologies(): void {
+  cache.clear()
+}
+
 /** Topología del sólido (cacheada por contenido); `null` si no hay mallador registrado. */
 export function solidTopology(p: SolidProps): Topology | null {
   if (!mesher) return null
@@ -972,7 +992,7 @@ export function solidTopology(p: SolidProps): Topology | null {
   const hit = cache.get(key)
   if (hit) return hit
   const m = mesher(p)
-  const topo = 'positions' in m ? buildTopology(m.positions, m.surf, m.shapes) : buildTopology(m)
+  const topo = 'positions' in m ? buildTopology(m.positions, m.surf, m.shapes, !!m.exact) : buildTopology(m)
   cache.set(key, topo)
   return topo
 }

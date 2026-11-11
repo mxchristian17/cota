@@ -4,6 +4,21 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+### Added
+- **Exact solid kernel** (`SOLIDKERNEL`, on by default): 3D solids are built with an exact B-rep kernel that runs in
+  its own thread and is downloaded once (about 5 MB compressed) the first time a drawing needs it. Fillets and
+  chamfers between curved and flat faces come out exact: on a sphere cut by a box they no longer stick out of the
+  sphere or leave blocks at mixed corners, with any subset of its edges; the circle where a plane cuts a sphere (the
+  ring of a spherical plain bearing) is one edge, so one click rounds all of it. Profiles with arcs extrude into exact
+  curved faces, revolutions and smooth sweeps too, and SHELL makes walls of exact thickness. While the kernel works,
+  and whenever it cannot build a solid, the mesh is shown as before; a fillet radius or chamfer distance that does not
+  fit is reported in the command line. `SOLIDKERNEL MESH` goes back to meshes only. The kernel is a separate,
+  replaceable module under the LGPL 2.1, served unmodified with its license texts and source links (see
+  `THIRD_PARTY_NOTICES.md`); `services/web/tools/occt-source.sh` builds the source archive attached to each release.
+
+### Fixed
+- Tangent edges (where a fillet meets a face) are no longer cut into pieces where the two faces meet almost flat.
+
 ## [2.38.0] — 2026-11-11
 
 ### Added

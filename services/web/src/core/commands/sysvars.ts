@@ -66,6 +66,11 @@ export interface Sysvars {
   RENDERMINPX: number
   /** SMOOTHANGLE: las caras de un sólido que se cruzan a menos de este ángulo (grados) se sombrean lisas; 0 = facetado. */
   SMOOTHANGLE: number
+  /**
+   * SOLIDKERNEL: con qué se evalúan los sólidos. `OCCT` = núcleo B-rep exacto (OpenCascade en un Worker; mientras
+   * llega su resultado, y si no puede, se muestra la malla); `MESH` = sólo la malla (booleanas sobre triángulos).
+   */
+  SOLIDKERNEL: 'OCCT' | 'MESH'
   /** ZOOMWHEEL: 0 = rueda hacia adelante acerca (CAD clásico), 1 = al revés. */
   ZOOMWHEEL: 0 | 1
   /** UCSVIEW: 1 = las vistas guardadas guardan también la UCS. */
@@ -115,6 +120,7 @@ const DEFAULTS: Sysvars = {
   ZOOMFACTOR: 60,
   RENDERMINPX: 3,
   SMOOTHANGLE: 12,
+  SOLIDKERNEL: 'OCCT',
   ZOOMWHEEL: 0,
   UCSVIEW: 1,
   PDMODE: 0,
@@ -136,7 +142,7 @@ export function resetSysvars(): void {
  */
 export const PERSISTED_SYSVARS = [
   'FILLETRAD', 'CHAMFERA', 'CHAMFERB', 'CHAMFERC', 'CHAMFERD', 'CHAMMODE', 'TRIMMODE',
-  'UCSICON', 'ZOOMFACTOR', 'ZOOMWHEEL', 'RENDERMINPX', 'SMOOTHANGLE', 'UCSORTHO', 'UCSFOLLOW', 'UCSDETECT', 'UCSVIEW',
+  'UCSICON', 'ZOOMFACTOR', 'ZOOMWHEEL', 'RENDERMINPX', 'SMOOTHANGLE', 'SOLIDKERNEL', 'UCSORTHO', 'UCSFOLLOW', 'UCSDETECT', 'UCSVIEW',
   'ATTDIA', 'ATTREQ', 'PEDITACCEPT', 'OFFSETGAPTYPE', 'EDGEMODE', 'PROJMODE', 'PDMODE', 'PDSIZE', 'POLARANG', 'PICKSTYLE',
   'ISAVEBAK', 'SAVETIME',
 ] as const
@@ -171,6 +177,7 @@ export function applySysvars(data: Record<string, unknown>): void {
   if (typeof zf === 'number' && zf >= 3 && zf <= 100) sysvars.ZOOMFACTOR = zf
   if (nonNegative(data.RENDERMINPX)) sysvars.RENDERMINPX = data.RENDERMINPX
   if (nonNegative(data.SMOOTHANGLE) && data.SMOOTHANGLE <= 90) sysvars.SMOOTHANGLE = data.SMOOTHANGLE
+  if (data.SOLIDKERNEL === 'OCCT' || data.SOLIDKERNEL === 'MESH') sysvars.SOLIDKERNEL = data.SOLIDKERNEL
   if (data.PROJMODE === 'None' || data.PROJMODE === 'Ucs' || data.PROJMODE === 'View') sysvars.PROJMODE = data.PROJMODE
   const pd = data.PDMODE
   if (typeof pd === 'number' && Number.isInteger(pd) && (pd & 31) <= 4 && (pd & ~(31 | 32 | 64)) === 0) sysvars.PDMODE = pd

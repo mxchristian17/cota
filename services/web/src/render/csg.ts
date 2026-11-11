@@ -4,7 +4,9 @@ import type { Vec3 } from '../core/math'
 import type { EdgeBlendProps, MeshProps, RevolveProps, SolidBasis, SolidProps } from '../core/document/types'
 import { revolveMesh } from '../core/editing/revolve'
 import { sweepStartRef } from '../core/editing/solid'
-import { registerSolidMesher, solidTopology, type SurfShape } from '../core/editing/topology'
+import { positiveLeaf } from '../core/editing/solidLeaf'
+import { buildTopology, forgetAllSolidTopologies, forgetSolidTopology, registerSolidMesher, solidTopology, type SurfShape, type Topology } from '../core/editing/topology'
+import { kernelAvailable, kernelResult, onKernelResults, requestKernel, type KernelResult } from './occtKernel'
 import { blendTools } from '../core/editing/edgeBlend'
 import { dropStrayTriangles, type BoolOp } from './csgClean'
 import { closeTJunctions } from './tjunctions'
@@ -44,7 +46,10 @@ function tagSurfaces(g: THREE.BufferGeometry, shape?: SurfShape): THREE.BufferGe
   g.setAttribute('surf', new THREE.Float32BufferAttribute(arr, 1))
   return g
 }
+/** Geometría que se muestra de cada sólido (la del núcleo exacto si ya llegó; si no, la malla). */
 const cache = new LruCache<string, THREE.BufferGeometry>(2000)
+/** Geometría de la malla (three-bvh-csg) de cada árbol: la del núcleo MESH y el respaldo del exacto. */
+const meshCache = new LruCache<string, THREE.BufferGeometry>(2000)
 
 /** three-bvh-csg exige que TODOS los operandos tengan el MISMO set de atributos (position/normal/uv).
  *  Las primitivas de Three traen los tres; las geometrías custom (LOFT) no traen `uv`. Normalizamos
@@ -443,34 +448,6 @@ function orientAlongAxis(geom: THREE.BufferGeometry, base: Vec3, height: number,
   return geom
 }
 
-/**
- * Medidas negativas (altura de CYLINDER/CONE/EXTRUDE, lados de BOX): en el CAD clásico sólo invierten el sentido.
- * Three las convierte en geometría dada vuelta (caras hacia adentro) y la CSG con ella da basura: se
- * normalizan a medidas positivas con el eje o el ancla invertidos.
- */
-function positiveLeaf(p: SolidProps): SolidProps {
-  switch (p.op) {
-    case 'CYLINDER':
-    case 'CONE':
-    case 'EXTRUDE': {
-      if (!(p.height < 0)) return p
-      const a = p.axis ?? [0, 0, 1]
-      return { ...p, height: -p.height, axis: [-a[0], -a[1], -a[2]] }
-    }
-    case 'BOX': {
-      if (p.width >= 0 && p.depth >= 0 && p.height >= 0) return p
-      const x = p.basis?.x ?? [1, 0, 0]
-      const y = p.basis?.y ?? [0, 1, 0]
-      const z: Vec3 = [x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0]]
-      const o: Vec3 = [...p.origin]
-      for (const [len, d] of [[p.width, x], [p.depth, y], [p.height, z]] as const) if (len < 0) for (let i = 0; i < 3; i++) o[i] += len * d[i]
-      return { ...p, origin: o, width: Math.abs(p.width), depth: Math.abs(p.depth), height: Math.abs(p.height) }
-    }
-    default:
-      return p
-  }
-}
-
 function leafGeometry(raw: SolidProps): THREE.BufferGeometry | null {
   const props = positiveLeaf(raw)
   switch (props.op) {
@@ -527,8 +504,9 @@ function leafGeometry(raw: SolidProps): THREE.BufferGeometry | null {
  * restan los cortadores (aristas convexas) y luego se suman los rellenos (cóncavas).
  */
 function blendGeometry(props: EdgeBlendProps): THREE.BufferGeometry {
-  const child = solidGeometry(props.solid)
-  const topo = solidTopology(props.solid)
+  // La malla de respaldo es autónoma: hijo y topología salen de la malla, no del núcleo exacto.
+  const child = meshSolidGeometry(props.solid)
+  const topo = meshTopology(props.solid)
   if (!topo) return child.clone()
   const { tools } = blendTools(topo, props)
   let acc = csgBrush(child.clone())
@@ -629,9 +607,9 @@ function hasFinitePositions(g: THREE.BufferGeometry): boolean {
   return true
 }
 
-export function solidGeometry(props: SolidProps): THREE.BufferGeometry {
-  const key = JSON.stringify(props)
-  const hit = cache.get(key)
+/** Malla del árbol (three-bvh-csg), con caché por contenido. */
+function meshSolidGeometry(props: SolidProps, key = JSON.stringify(props)): THREE.BufferGeometry {
+  const hit = meshCache.get(key)
   if (hit) return withSmoothing(hit)
   let geom: THREE.BufferGeometry
   try {
@@ -649,8 +627,128 @@ export function solidGeometry(props: SolidProps): THREE.BufferGeometry {
     console.warn('Cota: a solid could not be evaluated; its geometry is skipped.', err)
     geom = new THREE.BufferGeometry()
   }
+  meshCache.set(key, geom)
+  return withSmoothing(geom)
+}
+
+/**
+ * Geometría de un sólido para dibujarlo, medirlo, exportarlo o sacarle la topología. Con el núcleo exacto
+ * (`SOLIDKERNEL` = OCCT) devuelve su resultado si ya llegó; si no, lo pide al Worker y devuelve la malla de siempre,
+ * que se reemplaza cuando llega (`onSolidsChanged`). Si el núcleo no puede con el árbol, queda la malla.
+ * La geometría devuelta es compartida: NO debe liberarse mientras esté en caché.
+ */
+export function solidGeometry(props: SolidProps): THREE.BufferGeometry {
+  syncKernel()
+  const key = JSON.stringify(props)
+  const hit = cache.get(key)
+  if (hit) return withSmoothing(hit)
+  const geom = exactGeometry(props, key) ?? meshSolidGeometry(props, key)
   cache.set(key, geom)
   return withSmoothing(geom)
+}
+
+/** Hojas que la malla ya resuelve igual que el núcleo exacto (no vale la pena mandarlas al Worker). */
+function wantsKernel(p: SolidProps): boolean {
+  switch (p.op) {
+    case 'BOX':
+    case 'CYLINDER':
+    case 'CONE':
+    case 'SPHERE':
+    case 'TORUS':
+    case 'PRISM':
+    case 'LOFT':
+      return false
+    case 'EXTRUDE':
+      return !!p.arcs?.length // los arcos del perfil salen exactos
+    case 'SWEEP':
+      return !!p.smooth
+    default:
+      return true
+  }
+}
+
+function exactGeometry(props: SolidProps, key: string): THREE.BufferGeometry | null {
+  if (sysvars.SOLIDKERNEL !== 'OCCT' || !kernelAvailable() || !wantsKernel(props)) return null
+  const r = kernelResult(key)
+  if (!r) {
+    requestKernel(key, props)
+    return null
+  }
+  return r.ok ? kernelGeometry(r) : null
+}
+
+/**
+ * Malla del núcleo exacto como la de la CSG: triángulos sueltos (sin índice) con el atributo `surf` por cara; las
+ * caras de una misma superficie comparten id (la topología no marca arista entre ellas) y las esferas registran su
+ * forma exacta. Las normales las pone el sombreado según SMOOTHANGLE, como en la malla.
+ */
+function kernelGeometry(r: Extract<KernelResult, { ok: true }>): THREE.BufferGeometry {
+  const { positions: P, indices: I, triGroup, spheres } = r.mesh
+  const nt = Math.floor(I.length / 3)
+  const pos = new Float32Array(nt * 9)
+  const surf = new Float32Array(nt * 3)
+  const base = nextSurf
+  let groups = 0
+  for (let t = 0; t < nt; t++) {
+    for (let c = 0; c < 3; c++) {
+      const v = I[t * 3 + c] * 3
+      pos[t * 9 + c * 3] = P[v]
+      pos[t * 9 + c * 3 + 1] = P[v + 1]
+      pos[t * 9 + c * 3 + 2] = P[v + 2]
+      surf[t * 3 + c] = base + triGroup[t]
+    }
+    groups = Math.max(groups, triGroup[t] + 1)
+  }
+  nextSurf = base + groups
+  for (const s of spheres) surfShapes.set(base + s.group, { kind: 'sphere', c: s.c, r: s.r })
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+  g.setAttribute('surf', new THREE.BufferAttribute(surf, 1))
+  g.userData.exact = true
+  return g
+}
+
+const meshTopoCache = new LruCache<string, Topology>(500)
+/** Topología de la malla del árbol (para los empalmes de la malla de respaldo). */
+function meshTopology(props: SolidProps): Topology {
+  const key = JSON.stringify(props)
+  const hit = meshTopoCache.get(key)
+  if (hit) return hit
+  const g = meshSolidGeometry(props, key)
+  const topo = buildTopology(triangleSoup(g), triangleSurfaces(g), surfShapes)
+  meshTopoCache.set(key, topo)
+  return topo
+}
+
+type SolidsListener = () => void
+const solidsListeners = new Set<SolidsListener>()
+/** Avisa cuando cambia la geometría de sólidos ya dibujados (llegó el resultado del núcleo exacto, cambió el núcleo). */
+export function onSolidsChanged(fn: SolidsListener): () => void {
+  solidsListeners.add(fn)
+  return () => solidsListeners.delete(fn)
+}
+
+onKernelResults((keys) => {
+  let changed = false
+  for (const key of keys) {
+    const r = kernelResult(key)
+    if (!r?.ok) continue // falló: sigue la malla que ya se muestra
+    cache.delete(key)
+    edgeCache.delete(key)
+    forgetSolidTopology(key)
+    changed = true
+  }
+  if (changed) for (const fn of solidsListeners) fn()
+})
+
+let lastKernel = sysvars.SOLIDKERNEL
+/** Si cambió `SOLIDKERNEL`, se rehacen la geometría, las aristas y la topología de todos los sólidos. */
+function syncKernel(): void {
+  if (sysvars.SOLIDKERNEL === lastKernel) return
+  lastKernel = sysvars.SOLIDKERNEL
+  cache.clear()
+  edgeCache.clear()
+  forgetAllSolidTopologies()
 }
 
 /** Sombreado liso según SMOOTHANGLE; si el ángulo cambió desde la última vez, se recalcula en el lugar. */
@@ -686,11 +784,12 @@ const edgeCache = new LruCache<string, Float32Array>(4000)
  * triangulación: ahí se usan las aristas de la topología, que las empareja.
  */
 export function solidEdgePositions(props: SolidProps): Float32Array {
+  syncKernel()
   const key = JSON.stringify(props)
   const hit = edgeCache.get(key)
   if (hit) return hit
   let out: Float32Array
-  const topo = LEAF_OPS.has(props.op) ? null : solidTopology(props)
+  const topo = LEAF_OPS.has(props.op) && !solidGeometry(props).userData.exact ? null : solidTopology(props)
   if (topo) {
     const pos: number[] = []
     for (const e of topo.edges) {
@@ -764,5 +863,10 @@ function triangleSurfaces(g: THREE.BufferGeometry): Float32Array | null {
 
 registerSolidMesher((p) => {
   const g = solidGeometry(p)
-  return { positions: triangleSoup(g), surf: triangleSurfaces(g), shapes: surfShapes }
+  return { positions: triangleSoup(g), surf: triangleSurfaces(g), shapes: surfShapes, exact: !!g.userData.exact }
 })
+
+// Hook de depuración/E2E, sólo en desarrollo: geometría de sólidos y estado del núcleo exacto.
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  ;(window as unknown as { __cotaSolids?: unknown }).__cotaSolids = { solidGeometry, solidEdgePositions, kernelResult, kernelAvailable }
+}

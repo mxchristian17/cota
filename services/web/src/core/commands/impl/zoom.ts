@@ -392,6 +392,18 @@ export const zoomVarCommands: Command[] = [
     },
   },
   {
+    name: 'SOLIDKERNEL',
+    aliases: [],
+    description: 'Kernel for 3D solids: OCCT = exact (B-rep, OpenCascade), MESH = triangle meshes',
+    async run(ctx) {
+      const k = await askKeyword(ctx, `Enter new value for SOLIDKERNEL [OCCT/MESH] <${sysvars.SOLIDKERNEL}>: `, ['OCCT', 'MESH'], sysvars.SOLIDKERNEL)
+      if (k && k !== sysvars.SOLIDKERNEL) {
+        sysvars.SOLIDKERNEL = k === 'MESH' ? 'MESH' : 'OCCT'
+        ctx.app.redraw() // la geometría de los sólidos se rehace con el núcleo nuevo
+      }
+    },
+  },
+  {
     name: 'ZOOMWHEEL',
     aliases: [],
     description: 'Mouse wheel direction: 0 = forward zooms in, 1 = forward zooms out',

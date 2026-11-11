@@ -36,6 +36,7 @@ const DISPLAY_FIELDS: Field[] = [
   { kind: 'check', key: 'ZOOMWHEEL', label: 'Reverse the mouse wheel zoom' },
   { kind: 'number', key: 'RENDERMINPX', label: 'Hide text smaller than (px)', min: 0, max: 20 },
   { kind: 'number', key: 'SMOOTHANGLE', label: 'Smooth shading of solids below (degrees)', min: 0, max: 90 },
+  { kind: 'select', key: 'SOLIDKERNEL', label: 'Solids kernel', options: [['OCCT', 'Exact (B-rep)'], ['MESH', 'Mesh']] },
 ]
 
 const DRAFTING_FIELDS: Field[] = [

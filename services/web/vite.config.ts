@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { docsSite } from './tools/docsSite'
 import { serviceWorker } from './tools/serviceWorker'
+import { occtGlueStub, occtModule, occtVersion } from './tools/occtModule'
 
 // Destino del backend para el proxy de dev. En Docker: http://api:8000.
 const apiTarget = process.env.API_PROXY_TARGET || 'http://localhost:8000'
@@ -12,11 +13,14 @@ export default defineConfig({
   // Ruta base del sitio: `/` en local; la demo en GitHub Pages se publica bajo `/<repositorio>/`.
   base: process.env.COTA_BASE || '/',
   // La app es instalable (PWA): el service worker se genera en el build. Las docs (`/docs/`) son páginas estáticas aparte.
-  plugins: [react(), docsSite(), serviceWorker()],
+  plugins: [react(), docsSite(), occtModule(process.env.COTA_BASE || '/'), occtGlueStub(), serviceWorker()],
+  // Núcleo de sólidos exacto (OpenCascade): su versión arma la ruta del módulo `occt/<versión>/`. Vite no lo pre-empaqueta.
+  define: { __OCCT_VERSION__: JSON.stringify(occtVersion()) },
+  optimizeDeps: { exclude: ['occt-wasm'] },
   // La librería de DWG (acad-ts) busca sus clases por nombre (`constructor.name`): al minificar sin conservarlos, abrir
   // o guardar algunos DWG fallaba ("Rt is not a DXF subclass"). También en el hilo aparte que lee los DWG.
   build: { rolldownOptions: { output: { keepNames: true } } },
-  worker: { rolldownOptions: { output: { keepNames: true } } },
+  worker: { plugins: () => [occtGlueStub()], rolldownOptions: { output: { keepNames: true } } },
   server: {
     port: 5173,
     // Sólo esta máquina; el contenedor de desarrollo pasa `--host 0.0.0.0`.
