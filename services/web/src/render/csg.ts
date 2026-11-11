@@ -9,6 +9,8 @@ import { blendTools } from '../core/editing/edgeBlend'
 import { dropStrayTriangles, type BoolOp } from './csgClean'
 import { closeTJunctions } from './tjunctions'
 import { LruCache } from '../core/lru'
+import { sysvars } from '../core/commands/sysvars'
+import { smoothShading } from './smoothShading'
 
 /** Segmentos de una primitiva curva, acotados (un `.cota` o la IA pueden traer valores absurdos). */
 export const MAX_SEGMENTS = 512
@@ -630,7 +632,7 @@ function hasFinitePositions(g: THREE.BufferGeometry): boolean {
 export function solidGeometry(props: SolidProps): THREE.BufferGeometry {
   const key = JSON.stringify(props)
   const hit = cache.get(key)
-  if (hit) return hit
+  if (hit) return withSmoothing(hit)
   let geom: THREE.BufferGeometry
   try {
     geom = evalTree(props)
@@ -648,6 +650,16 @@ export function solidGeometry(props: SolidProps): THREE.BufferGeometry {
     geom = new THREE.BufferGeometry()
   }
   cache.set(key, geom)
+  return withSmoothing(geom)
+}
+
+/** Sombreado liso según SMOOTHANGLE; si el ángulo cambió desde la última vez, se recalcula en el lugar. */
+function withSmoothing(geom: THREE.BufferGeometry): THREE.BufferGeometry {
+  const deg = sysvars.SMOOTHANGLE
+  if (geom.userData.smoothAngle !== deg && !geom.getIndex()) {
+    smoothShading(geom, deg)
+    geom.userData.smoothAngle = deg
+  }
   return geom
 }
 

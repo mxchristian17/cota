@@ -377,6 +377,21 @@ export const zoomVarCommands: Command[] = [
     },
   },
   {
+    name: 'SMOOTHANGLE',
+    aliases: [],
+    description: 'Shade solid faces that meet at less than this angle as one smooth surface (0 = faceted)',
+    async run(ctx) {
+      const r = await askNumber(ctx, `Enter new value for SMOOTHANGLE <${sysvars.SMOOTHANGLE}>: `, {
+        def: sysvars.SMOOTHANGLE,
+        check: (v) => (v >= 0 && v <= 90 ? null : 'Requires an angle between 0 and 90.'),
+      })
+      if (r?.kind === 'number') {
+        sysvars.SMOOTHANGLE = r.value
+        ctx.app.redraw()
+      }
+    },
+  },
+  {
     name: 'ZOOMWHEEL',
     aliases: [],
     description: 'Mouse wheel direction: 0 = forward zooms in, 1 = forward zooms out',

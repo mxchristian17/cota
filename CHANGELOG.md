@@ -4,6 +4,14 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.36.0] — 2026-11-11
+
+### Added
+- **Auto-smooth shading of solids**: faces that meet at less than `SMOOTHANGLE` degrees (10 by default, 0 to 90, also
+  in OPTIONS › Display) are shaded as one smooth surface. Fillets and the walls of booleans no longer show bands, and
+  real edges stay crisp. Facets of one curved surface (a cylinder wall, a sphere, a fillet) are smoothed up to 30°,
+  so a 32-sided cylinder still looks round; `SMOOTHANGLE 0` shows the plain facets. The setting is remembered.
+
 ## [2.35.5] — 2026-11-11
 
 ### Documentation

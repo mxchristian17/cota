@@ -83,7 +83,7 @@ discussion.
 
 | Status | Item |
 |---|---|
-| planned | **Auto-smooth shading**: facets that meet at less than a set angle (10° by default, configurable) are shaded as one smooth surface, so cylinders, fillets and spheres look round instead of faceted, while real edges stay crisp. |
+| done | **Auto-smooth shading**: facets that meet at less than a set angle (`SMOOTHANGLE`, 10° by default, also in OPTIONS) are shaded as one smooth surface, so cylinders, fillets and spheres look round instead of faceted, while real edges stay crisp (2.36.0). |
 | idea | **Ray-traced rendering** with physically based materials, environment lighting and soft shadows. |
 | idea | **Real physics**: rigid bodies, gravity, contacts and friction, motors on joints. |
 | idea | Mass properties for assemblies (mass, center of gravity, inertia) with materials. |

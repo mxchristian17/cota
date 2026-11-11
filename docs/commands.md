@@ -282,6 +282,7 @@ Type the name to see or change the value. Each one is explained in [System varia
 | [`LWDISPLAY`](reference/variables.md#lwdisplay) | Show lineweights in the model (ON/OFF); layouts always show them |
 | [`ZOOMFACTOR`](reference/variables.md#zoomfactor) | Mouse wheel zoom step (3–100) |
 | [`RENDERMINPX`](reference/variables.md#renderminpx) | Draw solids smaller than this many pixels as a point (0 = off) |
+| [`SMOOTHANGLE`](reference/variables.md#smoothangle) | Shade solid faces that meet at less than this angle as one smooth surface (0 = faceted) |
 | [`ZOOMWHEEL`](reference/variables.md#zoomwheel) | Mouse wheel direction: 0 = forward zooms in, 1 = forward zooms out |
 | [`ISAVEBAK`](reference/variables.md#isavebak) | Keep the previous version as a .bak file when saving to the local folder (0/1) |
 | [`SAVETIME`](reference/variables.md#savetime) | Minutes between automatic recovery copies (.sv$) in the local folder (0 = off) |

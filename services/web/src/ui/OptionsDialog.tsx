@@ -35,6 +35,7 @@ const DISPLAY_FIELDS: Field[] = [
   { kind: 'number', key: 'ZOOMFACTOR', label: 'Zoom step of the mouse wheel', min: 3, max: 100 },
   { kind: 'check', key: 'ZOOMWHEEL', label: 'Reverse the mouse wheel zoom' },
   { kind: 'number', key: 'RENDERMINPX', label: 'Hide text smaller than (px)', min: 0, max: 20 },
+  { kind: 'number', key: 'SMOOTHANGLE', label: 'Smooth shading of solids below (degrees)', min: 0, max: 90 },
 ]
 
 const DRAFTING_FIELDS: Field[] = [
