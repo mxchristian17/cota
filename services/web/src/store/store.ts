@@ -1453,7 +1453,7 @@ export const useStore = create<AppState>((set, get) => {
       if (discard && capturedBefore) {
         // Ctrl+Z a mitad del comando: vuelve el dibujo a como estaba al empezarlo (el comando se rehace sin el último paso).
         if (doc.revision !== capturedRev) {
-          doc.load(capturedBefore)
+          doc.load(capturedBefore, true)
           afterRestore()
         }
         capturedBefore = null
@@ -1822,6 +1822,12 @@ export const useStore = create<AppState>((set, get) => {
     },
     entityDoubleClick: (id) => {
       const e = doc.getEntity(id)
+      // Un bloque sin atributos se abre en el editor de bloques (BEDIT), como el CAD clásico.
+      if (e?.type === 'INSERT' && !e.props.attributes?.length && !e.props.name.startsWith('*') && !doc.editingBlock && !engine.busy) {
+        get().selectEntity(id)
+        get().runMacro(['BEDIT'])
+        return
+      }
       // Cualquier objeto abre sus propiedades; un bloque con atributos, su editor de atributos.
       if (e?.type !== 'INSERT' || !e.props.attributes?.length) {
         get().selectEntity(id)
@@ -1882,6 +1888,10 @@ export const useStore = create<AppState>((set, get) => {
     },
     setActiveTab: (id) => {
       if (id === doc.activeTab && !doc.msViewportId) return
+      if (doc.editingBlock) {
+        print(`Close the Block Editor first (BCLOSE): block "${doc.editingBlock}" is open.`)
+        return
+      }
       if (engine.busy || engine.hasPending) engine.cancel()
       get().viewports.forEach((vp) => vp.clearTracking())
       activateTab(doc, id, get().currentLayerId, sheetInit())
@@ -3092,7 +3102,7 @@ export const useStore = create<AppState>((set, get) => {
         const redoSnap = doc.toJSON()
         if (label) undoLabels.set(redoSnap, label)
         redoStack.push(redoSnap)
-        doc.load(e)
+        doc.load(e, true)
         afterRestore()
         print(stepMessage('Undo', label))
         return
@@ -3117,7 +3127,7 @@ export const useStore = create<AppState>((set, get) => {
         const undoSnap = doc.toJSON()
         if (label) undoLabels.set(undoSnap, label)
         undoStack.push(undoSnap)
-        doc.load(e)
+        doc.load(e, true)
         afterRestore()
         print(stepMessage('Redo', label))
         return

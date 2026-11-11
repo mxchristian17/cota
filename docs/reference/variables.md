@@ -30,7 +30,7 @@ LTSCALE 10
 | `ZOOMFACTOR` | 3 to 100, default 60 | How much each step of the mouse wheel zooms. |
 | `ZOOMWHEEL` | 0 forward zooms in, 1 forward zooms out | The direction of the mouse wheel. |
 | `RENDERMINPX` | Pixels, default 3 (0 = off) | Solids smaller than this on screen are drawn as a point, to keep huge models fluid. |
-| `SMOOTHANGLE` | 0 to 90 degrees, default 10 (0 = faceted) | Faces of a solid that meet at less than this angle are shaded as one smooth surface. Facets of the same curved surface (a cylinder wall, a sphere, a fillet) are smoothed up to 30°, so a 32-sided cylinder still looks round. Also in OPTIONS › Display. |
+| `SMOOTHANGLE` | 0 to 90 degrees, default 12 (0 = faceted) | Faces of a solid that meet at less than this angle are shaded as one smooth surface; 12° covers a 32-sided cylinder (11.25° per side). Facets of the same curved surface (a cylinder wall, a sphere, a fillet) are smoothed up to 30°. Also in OPTIONS › Display. |
 
 ## Saving
 

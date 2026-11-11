@@ -4,6 +4,18 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.37.0] — 2026-11-11
+
+### Added
+- **Block Editor**: double-click a block (or use `BEDIT`) to edit its definition. The view shows only the block, in
+  its own coordinates with the base point at 0,0,0, and every command works there. A bar at the top shows the block
+  name with **Save** and **Close**: `BSAVE` saves and keeps editing, `BCLOSE` asks to save or discard and returns to
+  the previous view. Saving updates every reference. A block cannot be inserted into itself, undo works inside the
+  editor, and blocks with attributes still open their attribute editor on double click.
+
+### Changed
+- `SMOOTHANGLE` defaults to 12°, enough to smooth a 32-sided cylinder (11.25° per side) on its own.
+
 ## [2.36.0] — 2026-11-11
 
 ### Added

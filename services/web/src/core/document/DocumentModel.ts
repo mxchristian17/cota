@@ -49,6 +49,8 @@ export class DocumentModel {
   private lastMs = new Map<string, string>()
   /** Viewport maximizado temporalmente (VPMAX); siempre es el de MSPACE. */
   private maxVp: string | null = null
+  /** Bloque abierto en el editor de bloques (BEDIT): su definición es el espacio de edición. No se persiste. */
+  private blockEd: string | null = null
   /** Firmas de los sombreados asociativos (contorno y lazos) desde la última actualización. */
   private hatchSigs = new Map<string, { src: string; self: string }>()
   private ltMemo = new Map<string, LinetypeContext>()
@@ -582,7 +584,8 @@ export class DocumentModel {
   /** Recalcula el contador de ids a partir de las entidades existentes (modelo y papeles). */
   private reseed(): void {
     let max = 0
-    for (const list of this.allLists()) {
+    // También los de las definiciones de bloque: en BEDIT se agregan objetos ahí y no deben repetir un id.
+    for (const list of [...this.allLists(), ...this.blocks.map((b) => b.entities)]) {
       for (const e of list) {
         const m = /^e(\d+)$/.exec(e.id)
         if (m) max = Math.max(max, Number(m[1]))
@@ -592,7 +595,8 @@ export class DocumentModel {
   }
 
   private allLists(): Entity[][] {
-    return [this.data.entities, ...this.layouts.map((l) => l.entities)]
+    const b = this.editingBlock ? this.getBlock(this.editingBlock) : undefined
+    return [this.data.entities, ...this.layouts.map((l) => l.entities), ...(b ? [b.entities] : [])]
   }
 
   static createDefault(name = 'drawing1'): DocumentModel {
@@ -646,8 +650,10 @@ export class DocumentModel {
     return this.data.layers
   }
 
-  /** Entidades del espacio de edición (papel del layout activo, o modelo). */
+  /** Entidades del espacio de edición (la definición abierta en BEDIT, el papel del layout activo, o el modelo). */
   get entities(): Entity[] {
+    const b = this.blockEd ? this.getBlock(this.blockEd) : undefined
+    if (b) return b.entities
     const l = this.activeLayout
     return l && !this.msVp ? l.entities : this.data.entities
   }
@@ -675,6 +681,21 @@ export class DocumentModel {
   findLayoutByName(name: string): LayoutDef | undefined {
     const n = name.trim().toLowerCase()
     return this.layouts.find((l) => l.name.toLowerCase() === n)
+  }
+
+  /** Bloque abierto en el editor de bloques, o null. */
+  get editingBlock(): string | null {
+    return this.blockEd && this.getBlock(this.blockEd) ? this.blockEd : null
+  }
+
+  /** Abre el editor de bloques sobre `name` (en la pestaña Model) o lo cierra (null). */
+  setBlockEditor(name: string | null): void {
+    if (name !== null) {
+      if (!this.getBlock(name)) throw new Error(`Block "${name}" not found.`)
+      if (this.data.activeLayout) this.setActiveTab(MODEL_TAB)
+    }
+    this.blockEd = name
+    this._rev++
   }
 
   /** Pestaña activa: `MODEL_TAB` o el id del layout. */
@@ -705,11 +726,12 @@ export class DocumentModel {
 
   /** ¿Los comandos operan sobre el papel? (layout activo y sin viewport en MSPACE). */
   get inPaperSpace(): boolean {
-    return !!this.activeLayout && !this.msVp
+    return !this.editingBlock && !!this.activeLayout && !this.msVp
   }
 
   /** Cambia de pestaña (`MODEL_TAB` o id de layout). Vuelve a PSPACE. */
   setActiveTab(id: string): void {
+    if (this.editingBlock) return // con el editor de bloques abierto no se cambia de pestaña (BCLOSE primero)
     const next = id === MODEL_TAB || !this.getLayout(id) ? undefined : id
     if (next === this.data.activeLayout && !this.msVp) return
     if (next) this.data.activeLayout = next
@@ -1031,8 +1053,10 @@ export class DocumentModel {
   /**
    * Reemplaza el contenido del documento in-place (OPEN/NEW/undo sin cambiar la instancia). El MSPACE
    * (y VPMAX) se conserva si la pestaña es la misma y el viewport sigue existiendo (undo dentro de un viewport).
+   * `keepBlockEditor` (deshacer/rehacer): el editor de bloques sigue abierto si el bloque todavía existe.
    */
-  load(data: DocumentData): void {
+  load(data: DocumentData, keepBlockEditor = false): void {
+    const ed = keepBlockEditor ? this.blockEd : null
     const tab = this.activeTab
     const ms = this.msVp
     const max = this.maxVp
@@ -1044,6 +1068,7 @@ export class DocumentModel {
     this.msVp = this.maxVp = null
     if (ms && this.activeTab === tab) this.setMsViewport(ms)
     if (max && max === this.msVp) this.maxVp = max
+    this.blockEd = ed && this.getBlock(ed) ? ed : null
     this._rev++
   }
 

@@ -26,7 +26,7 @@ discussion.
 | next | **Robust fillets and chamfers on any edge selection**: today a sphere with a box subtracted fails when only some edges are rounded (concave blends overflow the sphere, mixed corners). Evaluate an exact B-rep kernel (OpenCascade compiled to WebAssembly, loaded only for 3D solids) for booleans, fillets and chamfers instead of mesh-based tools. |
 | planned | Per-object lineweight (ByLayer by default) and a toggle to show lineweights in the model. |
 | planned | Isolate / hide objects and quick select from the context menu. |
-| planned | **Edit a block by double-clicking it**: the block definition opens for editing in place, as in the classic block editor, and the changes update every insert of that block. |
+| done | **Edit a block by double-clicking it**: the block definition opens in the Block Editor (`BEDIT`, `BSAVE`, `BCLOSE`), as in the classic block editor, and saving updates every insert of that block (2.37.0). |
 | planned | Drawing in a UCS seen edge-on (the cursor stays on the view plane through the base point). |
 | idea | Parametric sketches with geometric and dimensional constraints. |
 
@@ -83,7 +83,7 @@ discussion.
 
 | Status | Item |
 |---|---|
-| done | **Auto-smooth shading**: facets that meet at less than a set angle (`SMOOTHANGLE`, 10° by default, also in OPTIONS) are shaded as one smooth surface, so cylinders, fillets and spheres look round instead of faceted, while real edges stay crisp (2.36.0). |
+| done | **Auto-smooth shading**: facets that meet at less than a set angle (`SMOOTHANGLE`, 12° by default, also in OPTIONS) are shaded as one smooth surface, so cylinders, fillets and spheres look round instead of faceted, while real edges stay crisp (2.36.0). |
 | idea | **Ray-traced rendering** with physically based materials, environment lighting and soft shadows. |
 | idea | **Real physics**: rigid bodies, gravity, contacts and friction, motors on joints. |
 | idea | Mass properties for assemblies (mass, center of gravity, inertia) with materials. |

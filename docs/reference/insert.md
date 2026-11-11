@@ -30,6 +30,58 @@ INSERT SQUARE 50,50 2 45
 
 - Define blocks with [BLOCK](draw.md#block). Blocks from DWG and DXF files come with them.
 
+## BEDIT
+
+Opens a block definition in the **Block Editor**: the drawing shows only the block, in its own coordinates, with
+its base point at 0,0,0. Every command works there as usual (draw, edit, object snaps, 3D, dimensions). A bar at the
+top of the view shows the block name with **Save** and **Close**.
+
+**Aliases** `BE` · **Menu** Insert
+
+Double-clicking a block without attributes opens it here.
+
+**Steps**
+
+1. With a block selected (or after a double click) it opens that block. Otherwise:
+   `Block to edit [BOLT, NUT…] <BOLT>:`
+
+Cota prints `Block Editor: "NAME" (base point at 0,0,0). BSAVE saves it, BCLOSE closes the editor.`
+
+**Example**
+
+```text
+BEDIT SQUARE
+CIRCLE 5,5 2
+BCLOSE Save
+```
+
+**Notes**
+
+- While the editor is open the layout tabs stay on Model, and a block cannot be inserted into itself (directly or
+  through another block).
+- Undo works inside the editor. A block with attributes opens its attribute editor on double click; use `BEDIT` to
+  change its geometry.
+
+## BSAVE
+
+Saves the block open in the Block Editor without closing it: every reference to it shows the change, and it becomes
+the state that `BCLOSE` › `Discard` returns to.
+
+**Aliases** none · **Menu** Insert
+
+Cota prints `Block "NAME" saved; all its references are updated.`
+
+## BCLOSE
+
+Closes the Block Editor and returns to the model with the view it had before.
+
+**Aliases** none · **Menu** Insert
+
+**Steps**
+
+1. If there are unsaved changes: `Save changes to block "NAME"? [Save/Discard] <Save>:`. **Discard** puts the block
+   back as it was when it was opened or last saved.
+
 ## VIEWBASE
 
 Creates a base view of the 3D model on a layout, and then the views projected from it (front, top, side,

@@ -185,6 +185,8 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
   const ucsName = useStore((s) => s.ucsName)
   useStore((s) => s.version) // la lista de UCS guardadas cambia con el documento
   const namedUcs = useStore.getState().doc.namedUcs().map((u) => u.name)
+  const editingBlock = useStore.getState().doc.editingBlock
+  const runMacro = useStore((s) => s.runMacro)
   return (
     <div
       className={`viewport-pane${active ? ' active' : ''}`}
@@ -201,6 +203,15 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
           <div className="crosshair-h" style={{ top: cross.y }} />
           {!picking && <div className="crosshair-box" style={{ left: cross.x, top: cross.y }} />}
         </>
+      )}
+      {editingBlock && (
+        <div className="block-editor-bar" data-testid="block-editor-bar" onMouseDown={(e) => e.stopPropagation()} onMouseUp={(e) => e.stopPropagation()}>
+          <span>
+            Block Editor: <b>{editingBlock}</b>
+          </span>
+          <button onClick={() => runMacro(['BSAVE'])}>Save</button>
+          <button onClick={() => runMacro(['BCLOSE'])}>Close</button>
+        </div>
       )}
       {viewCubeOn && (
       <ViewNet

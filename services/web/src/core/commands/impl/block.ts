@@ -5,6 +5,7 @@ import { commonOf } from '../../document/common'
 import { translateEntity } from '../../editing/edit'
 import { defaultAttributes, expandEntities } from '../../editing/block'
 import { askAttributeValues } from './attribs'
+import { blockContains } from './bedit'
 import type { Entity, EntityInput, PolylineProps } from '../../document/types'
 import type { Vec3 } from '../../math'
 import type { Command } from '../types'
@@ -84,6 +85,11 @@ export const insertCommand: Command = {
     if (!name) return
     if (!ctx.doc.getBlock(name)) {
       ctx.print(`Block "${name}" not found.`)
+      return
+    }
+    const editing = ctx.doc.editingBlock
+    if (editing && blockContains(ctx.doc, name, editing)) {
+      ctx.print(`A block cannot contain itself: "${name}" is or contains "${editing}".`)
       return
     }
     const ip = await ctx.getPoint('Specify insertion point: ')
