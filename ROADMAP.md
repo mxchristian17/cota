@@ -104,4 +104,4 @@ discussion.
 |---|---|
 | next | Heavy models: faster rebuild after each change, orbit and selection with hundreds of filleted solids. |
 | planned | Drawing views: small glitches near rounded edges in some projections. |
-| planned | **Session log and `TRACEBACK`**: Cota keeps a log of everything done since the window was opened, with all its parameters: commands and every input, geometry created or edited, selections, view and visual style changes, settings. It lives until the window is closed. `TRACEBACK` exports the last *n* lines or the last *n* minutes to a file, detailed enough that an agent can replay that interval exactly and reproduce a bug found by you or by a user. |
+| done | **Session log and `TRACEBACK`**: Cota keeps a log of everything done since the window was opened, with all its parameters: commands and every input, geometry created or edited, selections, view and visual style changes, settings. It lives until the window is closed. `TRACEBACK` exports the last *n* lines or the last *n* minutes to a file, detailed enough that an agent can replay that interval exactly and reproduce a bug found by you or by a user. (2.38.0). |

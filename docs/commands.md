@@ -254,6 +254,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | --- | --- | --- |
 | [`HELP`](reference/help.md#help) | `?` | List available commands |
 | [`DOCS`](reference/help.md#docs) | `DOCUMENTATION` | Open the documentation (guides and command reference) in a new tab |
+| [`TRACEBACK`](reference/help.md#traceback) | — | Export the session log (last n minutes or lines) with the drawing, so an agent can replay it |
 | [`ABOUT`](reference/help.md#about) | — | Show the Cota version, author and license |
 
 ## Command-line versions

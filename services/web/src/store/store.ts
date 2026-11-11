@@ -8,6 +8,7 @@ import type { DimStyleDef, DimVarName, DimVars } from '../core/dimension/style'
 import type { Deferred } from '../core/geom/tangency'
 import { create } from 'zustand'
 import { DocumentModel, MODEL_TAB } from '../core/document/DocumentModel'
+import { setTraceSnapshot, traceLog } from '../core/session/traceLog'
 import { LayerService } from '../core/layers/LayerService'
 import { CommandEngine } from '../core/commands/CommandEngine'
 import { registerDefaultCommands } from '../core/commands/registry'
@@ -1412,6 +1413,10 @@ export const useStore = create<AppState>((set, get) => {
     },
   }
 
+  // TRACEBACK: lo que un comando le pide a la app no es una acción del usuario (al repetir, el comando lo vuelve a pedir).
+  for (const [k, v] of Object.entries(app)) {
+    if (typeof v === 'function') (app as unknown as Record<string, unknown>)[k] = (...a: unknown[]) => traceLog.nested(() => (v as (...x: unknown[]) => unknown)(...a))
+  }
   const engine = new CommandEngine({
     doc,
     currentLayerId: () => get().currentLayerId,
@@ -3494,6 +3499,50 @@ export const useStore = create<AppState>((set, get) => {
     },
     closeOpen: () => set({ openOpen: false }),
   }
+})
+
+// TRACEBACK: cada acción iniciada por el usuario (no las que unas acciones llaman a otras) queda en el registro de la
+// sesión con sus argumentos, para repetirla (`core/session/traceLog`). Se excluyen las de consulta, las muy frecuentes
+// (cursor, vistas: van aparte como `view`) y las que llevan credenciales.
+const TRACE_SKIP = new Set([
+  'setCursor', 'registerViewport', 'unregisterViewport', 'viewportViewChanged', 'setCameraState', 'isSelectMode',
+  'selectionArea', 'listTemplates', 'isDirty', 'plotPreview', 'computePreview', 'listCommands', 'writeRecovery',
+  'restoreSession', 'notify', 'login', 'logout', 'setAiConfig', 'markSaved', 'setActiveViewport',
+])
+const TRACE_CHECKPOINT = /^(open|load|new|import|reset|restore|delete)/i
+{
+  setTraceSnapshot(() => useStore.getState().doc.toJSON())
+  const patch: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(useStore.getState())) {
+    if (typeof v !== 'function' || TRACE_SKIP.has(k)) continue
+    const fn = v as (...a: unknown[]) => unknown
+    patch[k] = (...args: unknown[]) => {
+      if (traceLog.recording) {
+        traceLog.record(k, args)
+        if (TRACE_CHECKPOINT.test(k)) traceLog.markCheckpoint()
+      }
+      return traceLog.nested(() => fn(...args))
+    }
+  }
+  useStore.setState(patch as Partial<AppState>)
+}
+// Avisos y errores de consola (informativos, sin repetir el mismo mensaje dentro del segundo).
+{
+  let lastMsg = ''
+  let lastAt = 0
+  for (const level of ['warn', 'error'] as const) {
+    const orig = console[level].bind(console)
+    console[level] = (...a: unknown[]) => {
+      const msg = a.map((x) => (x instanceof Error ? `${x.name}: ${x.message}` : String(x))).join(' ').slice(0, 500)
+      if (msg !== lastMsg || Date.now() - lastAt > 1000) traceLog.record('error', [level, msg])
+      ;[lastMsg, lastAt] = [msg, Date.now()]
+      orig(...a)
+    }
+  }
+}
+// La selección resultante de cada cambio (informativa: ayuda a verificar la repetición).
+useStore.subscribe((s, prev) => {
+  if (s.selection !== prev.selection) traceLog.record('selection', [s.selection.slice(0, 500)])
 })
 
 // Preferencias del usuario guardadas en este navegador: se aplican antes del primer render, así las

@@ -14,6 +14,7 @@ import { ViewNet } from './ViewNet'
 import { LayoutView } from './LayoutView'
 import { paneKeyOf, paneState } from '../render/viewMemory'
 import { isolation, viewLayers } from '../core/editing/isolation'
+import { traceLog } from '../core/session/traceLog'
 
 
 function containerStyle(layout: number): CSSProperties {
@@ -68,6 +69,7 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
     const host = hostRef.current
     if (!host) return
     const isActive = () => useStore.getState().activeViewport === vp
+    let viewTimer: ReturnType<typeof setTimeout> | undefined
     const vp: Viewport = new Viewport(host, {
       onPointerMove: (w) => {
         if (isActive()) setCursor(w)
@@ -112,6 +114,11 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
       onCameraChange: (az, el, mode) => {
         setCam({ az, el, mode }) // el cubo de vistas de este pane sigue su propia cámara
         if (isActive()) setCameraState(az, el, mode)
+      },
+      // TRACEBACK: la vista queda en el registro al terminar de moverla (no en cada cuadro).
+      onViewChange: () => {
+        clearTimeout(viewTimer)
+        viewTimer = setTimeout(() => traceLog.record('view', [paneKey, vp.getCamera()]), 400)
       },
       onActivate: () => setActiveViewport(vp),
       // Vista mobile: un toque elige la pieza (o la suelta, si ya estaba); sobre el vacío, vacía la selección. La órbita
@@ -170,6 +177,7 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
     } else if (view) vp.setView(view)
     return () => {
       paneState.set(paneKey, { cam: vp.getCamera(), ucs: vp.getUcs() })
+      clearTimeout(viewTimer)
       unregisterViewport(vp)
       vp.dispose()
     }

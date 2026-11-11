@@ -4,6 +4,16 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.38.0] — 2026-11-11
+
+### Added
+- **Session log and `TRACEBACK`** (Help menu): Cota logs every action in the tab: commands and each answer, clicks
+  with their point and the object they hit, selections, grips, views, layers, tabs, files, and warnings.
+  `TRACEBACK` exports the last n minutes or lines to a `.txt` file, also copied to the clipboard. The file holds the
+  drawing as it was when those events started, so a bug can be replayed exactly; the log is lost when the tab
+  closes. `services/web/tools/replay-traceback.mjs` replays a file on the development server, for example for an AI
+  agent fixing the bug. Passwords and API keys are never logged.
+
 ## [2.37.0] — 2026-11-11
 
 ### Added

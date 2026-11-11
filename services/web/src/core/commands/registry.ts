@@ -47,6 +47,7 @@ import { divideCommand, measureCommand, pointCommand, pointVarCommands } from '.
 import { arrayCommand } from './impl/array'
 import { blockCommand, explodeCommand, insertCommand } from './impl/block'
 import { blockEditorCommands } from './impl/bedit'
+import { tracebackCommand } from './impl/traceback'
 import { flatshotCommand } from './impl/project'
 import { drawingViewCommands } from './impl/viewbase'
 import { solprofCommand } from './impl/solprof'
@@ -180,6 +181,7 @@ export function registerDefaultCommands(engine: CommandEngine): void {
   engine.register(blockCommand)
   engine.register(insertCommand)
   for (const c of blockEditorCommands) engine.register(c)
+  engine.register(tracebackCommand)
   engine.register(explodeCommand)
   engine.register(flatshotCommand)
   for (const c of drawingViewCommands) engine.register(c)
