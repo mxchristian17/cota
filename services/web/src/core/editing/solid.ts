@@ -1,6 +1,7 @@
 import type { Vec3 } from '../math'
 import type { ArcProps, BoxProps, EdgeBlendProps, ExtrudeProps, RevolveProps, SolidLeaf, SolidProps, TorusProps } from '../document/types'
 import { arcBasis } from '../geom/arc'
+import { LruCache } from '../lru'
 import { isFullRevolve, openProfile, revolveAngle, revolveFrame, revolvePoint } from './revolve'
 import { nearestEdge, solidTopology } from './topology'
 import { vdist, vdot, vsub } from '../geom/vec3'
@@ -505,7 +506,7 @@ function joinCollinear(edges: SnapEdge[]): SnapEdge[] {
   return list
 }
 
-const edgeCache = new Map<string, SnapEdge[]>()
+const edgeCache = new LruCache<string, SnapEdge[]>(4000)
 
 /** Aristas del sólido para los object snaps: las de la hoja o, en booleanas/empalmes, las del resultado. */
 export function solidSnapEdges(p: SolidProps): SnapEdge[] {
@@ -525,7 +526,6 @@ export function solidSnapEdges(p: SolidProps): SnapEdge[] {
       }),
     )
   }
-  if (edgeCache.size > 50) edgeCache.clear()
   edgeCache.set(key, out)
   return out
 }

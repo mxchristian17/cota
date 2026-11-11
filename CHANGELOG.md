@@ -4,6 +4,15 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.35.4] — 2026-11-11
+
+### Fixed
+- **Models with more than 50 solids no longer recompute everything on each pass.** The caches of solid meshes,
+  edges and topology were emptied as soon as they held 50 (or 120–200) entries. With a model of about a hundred
+  solids, every pass over all of them (object snaps, outlines, picking) rebuilt meshes and edges from scratch: more
+  than a second each time on a furniture model with 96 solids. They now keep what is still in use and drop only what
+  has not been used for a while; the same pass takes 1 ms instead of 1.3 s.
+
 ## [2.35.3] — 2026-11-10
 
 ### Documentation

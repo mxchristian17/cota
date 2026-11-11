@@ -1,6 +1,7 @@
 import type { Vec3 } from '../math'
 import type { SolidProps } from '../document/types'
 import { closestOnSegment, vadd, vcross, vdist, vdot, vlen, vnorm, vscale, vsub } from '../geom/vec3'
+import { LruCache } from '../lru'
 
 /**
  * Topología B-rep **derivada de la malla** de un sólido (Vía A): caras suaves y aristas
@@ -955,7 +956,8 @@ type Mesher = (
   p: SolidProps,
 ) => ArrayLike<number> | { positions: ArrayLike<number>; surf?: ArrayLike<number> | null; shapes?: ReadonlyMap<number, SurfShape> }
 let mesher: Mesher | null = null
-const cache = new Map<string, Topology>()
+/** Por contenido; holgado para modelos con cientos de sólidos (ver `LruCache`). */
+const cache = new LruCache<string, Topology>(4000)
 
 /** Registra el mallador de sólidos (lo hace `render/csg` al cargarse; el core no importa three). */
 export function registerSolidMesher(fn: Mesher): void {
@@ -971,7 +973,6 @@ export function solidTopology(p: SolidProps): Topology | null {
   if (hit) return hit
   const m = mesher(p)
   const topo = 'positions' in m ? buildTopology(m.positions, m.surf, m.shapes) : buildTopology(m)
-  if (cache.size > 50) cache.clear()
   cache.set(key, topo)
   return topo
 }

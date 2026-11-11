@@ -8,6 +8,7 @@ import { registerSolidMesher, solidTopology, type SurfShape } from '../core/edit
 import { blendTools } from '../core/editing/edgeBlend'
 import { dropStrayTriangles, type BoolOp } from './csgClean'
 import { closeTJunctions } from './tjunctions'
+import { LruCache } from '../core/lru'
 
 /** Segmentos de una primitiva curva, acotados (un `.cota` o la IA pueden traer valores absurdos). */
 export const MAX_SEGMENTS = 512
@@ -41,7 +42,7 @@ function tagSurfaces(g: THREE.BufferGeometry, shape?: SurfShape): THREE.BufferGe
   g.setAttribute('surf', new THREE.Float32BufferAttribute(arr, 1))
   return g
 }
-const cache = new Map<string, THREE.BufferGeometry>()
+const cache = new LruCache<string, THREE.BufferGeometry>(2000)
 
 /** three-bvh-csg exige que TODOS los operandos tengan el MISMO set de atributos (position/normal/uv).
  *  Las primitivas de Three traen los tres; las geometrías custom (LOFT) no traen `uv`. Normalizamos
@@ -553,7 +554,7 @@ function blendGeometry(props: EdgeBlendProps): THREE.BufferGeometry {
  * Resultados intermedios del árbol (booleanas, empalmes, vaciados) por contenido: la operación siguiente (agujerear
  * lo que se acaba de unir, cortarlo con SLICE) reutiliza lo ya calculado en vez de rehacer todo el árbol.
  */
-const treeCache = new Map<string, THREE.BufferGeometry>()
+const treeCache = new LruCache<string, THREE.BufferGeometry>(500)
 
 function evalTree(props: SolidProps): THREE.BufferGeometry {
   const leaf = leafGeometry(props)
@@ -562,7 +563,6 @@ function evalTree(props: SolidProps): THREE.BufferGeometry {
   const hit = treeCache.get(key)
   if (hit) return hit.clone() // quien la usa la prepara (atributos, BVH): la del caché queda intacta
   const out = evalNode(props)
-  if (treeCache.size > 120) treeCache.clear()
   treeCache.set(key, out.clone())
   return out
 }
@@ -647,7 +647,6 @@ export function solidGeometry(props: SolidProps): THREE.BufferGeometry {
     console.warn('Cota: a solid could not be evaluated; its geometry is skipped.', err)
     geom = new THREE.BufferGeometry()
   }
-  if (cache.size > 200) cache.clear()
   cache.set(key, geom)
   return geom
 }
@@ -666,7 +665,7 @@ export function previewSolidGeometry(props: SolidProps): THREE.BufferGeometry | 
 }
 
 const LEAF_OPS = new Set(['BOX', 'CYLINDER', 'CONE', 'SPHERE', 'EXTRUDE', 'REVOLVE', 'TORUS'])
-const edgeCache = new Map<string, Float32Array>()
+const edgeCache = new LruCache<string, Float32Array>(4000)
 
 /**
  * Aristas visibles de un sólido (pares de puntos para `LineSegments`), como las muestra el CAD clásico: sólo
@@ -696,7 +695,6 @@ export function solidEdgePositions(props: SolidProps): Float32Array {
     out = Float32Array.from(eg.getAttribute('position').array as ArrayLike<number>)
     eg.dispose()
   }
-  if (edgeCache.size > 200) edgeCache.clear()
   edgeCache.set(key, out)
   return out
 }
