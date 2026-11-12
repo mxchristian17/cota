@@ -4,6 +4,18 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.40.0] — 2026-11-12
+
+### Added
+- **TRIM and EXTEND by window**: while picking what to trim or extend, a click on empty space opens a crossing window
+  and every piece it crosses is trimmed (or extended) at once, as in the classic CAD. Object snap markers stay hidden
+  while picking, so they no longer get in the way.
+
+### Fixed
+- **Zoom or pan during a window selection** keeps the first corner where it was in the drawing, so you can zoom in to
+  pick exactly what the box takes.
+- TRIM/EXTEND **Crossing** missed lines whose two ends were outside the window; now every curve that crosses it counts.
+
 ## [2.39.0] — 2026-11-11
 
 ### Added

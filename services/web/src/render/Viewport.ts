@@ -79,6 +79,8 @@ export interface ViewportData {
   snapBase: Pt | null
   /** Hay un prompt esperando un punto/distancia → activar object snap y previsualización. */
   pointPrompt: boolean
+  /** El prompt de punto elige objetos (TRIM/EXTEND): sin object snap. */
+  noSnap?: boolean
   /** Color del rubber-band, ya elegido para contrastar con la capa actual y el fondo. */
   previewColor: number
   /** Object snap tracking activo (OTRACK / F11). */
@@ -404,6 +406,8 @@ export class Viewport {
   /** Último cursor en coordenadas de cliente (para el rayo de los snaps de caras). */
   private lastClient: [number, number] | null = null
   private boxStartPx: [number, number] | null = null
+  /** Primera esquina de la ventana en el dibujo: si se hace zoom o pan a mitad de la selección, la esquina la sigue. */
+  private boxStartWorld: THREE.Vector3 | null = null
   /** Ventana de selección abierta por un clic en vacío: espera el clic de la esquina opuesta. */
   private boxPending = false
   private curPx: [number, number] = [0, 0]
@@ -961,6 +965,15 @@ export class Viewport {
   }
 
   /** Coordenadas de píxel relativas al canvas (origen arriba-izquierda). */
+  /** Punto del dibujo bajo `px`, en el plano del objetivo de la cámara (perpendicular a la vista). */
+  private worldOfPx(px: [number, number]): THREE.Vector3 | null {
+    const c = this.controller
+    if (!this.width || !this.height) return null
+    const ray = c.rayFromNdc((px[0] / this.width) * 2 - 1, 1 - (px[1] / this.height) * 2)
+    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(c.camera.getWorldDirection(new THREE.Vector3()), c.target)
+    return ray.intersectPlane(plane, new THREE.Vector3())
+  }
+
   private pxOf(clientX: number, clientY: number): [number, number] {
     const rect = this.renderer.domElement.getBoundingClientRect()
     return [clientX - rect.left, clientY - rect.top]
@@ -1100,6 +1113,7 @@ export class Viewport {
       }
       if (this.boxPending) return // el clic que cierra la ventana se resuelve al soltar
       this.boxStartPx = this.pxOf(e.clientX, e.clientY)
+      this.boxStartWorld = this.worldOfPx(this.boxStartPx)
       this.curPx = this.boxStartPx
       this.draggingBox = true
       this.boxActive = false
@@ -1234,6 +1248,7 @@ export class Viewport {
     this.boxPending = false
     this.boxActive = false
     this.boxStartPx = null
+    this.boxStartWorld = null
     this.boxEl.style.display = 'none'
   }
 
@@ -1265,6 +1280,7 @@ export class Viewport {
     this.boxPending = false
     this.boxActive = false
     this.boxStartPx = null
+    this.boxStartWorld = null
     this.boxEl.style.display = 'none'
   }
 
@@ -1339,6 +1355,8 @@ export class Viewport {
         this.cb.onClick?.(snap.point, extra ?? this.pickAt(e.clientX, e.clientY), snapped, e.shiftKey, raw, deferred, this.ducsFace?.ucs)
       }
       this.boxStartPx = null
+      this.boxStartWorld = null
+    this.boxStartWorld = null
       this.draggingBox = false
       this.boxActive = false
       this.boxEl.style.display = 'none'
@@ -1742,7 +1760,7 @@ export class Viewport {
   /** ¿El snap está activo ahora? (solo durante un prompt de punto/distancia, como el CAD clásico). */
   private needSnap(): boolean {
     const d = this.data
-    return !!d && d.pointPrompt && (d.esnap || d.osnapOverride !== null || d.otrack || !!(d.polarAng && d.snapBase && !d.ortho))
+    return !!d && d.pointPrompt && !d.noSnap && (d.esnap || d.osnapOverride !== null || d.otrack || !!(d.polarAng && d.snapBase && !d.ortho))
   }
 
   private entities(): Entity[] {
@@ -3683,6 +3701,8 @@ export class Viewport {
         }
         this.cb.onViewChange?.()
         this.updateUcsIcon()
+        // Zoom o pan a mitad de una ventana de selección: la primera esquina queda donde estaba en el dibujo.
+        if (this.boxStartWorld && this.boxStartPx) this.boxStartPx = this.controller.project(this.boxStartWorld) ?? this.boxStartPx
         // al cambiar el zoom de forma apreciable, las piezas pueden cambiar de clase.
         if (this.lodOn && this.expanded && data) {
           const bucket = this.lodBucketKey()

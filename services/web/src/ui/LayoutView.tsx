@@ -52,6 +52,7 @@ function baseData(
     snapLive: s.engine.snapEntities(),
     ortho: s.ortho,
     pointPrompt: active && s.engine.awaitingPoint,
+    noSnap: s.engine.pointNoSnap,
     previewColor: pickPreviewColor(s.layerSvc.get(s.currentLayerId)?.color ?? '#ffffff', PAPER_COLOR),
     otrack: s.otrack,
         polarAng: s.polar ? sysvars.POLARANG : undefined,

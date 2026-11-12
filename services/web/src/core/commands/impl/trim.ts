@@ -1,4 +1,4 @@
-import type { Vec3 } from '../../math'
+import type { Pt, Vec3 } from '../../math'
 import type { Entity } from '../../document/types'
 import type { Command, CommandContext } from '../types'
 import { Curve, boxesOverlap, curveOf, polylineCurve } from '../../geom/curve'
@@ -154,8 +154,29 @@ async function fence(ctx: CommandContext, s: TrimSession, op: Mode): Promise<voi
   applyAll(s, op, hits.sort((a, b) => a.s - b.s))
 }
 
-async function crossing(ctx: CommandContext, s: TrimSession, op: Mode): Promise<void> {
-  const a = await ctx.getPoint('Specify first corner: ')
+/** Punto del segmento `p`–`q` dentro de la ventana más cercano a su centro (Liang–Barsky), o null si no la cruza. */
+function closestInBox(p: Vec3, q: Vec3, box: { minX: number; maxX: number; minY: number; maxY: number }, cx: number, cy: number): Vec3 | null {
+  const dx = q[0] - p[0]
+  const dy = q[1] - p[1]
+  let t0 = 0
+  let t1 = 1
+  for (const [num, den] of [[p[0] - box.minX, -dx], [box.maxX - p[0], dx], [p[1] - box.minY, -dy], [box.maxY - p[1], dy]]) {
+    if (den === 0) {
+      if (num < 0) return null
+      continue
+    }
+    const t = num / den
+    if (den < 0) t0 = Math.max(t0, t)
+    else t1 = Math.min(t1, t)
+    if (t0 > t1) return null
+  }
+  const len2 = dx * dx + dy * dy
+  const t = len2 > 0 ? Math.min(t1, Math.max(t0, ((cx - p[0]) * dx + (cy - p[1]) * dy) / len2)) : t0
+  return [p[0] + dx * t, p[1] + dy * t, p[2] + (q[2] - p[2]) * t]
+}
+
+async function crossing(ctx: CommandContext, s: TrimSession, op: Mode, first?: Pt): Promise<void> {
+  const a = first ? { kind: 'point' as const, point: first } : await ctx.getPoint('Specify first corner: ')
   if (a.kind !== 'point') return
   const b = await ctx.getPoint('Specify opposite corner: ', {
     base: a.point,
@@ -175,15 +196,18 @@ async function crossing(ctx: CommandContext, s: TrimSession, op: Mode): Promise<
   for (const e of selectableEntities(ctx.doc)) {
     const c = curveOf(e)
     if (!c || !boxesOverlap(box, c.box(), 0)) continue
-    // El tramo afectado es el que pasa por la ventana: se toma su punto más cercano al centro.
+    // El tramo afectado es el que pasa por la ventana: se toma su punto más cercano al centro. Cada cuerda de la curva
+    // se recorta contra la ventana (una recta sólo tiene dos muestras, sus extremos, que pueden quedar afuera).
     let best: Vec3 | null = null
     let bd = Infinity
-    for (const p of c.samples(64)) {
-      if (p[0] < box.minX || p[0] > box.maxX || p[1] < box.minY || p[1] > box.maxY) continue
-      const d = Math.hypot(p[0] - cx, p[1] - cy)
+    const pts = c.samples(64)
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const q = closestInBox(pts[i], pts[i + 1], box, cx, cy)
+      if (!q) continue
+      const d = Math.hypot(q[0] - cx, q[1] - cy)
       if (d < bd) {
         bd = d
-        best = p
+        best = q
       }
     }
     if (best) items.push({ id: e.id, at: c.pointAt(c.paramAt(best)) })
@@ -216,7 +240,7 @@ async function runTrimExtend(ctx: CommandContext, mode: Mode): Promise<void> {
       : 'Select object to extend or shift-select to trim or [Fence/Crossing/Project/Edge/Undo]: '
   const keywords = mode === 'trim' ? ['Fence', 'Crossing', 'Project', 'Edge', 'eRase', 'Undo'] : ['Fence', 'Crossing', 'Project', 'Edge', 'Undo']
   for (;;) {
-    const r = await ctx.getPoint(prompt, { keywords })
+    const r = await ctx.getPoint(prompt, { keywords, noSnap: true })
     if (r.kind === 'cancel') return
     if (r.kind === 'keyword') {
       if (r.keyword === 'Fence') await fence(ctx, s, mode)
@@ -233,7 +257,8 @@ async function runTrimExtend(ctx: CommandContext, mode: Mode): Promise<void> {
     }
     const pk = pickCurve(ctx.doc, r.point, r.pick)
     if (!pk) {
-      ctx.print('No object found.')
+      // Clic en el vacío: abre una ventana Crossing desde ahí, como el CAD clásico (recortar por recuadro).
+      await crossing(ctx, s, r.pick?.shift ? other(mode) : mode, r.point)
       continue
     }
     const op = r.pick?.shift ? other(mode) : mode

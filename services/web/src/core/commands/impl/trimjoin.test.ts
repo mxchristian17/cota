@@ -56,3 +56,29 @@ describe('TRIM ▸ select all', () => {
     expect(h.ofType('CIRCLE')).toHaveLength(0)
   })
 })
+
+describe('TRIM por recuadro y sin object snap', () => {
+  it('Crossing trims lines whose ends are both outside the window', async () => {
+    const h = makeEngine()
+    h.add('LINE', { start: [0, 0, 0], end: [0, 30, 0] })
+    h.add('LINE', { start: [-100, 10, 0], end: [100, 10, 0] })
+    await h.run('TRIM', '', 'C', '5,9', '8,11')
+    await new Promise((r) => setTimeout(r, 50))
+    const l = h.ofType('LINE').find((e) => e.type === 'LINE' && e.props.start[1] === 10)
+    expect(l?.type === 'LINE' && Math.max(l.props.start[0], l.props.end[0])).toBeCloseTo(0, 6)
+  })
+
+  it('a click on empty space opens a crossing window that trims every crossed piece', async () => {
+    const h = makeEngine()
+    h.add('LINE', { start: [0, 0, 0], end: [0, 30, 0] }) // arista de corte
+    for (const y of [5, 10, 15]) h.add('LINE', { start: [-10, y, 0], end: [10, y, 0] })
+    await h.run('TRIM', '')
+    expect(h.engine.pointNoSnap).toBe(true) // elegir qué recortar: sin marcas de snap
+    await h.click(5, -50) // clic en el vacío (lejos de todo): primera esquina de la ventana
+    await h.run('8,60') // esquina opuesta: cruza las tres horizontales a la derecha del corte // esquina opuesta: cruza las tres horizontales a la derecha del corte
+    await new Promise((r) => setTimeout(r, 100))
+    const right = h.ofType('LINE').filter((e) => e.type === 'LINE' && e.props.start[1] === e.props.end[1] && e.props.start[1] > 0)
+    expect(right).toHaveLength(3)
+    for (const e of right) if (e.type === 'LINE') expect(Math.max(e.props.start[0], e.props.end[0])).toBeCloseTo(0, 6)
+  })
+})

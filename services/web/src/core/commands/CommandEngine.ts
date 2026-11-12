@@ -105,6 +105,7 @@ type Pending =
       /** Esquina de ventana: sin ortho. */
       corner?: boolean
       snapEntities?: Entity[]
+      noSnap?: boolean
       resolve: (r: PointResult) => void
     }
   | {
@@ -295,6 +296,11 @@ export class CommandEngine {
   get awaitingPoint(): boolean {
     const t = this.pending?.type
     return t === 'point' || t === 'distance' || t === 'angle'
+  }
+
+  /** ¿El prompt de punto actual elige objetos y no usa object snap? (TRIM/EXTEND). */
+  get pointNoSnap(): boolean {
+    return this.pending?.type === 'point' && !!this.pending.noSnap
   }
 
   /** Override de snap de un solo uso activo (o null). Lo consume la próxima captura. */
@@ -733,6 +739,7 @@ export class CommandEngine {
         preview: opts?.preview,
         corner: opts?.corner,
         snapEntities: opts?.snapEntities,
+        noSnap: opts?.noSnap,
         resolve: (r) => {
           if (r.kind === 'point') this.runPoints++
           resolve(r)

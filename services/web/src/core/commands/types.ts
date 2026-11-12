@@ -37,6 +37,8 @@ export type AngleResult =
   | { kind: 'cancel' }
 
 export interface GetPointOptions {
+  /** Prompt que elige un objeto con un clic (TRIM/EXTEND): sin object snap, para que sus marcas no molesten. */
+  noSnap?: boolean
   /** Punto base (rubber-band, coordenadas relativas, PER/TAN). `null` = sin base aunque haya un punto previo. */
   base?: Pt | null
   keywords?: string[]
