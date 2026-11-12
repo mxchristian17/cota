@@ -360,7 +360,10 @@ Creates multiline text: one object with several lines, placed from its top-left 
 
 1. `Specify start point of text:` the top-left corner.
 2. The height and the rotation, as in TEXT.
-3. `Line 1 (empty line to finish):`, `Line 2 (empty line to finish):`… type each line. An empty line ends.
+3. A text window opens on the drawing itself, at the text's place, height and angle, with a formatting bar: bold,
+   italic, height, font, justification (left, center, right) and the Ø, ° and ± symbols. <kbd>Enter</kbd> starts a new
+   line; <kbd>Ctrl</kbd>+<kbd>Enter</kbd>, **OK** or a click away accepts; <kbd>Esc</kbd> cancels. From a script or
+   an agent there is no window: `Line 1 (empty line to finish):`, `Line 2…` ask for each line and an empty line ends.
 
 **Example**
 
@@ -371,6 +374,7 @@ MTEXT 0,100 3.5 0 "NOTES" "1. Break all sharp edges." "2. Tolerances ISO 2768-m.
 **Notes**
 
 - `%%c`, `%%d` and `%%p` work as in TEXT. Cota prints `MText created (n line(s)).`
+- Double-click any text (MTEXT or TEXT) to edit it in the same window on the drawing; the original hides while you edit.
 
 ## POINT
 

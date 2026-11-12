@@ -5,6 +5,7 @@ import { askAngle, askDistance, textSizeStore } from '../ask'
 import { decodeTextCodes } from '../../text/codes'
 import { LINE_SPACING, textAxes } from '../../geom/text'
 import type { TextProps } from '../../document/types'
+import { applyTextEdit } from '../../text/inplace'
 
 type Justify = TextProps['justify']
 /** Última justificación de TEXT (como el CAD clásico, se recuerda en la sesión). */
@@ -75,22 +76,41 @@ export const mtextCommand: Command = {
   async run(ctx) {
     const base = await insertionHeightRotation(ctx)
     if (!base) return
-    const lines: string[] = []
-    for (;;) {
-      const ln = await ctx.getString(`Line ${lines.length + 1} (empty line to finish): `, { default: '' })
-      if (ln === null) return
-      if (ln === '') break
-      lines.push(decodeTextCodes(ln))
-    }
-    if (lines.length === 0) {
-      ctx.print('No text entered.')
+    // Con pantalla: el editor de texto en el lugar, sobre el dibujo (como el CAD clásico).
+    if (ctx.app.editTextInPlace) {
+      const props: TextProps = { ...base, text: '', justify: 'left', normal: viewZ(ctx), kind: 'mtext' }
+      const r = await ctx.app.editTextInPlace(props)
+      if (r === 'lines' || r === undefined) return askLines(ctx, base)
+      if (!r || !r.text.trim()) {
+        ctx.print('No text entered.')
+        return
+      }
+      applyTextEdit(props, r)
+      ctx.doc.addEntity({ type: 'TEXT', layer: ctx.currentLayerId(), props })
+      ctx.print(`MText created (${props.text.split('\n').length} line(s)).`)
       return
     }
-    ctx.doc.addEntity({
-      type: 'TEXT',
-      layer: ctx.currentLayerId(),
-      props: { ...base, text: lines.join('\n'), justify: 'left', normal: viewZ(ctx), kind: 'mtext' },
-    })
-    ctx.print(`MText created (${lines.length} line(s)).`)
+    return askLines(ctx, base)
   },
+}
+
+/** MTEXT por la línea de comandos (scripts, agentes): un renglón por respuesta; uno vacío termina. */
+async function askLines(ctx: CommandContext, base: Omit<TextProps, 'text' | 'justify' | 'normal' | 'kind'>): Promise<void> {
+  const lines: string[] = []
+  for (;;) {
+    const ln = await ctx.getString(`Line ${lines.length + 1} (empty line to finish): `, { default: '' })
+    if (ln === null) return
+    if (ln === '') break
+    lines.push(decodeTextCodes(ln))
+  }
+  if (lines.length === 0) {
+    ctx.print('No text entered.')
+    return
+  }
+  ctx.doc.addEntity({
+    type: 'TEXT',
+    layer: ctx.currentLayerId(),
+    props: { ...base, text: lines.join('\n'), justify: 'left', normal: viewZ(ctx), kind: 'mtext' },
+  })
+  ctx.print(`MText created (${lines.length} line(s)).`)
 }

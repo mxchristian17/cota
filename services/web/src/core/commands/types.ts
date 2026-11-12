@@ -1,5 +1,6 @@
+import type { TextEditState } from '../text/inplace'
 import type { WindowPlane } from './selectionSets'
-import type { Entity, ShadeProps } from '../document/types'
+import type { Entity, ShadeProps, TextProps } from '../document/types'
 import type { FlatshotOptions } from '../projection/flatshot'
 import type { ViewGenChoice } from '../drawing/viewgen'
 import type { ProjBasis, ProjItem, ProjSegment } from '../projection/orthographic'
@@ -280,6 +281,11 @@ export interface AppHooks {
    * Diálogo de atributos (INSERT con ATTDIA=1, EATTEDIT): un valor por ítem, o null si se cancela.
    */
   editAttributes(title: string, items: { tag: string; prompt: string; value: string }[]): Promise<string[] | null>
+  /**
+   * Editor de texto en el lugar, sobre el dibujo (MTEXT); null = cancelado; `'lines'` (en un script o un agente, que no
+   * tienen pantalla) = pedir los renglones en la línea de comandos, como sin él.
+   */
+  editTextInPlace?(props: TextProps): Promise<TextEditState | null | 'lines'>
   /** Abre el asistente de IA (comando PROMPT): genera/edita el modelo con lenguaje natural. */
   openAi(): void
   /**

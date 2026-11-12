@@ -4,6 +4,14 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.42.0] — 2026-11-12
+
+### Added
+- **MTEXT edited in place**: MTEXT opens a text window on the drawing itself, at the text's place, height and angle,
+  with a formatting bar (bold, italic, height, font, justification and the Ø, ° and ± symbols). Double-click any text
+  to edit it the same way; the original hides while you edit. Enter starts a new line; Ctrl+Enter, OK or a click away
+  accepts; Esc cancels. Scripts and agents still type the lines in the command line.
+
 ## [2.41.0] — 2026-11-12
 
 ### Added

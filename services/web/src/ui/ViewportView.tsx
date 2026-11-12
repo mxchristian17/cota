@@ -141,8 +141,11 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
       const s = useStore.getState()
       return {
         // Lo oculto con ISOLATEOBJECTS/HIDEOBJECTS no se dibuja ni da snaps (la revisión cambia con el aislamiento).
-        revision: s.doc.revision + isolation.rev * 1e-6,
-        entities: isolation.hidden.size ? s.doc.entities.filter((e) => !isolation.hidden.has(e.id)) : s.doc.entities,
+        revision: s.doc.revision + isolation.rev * 1e-6 + (s.textEdit?.hideId ? 0.5 : 0),
+        entities:
+          isolation.hidden.size || s.textEdit?.hideId
+            ? s.doc.entities.filter((e) => !isolation.hidden.has(e.id) && e.id !== s.textEdit?.hideId)
+            : s.doc.entities,
         blocks: s.doc.blocks,
         layers: viewLayers(s.doc.layers),
         selection: s.picked.length ? [...s.selection, ...s.picked] : s.selection,

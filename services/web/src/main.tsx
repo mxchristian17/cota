@@ -4,6 +4,7 @@ import { installGlobalErrorHandlers } from './core/errors'
 import { startAnalytics } from './analytics'
 import { ErrorBanner, ErrorGuard } from './ui/ErrorBanner'
 import { NoteEditor } from './ui/NoteEditor'
+import { TextEditor } from './ui/TextEditor'
 import './styles.css'
 
 const container = document.getElementById('root')
@@ -16,6 +17,7 @@ createRoot(container).render(
     </ErrorGuard>
     <ErrorBanner />
     <NoteEditor />
+    <TextEditor />
   </>,
 )
 

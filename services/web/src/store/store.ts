@@ -10,6 +10,8 @@ import { create } from 'zustand'
 import { DocumentModel, MODEL_TAB } from '../core/document/DocumentModel'
 import { setTraceSnapshot, traceLog } from '../core/session/traceLog'
 import { noteCloseHit, notePoint } from '../core/geom/note'
+import { applyTextEdit, textEditStateOf, type TextEditState } from '../core/text/inplace'
+import { textAxes } from '../core/geom/text'
 import { LayerService } from '../core/layers/LayerService'
 import { CommandEngine } from '../core/commands/CommandEngine'
 import { registerDefaultCommands } from '../core/commands/registry'
@@ -412,6 +414,10 @@ export interface AppState {
   /** Diálogo DWGPROPS (propiedades del dibujo para los campos). */
   dwgPropsOpen: boolean
   /** Nota rápida cuyo texto se edita sobre ella misma (doble clic), con su rectángulo en la página; null = ninguna. */
+  /** Editor de texto en el lugar (MTEXT, doble clic sobre un texto): estado, esquina de arriba en la página, px por alto
+   *  de texto original y giro en pantalla; null = cerrado. */
+  textEdit: { state: TextEditState; left: number; top: number; px: number; angle: number; baseHeight: number; hideId?: string } | null
+  closeTextEditor: (r: TextEditState | null) => void
   noteEdit: { id: string; text: string; color: NoteColor; rect: { left: number; top: number; width: number; height: number } } | null
   openNoteEditor: (id: string) => void
   closeNoteEditor: (save: boolean, text?: string) => void
@@ -976,6 +982,7 @@ export const useStore = create<AppState>((set, get) => {
   let capturedVars: string | null = null
   /** Resolución pendiente del diálogo de atributos (fuera del estado: no es serializable). */
   let attResolve: ((values: string[] | null) => void) | null = null
+  let textResolve: ((r: TextEditState | null | 'lines') => void) | null = null
   // Backup del documento antes de aplicar una propuesta de IA (para accept/discard).
   let aiBackup: DocumentData | null = null
 
@@ -1368,6 +1375,24 @@ export const useStore = create<AppState>((set, get) => {
     openTemplateDialog: (mode) => get().openTemplateDialog(mode),
     saveLayoutTemplate: (layoutId, name) => void get().saveLayoutAsTemplate(layoutId, name),
     sheetInit: () => sheetInit(),
+    editTextInPlace: (props) =>
+      new Promise<TextEditState | null | 'lines'>((resolve) => {
+        if (scriptDepth > 0) return resolve('lines') // un script o un agente escribe los renglones
+        textResolve?.(null) // un editor anterior sin cerrar se cancela
+        textResolve = resolve
+        const vp = get().activeViewport
+        const { u, v } = textAxes(props)
+        const h = props.height
+        const top: Vec3 = props.kind === 'text' ? [props.position[0] + v[0] * h, props.position[1] + v[1] * h, props.position[2] + v[2] * h] : props.position
+        const p0 = vp?.pageOf(top)
+        const pu = vp?.pageOf([top[0] + u[0] * h, top[1] + u[1] * h, top[2] + u[2] * h])
+        const pv = vp?.pageOf([top[0] - v[0] * h, top[1] - v[1] * h, top[2] - v[2] * h])
+        const geo =
+          p0 && pu && pv
+            ? { left: p0[0], top: p0[1], px: Math.max(8, Math.hypot(pv[0] - p0[0], pv[1] - p0[1])), angle: (Math.atan2(pu[1] - p0[1], pu[0] - p0[0]) * 180) / Math.PI }
+            : { left: 200, top: 160, px: 16, angle: 0 }
+        set({ textEdit: { state: textEditStateOf(props), ...geo, baseHeight: h } })
+      }),
     editAttributes: (title, items) =>
       new Promise<string[] | null>((resolve) => {
         attResolve?.(null) // un diálogo anterior sin cerrar se cancela
@@ -1854,6 +1879,23 @@ export const useStore = create<AppState>((set, get) => {
         get().openNoteEditor(id)
         return
       }
+      // Un texto (MTEXT o TEXT) se edita en el lugar, sobre el dibujo, como el CAD clásico.
+      if (e?.type === 'TEXT' && !engine.busy && app.editTextInPlace) {
+        const layer = layerSvc.get(e.layer)
+        if (layer && !layerEditable(layer)) return
+        const editing = app.editTextInPlace(e.props)
+        const te = get().textEdit
+        // El original no se dibuja (ni resaltado) mientras se edita.
+        if (te) set({ textEdit: { ...te, hideId: e.id }, selection: get().selection.filter((x) => x !== e.id) })
+        void editing.then((r) => {
+          if (!r || r === 'lines') return
+          pushSnapshot('text edit')
+          applyTextEdit(e.props, r)
+          doc.touch()
+          bump()
+        })
+        return
+      }
       // Un bloque sin atributos se abre en el editor de bloques (BEDIT), como el CAD clásico.
       if (e?.type === 'INSERT' && !e.props.attributes?.length && !e.props.name.startsWith('*') && !doc.editingBlock && !engine.busy) {
         get().selectEntity(id)
@@ -1883,6 +1925,13 @@ export const useStore = create<AppState>((set, get) => {
     },
     dwgPropsOpen: false,
     noteEdit: null,
+    textEdit: null,
+    closeTextEditor: (r) => {
+      set({ textEdit: null })
+      const res = textResolve
+      textResolve = null
+      res?.(r)
+    },
     openNoteEditor: (id) => {
       const e = doc.getEntity(id)
       const vp = get().activeViewport
