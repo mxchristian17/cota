@@ -4,6 +4,13 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.43.1] — 2026-11-12
+
+### Fixed
+- **Back to the phone view**: on a phone, the full editor now shows a "📱 Mobile view" button that always stays on the
+  visible part of the screen (even when the full editor is larger than the phone and the browser has scrolled or
+  zoomed it); one tap goes back to the phone view.
+
 ## [2.43.0] — 2026-11-12
 
 ### Added

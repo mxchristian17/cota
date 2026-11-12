@@ -1,10 +1,11 @@
+import { createPortal } from 'react-dom'
 import { DimContextMenu } from './ui/DimContextMenu'
 import { ContextMenu } from './ui/ContextMenu'
 import { ViewGenDialog } from './ui/ViewGenDialog'
 import { useEffect, useRef, useState } from 'react'
 import { ViewportView } from './ui/ViewportView'
 import { FloatingToolbars, ToolbarDialog, ToolbarDock } from './ui/Toolbar'
-import { canInstall, enterFullscreen, isStandalone, mobileActive, onInstallChange, promptInstall } from './ui/appWindow'
+import { canInstall, enterFullscreen, isPhone, isStandalone, mobileActive, onInstallChange, promptInstall } from './ui/appWindow'
 import { FlatshotDialog } from './ui/FlatshotDialog'
 import { PlotDialog } from './ui/PlotDialog'
 import { QSelectDialog } from './ui/QSelectDialog'
@@ -358,6 +359,9 @@ export default function App() {
   if (mobile) return <MobileApp />
 
   return (
+    <>
+    {/* En un celular con la vista completa abierta: un toque vuelve a la vista para el celular (encima de todo). */}
+    {isPhone() && createPortal(<BackToMobile />, document.body)}
     <div className="app">
       <header className="topbar">
         <button
@@ -489,5 +493,37 @@ export default function App() {
       <ScriptDialog />
       <ViewGenDialog />
     </div>
+    </>
+  )
+}
+
+/**
+ * Botón para volver a la vista del celular desde la vista completa. Esa vista es más grande que la pantalla del teléfono
+ * y lo visible (el «visual viewport») puede quedar corrido o con zoom: el botón lo sigue para estar siempre a la vista.
+ */
+function BackToMobile() {
+  const [pos, setPos] = useState({ left: 10, top: 10, scale: 1 })
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const update = () => setPos({ left: vv.offsetLeft + 10 / vv.scale, top: vv.offsetTop + 10 / vv.scale, scale: 1 / vv.scale })
+    update()
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+    }
+  }, [])
+  return (
+    <button
+      className="back-to-mobile"
+      data-testid="back-to-mobile"
+      title="Back to the phone view"
+      style={{ left: pos.left, top: pos.top, transform: `scale(${pos.scale})` }}
+      onClick={() => useStore.getState().setScreen({ mobileView: true })}
+    >
+      📱 Mobile view
+    </button>
   )
 }
