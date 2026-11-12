@@ -12,7 +12,9 @@ All notable changes to Cota are documented here. The project follows [Semantic V
   ring of a spherical plain bearing) is one edge, so one click rounds all of it. Profiles with arcs extrude into exact
   curved faces, revolutions and smooth sweeps too, and SHELL makes walls of exact thickness. While the kernel works,
   and whenever it cannot build a solid, the mesh is shown as before; a fillet radius or chamfer distance that does not
-  fit is reported in the command line. `SOLIDKERNEL MESH` goes back to meshes only. The kernel is a separate,
+  fit is reported in the command line. A result is only used if it is a valid, non-empty solid and its fillets and
+  chamfers stay within the convex hull of the solid they round (with a small margin, as a concave fillet that ends on
+  a sphere follows it). `SOLIDKERNEL MESH` goes back to meshes only. The kernel is a separate,
   replaceable module under the LGPL 2.1, served unmodified with its license texts and source links (see
   `THIRD_PARTY_NOTICES.md`); `services/web/tools/occt-source.sh` builds the source archive attached to each release.
 

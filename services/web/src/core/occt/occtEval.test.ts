@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { OcctKernel } from 'occt-wasm'
 import type { SolidProps } from '../document/types'
 import type { Vec3 } from '../math'
-import { evalSolid, OcctEvalError, type OcctResult } from './occtEval'
+import { evalSolid, HULL_ALLOWANCE, hullExcess, OcctEvalError, type OcctResult } from './occtEval'
 
 let k: OcctKernel
 beforeAll(async () => {
@@ -49,6 +49,31 @@ describe('núcleo exacto (OCCT): esfera menos caja', () => {
       expect(maxR).toBeLessThan(10.001)
       expect(r.stats.faces).toBeGreaterThan(10)
     }
+  })
+
+  it('los rellenos de las cóncavas terminan al ras de la esfera (dentro de la cápsula convexa del sólido original)', () => {
+    const base = run(cut([3, 3, 3])).mesh.positions
+    for (const m of [1, 5, 7, 11, 14, 15, 19, 37, 59]) {
+      const r = run({ op: 'FILLETEDGE', solid: cut([3, 3, 3]), edges: corrida.filter((_, i) => m & (1 << i)).map((at) => ({ at })), radius: 2 })
+      expect(hullExcess(base, r.mesh.positions)).toBeLessThan(0.05)
+      expect(r.stats.hullExcess).toBeLessThan(HULL_ALLOWANCE / 2)
+      expect(r.stats.volume).toBeGreaterThan(4000)
+    }
+  })
+
+  it('un chaflán cóncavo que termina sobre la esfera la sigue: sale un poco de la cápsula y es correcto', () => {
+    // Caja centrada, chaflán 3 en la cóncava del eje Z: su borde sobre la esfera sale ≈ d²/(4R) de la cápsula.
+    const r = run({ op: 'CHAMFEREDGE', solid: cut([0, 0, 0]), edges: [{ at: centrada[0] }], d1: 3, d2: 3 })
+    expect(r.stats.hullExcess).toBeGreaterThan(0.01)
+    expect(r.stats.hullExcess).toBeLessThan(HULL_ALLOWANCE)
+  })
+
+  it('la cápsula convexa detecta lo que sobresale', () => {
+    const cube = [0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1]
+    expect(hullExcess(cube, [0.5, 0.5, 0.5])).toBe(0)
+    // Con planos de apoyo en 256 direcciones la medida es aproximada (por defecto), nunca falsa.
+    expect(hullExcess(cube, [0.5, 0.5, 1.3])).toBeGreaterThan(0.2)
+    expect(hullExcess(cube, [0.5, 0.5, 1.3])).toBeLessThanOrEqual(0.3)
   })
 
   it('chaflán con aristas cóncavas y convexas en el mismo vértice: por grupos', () => {

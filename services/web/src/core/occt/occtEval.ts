@@ -32,6 +32,8 @@ export interface OcctStats {
   strategy: Strategy
   volume: number
   faces: number
+  /** Lo más que un empalme del árbol salió de la cápsula convexa de su sólido original, en fracción de su tamaño. */
+  hullExcess: number
 }
 
 export interface OcctResult {
@@ -52,6 +54,10 @@ export class OcctEvalError extends Error {
 }
 
 type Strategy = 'direct' | 'grouped'
+
+/** Teselado: desviación máxima relativa a la diagonal de la caja envolvente, y angular (radianes). */
+const MESH_REL_DEFLECTION = 0.001
+const MESH_ANGULAR_DEFLECTION = 0.2
 interface Orient {
   dir: Vec3
   spin: number
@@ -74,6 +80,28 @@ function frame(dir: Vec3, spin = 0): { x: Vec3; y: Vec3; z: Vec3 } {
   const y0 = cross(z, x0)
   const x = add(mul(x0, Math.cos(spin)), mul(y0, Math.sin(spin)))
   return { x, y: cross(z, x), z }
+}
+
+/** 256 direcciones casi uniformes (espiral de Fibonacci) para acotar la cápsula convexa de un sólido. */
+const HULL_DIRS: Vec3[] = Array.from({ length: 256 }, (_, i) => {
+  const z = 1 - (2 * (i + 0.5)) / 256
+  const r = Math.sqrt(1 - z * z)
+  const a = i * Math.PI * (3 - Math.sqrt(5))
+  return [r * Math.cos(a), r * Math.sin(a), z]
+})
+
+/**
+ * Cuánto se sale `pts` de la cápsula convexa de `base` (0 si queda adentro). La cápsula se acota con los planos de
+ * apoyo de `base` en `HULL_DIRS`: un punto afuera de alguno está seguro fuera de la cápsula.
+ */
+export function hullExcess(base: ArrayLike<number>, pts: ArrayLike<number>): number {
+  let worst = 0
+  for (const d of HULL_DIRS) {
+    let h = -Infinity
+    for (let i = 0; i + 2 < base.length; i += 3) h = Math.max(h, d[0] * base[i] + d[1] * base[i + 1] + d[2] * base[i + 2])
+    for (let i = 0; i + 2 < pts.length; i += 3) worst = Math.max(worst, d[0] * pts[i] + d[1] * pts[i + 1] + d[2] * pts[i + 2] - h)
+  }
+  return worst
 }
 
 /** Matriz 3x4 (por filas) que lleva los ejes locales a `f` y el origen a `o`. */
@@ -102,6 +130,10 @@ interface Ctx {
   /** Orientación de la costura por hoja (ruta en el árbol). */
   orient: Map<string, Orient>
   strategy: Strategy
+  /** Cuánto puede salir un empalme de la cápsula convexa del sólido original, en fracción de su radio o distancia. */
+  allowance: number
+  /** Lo más que salió un empalme del árbol (en fracción de su tamaño). */
+  excess: number
 }
 
 function asSolid(k: K, s: ShapeHandle, op: string): ShapeHandle {
@@ -326,6 +358,27 @@ function refFace(k: K, solid: ShapeHandle, edge: ShapeHandle, base: Vec3): Shape
   return best
 }
 
+/**
+ * Un empalme o chaflán sólo saca material o rellena rincones: nunca puede salirse de la cápsula convexa del sólido
+ * original ni dejarlo vacío. OCCT a veces devuelve un sólido «válido» que no cumple eso: entonces es un error.
+ */
+function checkBlend(ctx: Ctx, base: ShapeHandle, result: ShapeHandle, size: number): void {
+  const { k } = ctx
+  const bb = k.getBoundingBox(base)
+  const diag = Math.hypot(bb.xmax - bb.xmin, bb.ymax - bb.ymin, bb.zmax - bb.zmin) || 1
+  const vol = k.getVolume(result)
+  if (!(vol > diag ** 3 * 1e-9)) throw new Error('empty solid')
+  const defl = diag * MESH_REL_DEFLECTION
+  const opts = { linearDeflection: defl, angularDeflection: MESH_ANGULAR_DEFLECTION }
+  const excess = hullExcess(k.meshShape(base, opts).positions, k.meshShape(result, opts).positions)
+  ctx.excess = Math.max(ctx.excess, excess / size)
+  // Las mallas quedan inscriptas en las superficies (hasta `defl` adentro): ese margen no es salirse. Un relleno
+  // cóncavo que termina sobre una cara convexa curva (una esfera) la sigue y sale de la cápsula en ≈ size²/(4·R),
+  // de segundo orden; lo que está mal (una tapa que asoma) sale en una fracción del tamaño (ver `HULL_ALLOWANCE`).
+  if (excess > 2 * defl + diag * 1e-6 + ctx.allowance * size)
+    throw new Error(`the result leaves the convex hull of the original solid by ${excess.toPrecision(3)}`)
+}
+
 function unify(k: K, s: ShapeHandle): ShapeHandle {
   try {
     const u = k.unifySameDomain(s)
@@ -366,7 +419,8 @@ function build(ctx: Ctx, p: SolidProps, path = '0'): ShapeHandle {
     }
     case 'FILLETEDGE':
     case 'CHAMFEREDGE': {
-      let solid = asSolid(k, build(ctx, p.solid, `${path}.0`), p.op)
+      const base = asSolid(k, build(ctx, p.solid, `${path}.0`), p.op)
+      let solid = base
       const size = p.op === 'FILLETEDGE' ? p.radius : Math.max(p.d1, p.d2)
       const groups: EdgeRef[][] = [p.edges]
       if (ctx.strategy === 'grouped' && p.edges.length > 1) {
@@ -389,6 +443,7 @@ function build(ctx: Ctx, p: SolidProps, path = '0'): ShapeHandle {
           }
           if (!k.isValid(solid)) throw new Error('invalid solid')
         }
+        checkBlend(ctx, base, solid, size)
       } catch (err) {
         throw new OcctEvalError(p.op, (err as Error).message, size)
       }
@@ -427,7 +482,7 @@ function blendProbe(k: K, p: SolidProps): Vec3[] {
   const visit = (q: SolidProps, path: string): void => {
     if (q.op === 'FILLETEDGE' || q.op === 'CHAMFEREDGE') {
       try {
-        const ctx: Ctx = { k, orient: new Map(), strategy: 'direct' }
+        const ctx: Ctx = { k, orient: new Map(), strategy: 'direct', allowance: Infinity, excess: 0 }
         const solid = asSolid(k, build(ctx, q.solid, `${path}.0`), q.op)
         for (const e of pickEdges(k, solid, q.edges)) {
           const w = k.wireframe(e, { deflection: 0.05 })
@@ -482,7 +537,17 @@ export interface EvalOptions {
   relDeflection?: number
   /** Desviación angular máxima de la teselación (radianes). */
   angularDeflection?: number
+  /** Cuánto puede salir un empalme de la cápsula convexa del original, en fracción de su tamaño (`HULL_ALLOWANCE`). */
+  hullAllowance?: number
 }
+
+/**
+ * Fracción del radio (o distancia) que un empalme puede salir de la cápsula convexa del sólido original. Medido en la
+ * matriz de aceptación (esfera menos caja, empalmes y chaflanes 1–3, 756 casos): los resultados exactos salen hasta
+ * 0,048 (rellenos cóncavos que terminan sobre la esfera y la siguen); las tapas de la malla, 0,25 a 0,41 con la caja
+ * corrida y 0,11 a 0,17 con la centrada en R2 y R3.
+ */
+export const HULL_ALLOWANCE = 0.1
 
 /** Evalúa el árbol y lo tesela. Lanza `OcctEvalError` con la operación que falló. */
 export function evalSolid(k: K, props: SolidProps, opts: EvalOptions = {}): OcctResult {
@@ -503,11 +568,18 @@ export function evalSolid(k: K, props: SolidProps, opts: EvalOptions = {}): Occt
     const orient = new Map<string, Orient>()
     for (const [path, list] of ranked) if (list.length) orient.set(path, list[Math.min(o, list.length - 1)])
     try {
-      const shape = build({ k, orient, strategy }, props)
+      const ctx: Ctx = { k, orient, strategy, allowance: opts.hullAllowance ?? HULL_ALLOWANCE, excess: 0 }
+      const shape = build(ctx, props)
+      // Nunca se da por bueno un sólido vacío o inválido: queda la malla y se avisa.
+      const bb = k.getBoundingBox(shape)
+      const diag = Math.hypot(bb.xmax - bb.xmin, bb.ymax - bb.ymin, bb.zmax - bb.zmin)
+      if (!(diag > 0) || !(k.getVolume(shape) > diag ** 3 * 1e-9)) throw new OcctEvalError(props.op, 'empty solid')
+      if (!k.isValid(shape)) throw new OcctEvalError(props.op, 'invalid solid')
       const mesh = tessellate(k, shape, opts)
+      if (!mesh.indices.length) throw new OcctEvalError(props.op, 'empty mesh')
       return {
         mesh,
-        stats: { ms: performance.now() - t0, attempts: attempt + 1, strategy, volume: k.getVolume(shape), faces: k.getSubShapes(shape, 'face').length },
+        stats: { ms: performance.now() - t0, attempts: attempt + 1, strategy, volume: k.getVolume(shape), faces: k.getSubShapes(shape, 'face').length, hullExcess: ctx.excess },
       }
     } catch (err) {
       lastErr = err
@@ -559,7 +631,7 @@ function surfaceKey(k: K, face: ShapeHandle, q: (x: number) => string, i: number
 function tessellate(k: K, shape: ShapeHandle, opts: EvalOptions): OcctMesh {
   const bb = k.getBoundingBox(shape)
   const diag = Math.hypot(bb.xmax - bb.xmin, bb.ymax - bb.ymin, bb.zmax - bb.zmin) || 1
-  const m = k.meshShape(shape, { linearDeflection: diag * (opts.relDeflection ?? 0.001), angularDeflection: opts.angularDeflection ?? 0.2 })
+  const m = k.meshShape(shape, { linearDeflection: diag * (opts.relDeflection ?? MESH_REL_DEFLECTION), angularDeflection: opts.angularDeflection ?? MESH_ANGULAR_DEFLECTION })
   const faces = k.getSubShapes(shape, 'face')
   const groups = m.faceGroups
   if (!groups || groups.length !== faces.length * 3) throw new OcctEvalError('MESH', 'face groups do not match the faces')
