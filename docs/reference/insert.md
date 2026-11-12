@@ -82,6 +82,34 @@ Closes the Block Editor and returns to the model with the view it had before.
 1. If there are unsaved changes: `Save changes to block "NAME"? [Save/Discard] <Save>:`. **Discard** puts the block
    back as it was when it was opened or last saved.
 
+## NOTE
+
+Pastes a sticky note on the drawing: a paper note (yellow, violet, pink, green, blue or orange) with a folded corner,
+a close cross and text that resizes itself to fill the note. It lies on the working UCS like a rectangle, or on the
+face of a solid when the dynamic UCS is on.
+
+**Aliases** `STICKY` · **Menu** Insert
+
+**Steps**
+
+1. `Specify first corner or [Color] <yellow>:` (`Color` picks the paper color for this and the next notes).
+2. `Specify opposite corner:`
+3. `Note text (double-click the note later to edit it):`
+
+**Example**
+
+```text
+NOTE 0,0 40,25 Check the chamfer before machining
+```
+
+**Notes**
+
+- Double-click a note to edit its text on the note itself (<kbd>Ctrl</kbd>+<kbd>Enter</kbd> or clicking away accepts,
+  <kbd>Esc</kbd> cancels). The cross closes it (undo brings it back).
+- Select it to see its grips: the bottom-right corner resizes it and the text adjusts; dragging any other corner or
+  midpoint draws a leader from there to the point you pick, with object snaps.
+- Notes are kept in `.cota` files only: DWG, DXF and PDF leave them out.
+
 ## VIEWBASE
 
 Creates a base view of the 3D model on a layout, and then the views projected from it (front, top, side,

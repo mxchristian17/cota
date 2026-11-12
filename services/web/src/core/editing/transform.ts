@@ -12,6 +12,7 @@ import { arcEndpoints, arcFromAngles, arcIsClockwise, normAngle } from '../geom/
 import { planeAngle } from './rigid'
 import { insertXDir } from './block'
 import { mapOwnThreads } from '../thread/geometry'
+import { mapNote, unflipNote } from '../geom/note'
 
 /**
  * ROTATE / MIRROR.
@@ -269,6 +270,8 @@ export function mirrorEntityInput(e: Entity, ax: MirrorAxis): EntityInput | null
       return { type: 'SHADE', layer: e.layer, props: mapShade(e.props, (v) => mirrorPoint(v, ax)) }
     case 'IMAGE':
       return { type: 'IMAGE', layer: e.layer, props: mapImage(e.props, (v) => mirrorPoint(v, ax)) }
+    case 'NOTE':
+      return { type: 'NOTE', layer: e.layer, props: unflipNote(mapNote(e.props, (v) => mirrorPoint(v, ax))) }
     case 'HATCH': {
       // MIRRHATCH = 0: el contorno se refleja, el patrón conserva su dirección.
       const p = mapHatch(e.props, (v) => mirrorPoint(v, ax), 1, true)

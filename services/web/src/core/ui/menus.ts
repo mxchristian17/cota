@@ -24,7 +24,7 @@ export const CATEGORIES: { label: string; names: string[] }[] = [
       '§Visual styles', 'VSCURRENT', 'SHADEMODE', '§Display', 'FULLSCREEN', 'CLEANSCREENON', 'CLEANSCREENOFF', 'COMMANDLINE', 'COMMANDLINEHIDE', 'NAVVCUBE', 'UCSICON', 'ATTDISP', 'MOBILEVIEW',
     ],
   },
-  { label: 'Insert', names: ['INSERT', 'BEDIT', 'BSAVE', 'BCLOSE', 'IMAGE', '§Layout', 'LAYOUT', '§Drawing views', 'VIEWBASE', 'VIEWGEN', 'VIEWPROJ', 'VIEWEDIT', 'VIEWUPDATE', 'VIEWSTD', '§Fields', 'FIELD', 'UPDATEFIELD'] },
+  { label: 'Insert', names: ['INSERT', 'BEDIT', 'BSAVE', 'BCLOSE', 'NOTE', 'IMAGE', '§Layout', 'LAYOUT', '§Drawing views', 'VIEWBASE', 'VIEWGEN', 'VIEWPROJ', 'VIEWEDIT', 'VIEWUPDATE', 'VIEWSTD', '§Fields', 'FIELD', 'UPDATEFIELD'] },
   {
     label: 'Format',
     names: [

@@ -2,7 +2,7 @@ import { PATTERN_NAMES, USER } from '../hatch/patterns'
 import { regionArea, regionPerimeter } from '../region/region'
 import { hatchArea } from '../hatch/geometry'
 import type { Vec3 } from '../math'
-import type { Entity, ShadePlot } from '../document/types'
+import type { Entity, NoteColor, ShadePlot } from '../document/types'
 import { decodeTextCodes } from '../text/codes'
 import { VIEW_NAMES, VISUAL_STYLES, type ViewName, type VisualStyle } from '../view'
 import { STANDARD_SCALES, standardScale } from '../layout/scale'
@@ -10,6 +10,7 @@ import { viewAngles, viewNameOf } from '../layout/viewport'
 import { arcIsClockwise, arcLength, normAngle, sweepOf } from '../geom/arc'
 import { solidThreads } from '../thread/geometry'
 import type { ThreadInfo } from '../thread/tables'
+import { NOTE_COLOR_NAMES } from '../geom/note'
 
 /** Fila de solo lectura con las roscas (THREAD) del objeto; el texto de la cota se cambia en la cota. */
 const threadField = (list: ThreadInfo[]): PropField => ({
@@ -255,6 +256,13 @@ export function entityFields(e: Entity): PropField[] {
     }
     case 'SHADE':
       return []
+    case 'NOTE':
+      return [
+        { key: 'text', label: 'Text', kind: 'text', value: e.props.text },
+        { key: 'color', label: 'Color', kind: 'enum', value: e.props.color, options: NOTE_COLOR_NAMES },
+        { key: 'width', label: 'Width', kind: 'number', value: e.props.size[0] },
+        { key: 'height', label: 'Height', kind: 'number', value: e.props.size[1] },
+      ]
     case 'IMAGE':
       return [
         { key: '_file', label: 'File', kind: 'text', value: e.props.file, readOnly: true },
@@ -427,6 +435,12 @@ export function applyField(e: Entity, key: string, value: number | string | bool
       break
     case 'IMAGE':
       if (key === 'fade') e.props.fade = Math.max(0, Math.min(100, num))
+      break
+    case 'NOTE':
+      if (key === 'text') e.props.text = String(value)
+      else if (key === 'color' && NOTE_COLOR_NAMES.includes(value as NoteColor)) e.props.color = value as NoteColor
+      else if (key === 'width' && num > 0) e.props.size = [num, e.props.size[1]]
+      else if (key === 'height' && num > 0) e.props.size = [e.props.size[0], num]
       break
   }
 }

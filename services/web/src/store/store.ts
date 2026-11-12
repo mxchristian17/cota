@@ -9,12 +9,13 @@ import type { Deferred } from '../core/geom/tangency'
 import { create } from 'zustand'
 import { DocumentModel, MODEL_TAB } from '../core/document/DocumentModel'
 import { setTraceSnapshot, traceLog } from '../core/session/traceLog'
+import { noteCloseHit, notePoint } from '../core/geom/note'
 import { LayerService } from '../core/layers/LayerService'
 import { CommandEngine } from '../core/commands/CommandEngine'
 import { registerDefaultCommands } from '../core/commands/registry'
 import { applySysvars, persistedSysvars, sysvars, type PersistedSysvars } from '../core/commands/sysvars'
 import type { AppHooks, Command, Measure } from '../core/commands/types'
-import type { DimensionProps, DocumentData, DrawingVars, Entity, HatchIsland, SolidProps, EntityProps, EntityType, ImageEntity, ImageProps, LineType, PageSetup } from '../core/document/types'
+import type { DimensionProps, DocumentData, DrawingVars, Entity, HatchIsland, SolidProps, EntityProps, EntityType, ImageEntity, ImageProps, LineType, NoteColor, PageSetup } from '../core/document/types'
 import { IMAGE_EXTS, imageFileName, isImageFile } from '../core/geom/image'
 import { drawingImages } from '../core/commands/impl/image'
 import { rebuildHatchLoops } from '../core/hatch/assoc'
@@ -410,6 +411,10 @@ export interface AppState {
   entityDoubleClick: (id: string) => void
   /** Diálogo DWGPROPS (propiedades del dibujo para los campos). */
   dwgPropsOpen: boolean
+  /** Nota rápida cuyo texto se edita sobre ella misma (doble clic), con su rectángulo en la página; null = ninguna. */
+  noteEdit: { id: string; text: string; color: NoteColor; rect: { left: number; top: number; width: number; height: number } } | null
+  openNoteEditor: (id: string) => void
+  closeNoteEditor: (save: boolean, text?: string) => void
   openDwgProps: () => void
   closeDwgProps: () => void
   setDrawingProps: (patch: Partial<DocumentData['meta']>) => void
@@ -1845,6 +1850,10 @@ export const useStore = create<AppState>((set, get) => {
     },
     entityDoubleClick: (id) => {
       const e = doc.getEntity(id)
+      if (e?.type === 'NOTE') {
+        get().openNoteEditor(id)
+        return
+      }
       // Un bloque sin atributos se abre en el editor de bloques (BEDIT), como el CAD clásico.
       if (e?.type === 'INSERT' && !e.props.attributes?.length && !e.props.name.startsWith('*') && !doc.editingBlock && !engine.busy) {
         get().selectEntity(id)
@@ -1873,6 +1882,29 @@ export const useStore = create<AppState>((set, get) => {
         })
     },
     dwgPropsOpen: false,
+    noteEdit: null,
+    openNoteEditor: (id) => {
+      const e = doc.getEntity(id)
+      const vp = get().activeViewport
+      if (e?.type !== 'NOTE' || !vp) return
+      const pts = [notePoint(e.props, 0, 0), notePoint(e.props, 1, 0), notePoint(e.props, 1, 1), notePoint(e.props, 0, 1)].map((p) => vp.pageOf(p))
+      if (pts.some((p) => !p)) return
+      const xs = pts.map((p) => p![0])
+      const ys = pts.map((p) => p![1])
+      const rect = { left: Math.min(...xs), top: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) }
+      set({ noteEdit: { id, text: e.props.text, color: e.props.color, rect } })
+    },
+    closeNoteEditor: (save, text) => {
+      const ed = get().noteEdit
+      if (!ed) return
+      set({ noteEdit: null })
+      const e = doc.getEntity(ed.id)
+      if (!save || e?.type !== 'NOTE' || text === undefined || text === e.props.text) return
+      pushSnapshot('note text')
+      e.props.text = text
+      doc.touch()
+      bump()
+    },
     openDwgProps: () => set({ dwgPropsOpen: true }),
     closeDwgProps: () => set({ dwgPropsOpen: false }),
     setDrawingProps: (patch) => {
@@ -1969,6 +2001,15 @@ export const useStore = create<AppState>((set, get) => {
       if (engine.hasPending) {
         engine.submitClick(world, pickedId, snapped, subtract, raw, deferred, face)
       } else if (!engine.busy) {
+        // La cruz de una nota rápida la cierra (se puede deshacer).
+        const hit = pickedId ? doc.getEntity(pickedId) : undefined
+        if (hit?.type === 'NOTE' && noteCloseHit(hit.props, [(raw ?? world).x, (raw ?? world).y, (raw ?? world).z])) {
+          pushSnapshot('erase')
+          doc.removeEntity(hit.id)
+          set({ selection: get().selection.filter((x) => x !== hit.id) })
+          bump()
+          return
+        }
         // Selección libre estilo CAD clásico: cada click ACUMULA; con Shift resta; el click en vacío
         // (sin entidad bajo el cursor) limpia la selección, igual que una ventana que no toma nada.
         if (!pickedId) {

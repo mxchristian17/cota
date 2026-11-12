@@ -10,6 +10,7 @@ import { mapEdgePoints, solidProfiles, sweepStartRef } from './solid'
 import { viewportRing } from '../layout/viewport'
 import { rotationAbout, transformEntity } from './rigid'
 import { mapOwnThreads } from '../thread/geometry'
+import { mapNote, noteRing } from '../geom/note'
 
 /** Offsets (dx,dy) de un array rectangular, excluyendo la celda original (0,0). */
 export function rectangularOffsets(rows: number, cols: number, dRow: number, dCol: number): { dx: number; dy: number }[] {
@@ -101,6 +102,8 @@ function entityPoints(e: Entity): Vec3[] {
       return shadeOutline(e.props)
     case 'IMAGE':
       return imageRing(e.props)
+    case 'NOTE':
+      return noteRing(e.props)
   }
 }
 
@@ -281,6 +284,8 @@ export function rotateEntityInput(e: Entity, center: Vec3, ang: number): EntityI
       return { type: 'SHADE', layer: e.layer, props: mapShade(e.props, (v) => rot(v, cx, cy, cos, sin)) }
     case 'IMAGE':
       return { type: 'IMAGE', layer: e.layer, props: mapImage(e.props, (v) => rot(v, cx, cy, cos, sin)) }
+    case 'NOTE':
+      return { type: 'NOTE', layer: e.layer, props: mapNote(e.props, (v) => rot(v, cx, cy, cos, sin)) }
     case 'HATCH': {
       // Giro de planta alrededor de Z: lazos, origen y semillas; el patrón gira con ellos.
       const p = mapHatch(e.props, (v) => rot(v, cx, cy, cos, sin))

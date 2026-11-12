@@ -13,6 +13,7 @@ import { polylinePoints } from '../geom/polyline'
 import { attdefText, textCorners } from '../geom/text'
 import { dimDisplay } from '../dimension/dimGeometry'
 import { viewportRing } from '../layout/viewport'
+import { noteRing } from '../geom/note'
 
 export interface Bounds {
   minX: number
@@ -193,6 +194,8 @@ export function entityOutline(e: Entity): Pt[][] {
       return [shadeOutline(e.props).map(fromVec3)]
     case 'IMAGE':
       return [imageRing(e.props).map(fromVec3)]
+    case 'NOTE':
+      return [noteRing(e.props).map(fromVec3)]
     case 'HATCH':
     case 'REGION':
       return e.props.loops.map((l) => {

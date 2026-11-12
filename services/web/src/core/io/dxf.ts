@@ -222,6 +222,8 @@ function entityDxf(e: Entity, layerName: string): string | null {
       return e.props.loops.map((l) => entityDxf({ ...e, type: 'POLYLINE', props: loopPolyline(l, e.props.normal) }, layerName)).join('')
     case 'IMAGE': // necesita su definición en OBJECTS (ver `exportDxf`)
       return null
+    case 'NOTE': // las notas rápidas son sólo de Cota: no van al DXF/DWG
+      return null
     case 'SHADE': {
       // Sombreado de una vista: un SOLID 2D por triángulo, con su color verdadero (420).
       const t = e.props.tris

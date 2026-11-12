@@ -84,6 +84,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | [`BEDIT`](reference/insert.md#bedit) | `BE` | Edit a block definition in the Block Editor (BSAVE saves, BCLOSE closes) |
 | [`BSAVE`](reference/insert.md#bsave) | — | Save the block open in the Block Editor |
 | [`BCLOSE`](reference/insert.md#bclose) | — | Close the Block Editor, saving or discarding the changes |
+| [`NOTE`](reference/insert.md#note) | `STICKY` | Paste a sticky note on the drawing (kept only in .cota files) |
 | [`IMAGE`](reference/insert.md#image) | `IM` | Load the files of the pictures the drawing uses (a DXF stores only their path) |
 | [`LAYOUT`](reference/insert.md#layout) | `LO` | Manage layouts [Copy/Delete/New/Template/Rename/SAveas/Set/?] |
 | [`VIEWBASE`](reference/insert.md#viewbase) | — | Create a base view of the model in a layout, then its projected views |

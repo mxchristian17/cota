@@ -11,6 +11,7 @@ import { loopsSignature, rebuildHatchLoops, sourceSignature } from '../hatch/ass
 import { BYBLOCK, BYLAYER, CONTINUOUS, CONTINUOUS_DEF, isSpecialLinetype, libraryLinetype, type LinetypeContext } from '../linetype/linetypes'
 import { defaultPageSetup } from '../layout/paper'
 import { updateDimension } from '../dimension/assoc'
+import { sanitizeNote } from '../geom/note'
 import {
   builtinDimStyles,
   BUILTIN_DIM_VARS,
@@ -102,6 +103,14 @@ export class DocumentModel {
     for (const l of this.data.layers) l.lineType = fix(l.lineType) ?? CONTINUOUS
     for (const list of [this.data.entities, ...(this.data.layouts ?? []).map((l) => l.entities), ...(this.data.blocks ?? []).map((b) => b.entities)]) {
       for (const e of list) if (e.lineType !== undefined) e.lineType = fix(e.lineType)
+      // Notas rápidas (sólo `.cota`): se validan; una con datos rotos se descarta en vez de romper el dibujo.
+      for (let i = list.length - 1; i >= 0; i--) {
+        const e = list[i]
+        if (e.type !== 'NOTE') continue
+        const ok = sanitizeNote(e.props)
+        if (ok) e.props = ok
+        else list.splice(i, 1)
+      }
     }
     const cel = this.data.vars?.CELTYPE
     if (cel && !isSpecialLinetype(cel) && !this.loadLinetype(cel)) table.push({ name: cel.toUpperCase(), description: '', pattern: [] })

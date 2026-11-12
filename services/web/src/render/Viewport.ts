@@ -39,10 +39,11 @@ import { entityPattern, type LinetypeContext } from '../core/linetype/linetypes'
 import { entityDashes, linetypePaths, type DashResult } from '../core/linetype/dash'
 import { hatchFrame, hatchRegions, hatchRings, hatchStrokesCached, isSolidHatch, to3, type Ring } from '../core/hatch/geometry'
 import { isWide, polylineBand } from '../core/geom/plineWidth'
-import type { HatchEntity, ImageEntity, RegionEntity } from '../core/document/types'
+import type { HatchEntity, ImageEntity, NoteEntity, NoteProps, RegionEntity } from '../core/document/types'
 import { regionPolylines, regionSegments } from '../core/region/region'
 import { imageClip, imageFileName, imagePoint, imageRing, imageUv } from '../core/geom/image'
 import { isDoubleTap, isTap, pinchStep, touchConfig, TOUCH_AIM_OFFSET, type TouchPt } from './touchGesture'
+import { NOTE_COLORS, fitNoteText, notePoint, noteRing } from '../core/geom/note'
 
 /** Distancia máxima (px) del cursor a una línea para tomarla con un clic. */
 const PICK_LINE_PX = 10
@@ -406,6 +407,8 @@ export class Viewport {
   /** Último cursor en coordenadas de cliente (para el rayo de los snaps de caras). */
   private lastClient: [number, number] | null = null
   private boxStartPx: [number, number] | null = null
+  /** Texturas del papel de las notas rápidas, por contenido. */
+  private readonly noteTextures = new Map<string, THREE.CanvasTexture>()
   /** Primera esquina de la ventana en el dibujo: si se hace zoom o pan a mitad de la selección, la esquina la sigue. */
   private boxStartWorld: THREE.Vector3 | null = null
   /** Ventana de selección abierta por un clic en vacío: espera el clic de la esquina opuesta. */
@@ -965,6 +968,14 @@ export class Viewport {
   }
 
   /** Coordenadas de píxel relativas al canvas (origen arriba-izquierda). */
+  /** Posición en la página (px) de un punto del dibujo, o null si no se proyecta. */
+  pageOf(p: Vec3): [number, number] | null {
+    const q = this.controller.project(new THREE.Vector3(p[0] - this.origin.x, p[1] - this.origin.y, p[2] - this.origin.z))
+    if (!q) return null
+    const r = this.container.getBoundingClientRect()
+    return [r.left + q[0], r.top + q[1]]
+  }
+
   /** Punto del dibujo bajo `px`, en el plano del objetivo de la cámara (perpendicular a la vista). */
   private worldOfPx(px: [number, number]): THREE.Vector3 | null {
     const c = this.controller
@@ -2141,6 +2152,8 @@ export class Viewport {
         return viewportRing(e.props).map((v) => new THREE.Vector3(...v))
       case 'IMAGE':
         return imageRing(e.props).map((v) => new THREE.Vector3(...v))
+      case 'NOTE':
+        return noteRing(e.props).map((v) => new THREE.Vector3(...v))
       case 'ATTDEF':
         return null
       case 'SOLID3D':
@@ -2572,6 +2585,10 @@ export class Viewport {
         }
         if (e.type === 'IMAGE') {
           individual(e) // el marco va con su capa; los píxeles, debajo de todo el dibujo (es un fondo)
+          continue
+        }
+        if (e.type === 'NOTE') {
+          individual(e) // papel con textura y leaders: se arma aparte
           continue
         }
         if (e.type === 'SHADE') {
@@ -3112,6 +3129,7 @@ export class Viewport {
         return
       }
       if (e.type === 'IMAGE') this.buildImage(e, color, selected) // y después su marco, como cualquier contorno
+      if (e.type === 'NOTE') this.buildNote(e, color) // el papel y sus leaders; después su marco
       const vertices = this.entityLinePoints(e)
       if (!vertices || vertices.length < 2) return
       if (e.type === 'POLYLINE' && isWide(e.props)) this.entityGroup.add(this.buildBand(e.id, polylineBand(e.props), color))
@@ -3173,6 +3191,118 @@ export class Viewport {
    * Imagen raster: los píxeles en un polígono con textura (el recorte, triangulado) que no se elige con el cursor (se
    * elige por el marco, como en el CAD clásico). Sin el archivo adjunto queda el nombre dentro del marco.
    */
+  /** Textura del papel de una nota (color, esquina doblada, cruz para cerrar y texto ajustado), cacheada por contenido. */
+  private noteTexture(p: NoteProps): THREE.CanvasTexture {
+    const H = 384
+    const W = Math.max(96, Math.min(1536, Math.round((H * p.size[0]) / Math.max(p.size[1], 1e-9))))
+    const key = `${p.color}|${W}|${p.text}`
+    const hit = this.noteTextures.get(key)
+    if (hit) return hit
+    const cv = document.createElement('canvas')
+    cv.width = W
+    cv.height = H
+    const g = cv.getContext('2d')!
+    const c = NOTE_COLORS[p.color] ?? NOTE_COLORS.yellow
+    const f = Math.min(W, H) * 0.16
+    // Papel sin la esquina inferior derecha, que va doblada.
+    g.fillStyle = c.paper
+    g.beginPath()
+    g.moveTo(0, 0)
+    g.lineTo(W, 0)
+    g.lineTo(W, H - f)
+    g.lineTo(W - f, H)
+    g.lineTo(0, H)
+    g.closePath()
+    g.fill()
+    const grad = g.createLinearGradient(0, 0, 0, H)
+    grad.addColorStop(0, 'rgba(255,255,255,0.18)')
+    grad.addColorStop(1, 'rgba(0,0,0,0.06)')
+    g.fillStyle = grad
+    g.fill()
+    g.fillStyle = c.fold
+    g.beginPath()
+    g.moveTo(W, H - f)
+    g.lineTo(W - f, H - f)
+    g.lineTo(W - f, H)
+    g.closePath()
+    g.fill()
+    // Cruz para cerrar, arriba a la derecha.
+    const x = Math.min(W, H) * 0.09
+    const m = Math.min(W, H) * 0.05
+    g.strokeStyle = c.ink
+    g.globalAlpha = 0.55
+    g.lineWidth = Math.max(2, x * 0.18)
+    g.beginPath()
+    g.moveTo(W - m - x, m)
+    g.lineTo(W - m, m + x)
+    g.moveTo(W - m, m)
+    g.lineTo(W - m - x, m + x)
+    g.stroke()
+    g.globalAlpha = 1
+    // Texto ajustado al espacio libre (debajo de la franja de la cruz).
+    const fit = fitNoteText(p.text, [W, H])
+    if (fit.lines.length) {
+      const px = fit.em * H
+      g.fillStyle = c.ink
+      g.textBaseline = 'top'
+      g.font = `${px}px "Segoe Print", "Bradley Hand", "Comic Sans MS", "Noto Sans", sans-serif`
+      fit.lines.forEach((line, i) => g.fillText(line, W * 0.07, H * 0.2 + i * px * 1.25, W * 0.86))
+    }
+    const tex = new THREE.CanvasTexture(cv)
+    tex.colorSpace = THREE.SRGBColorSpace
+    tex.anisotropy = 4
+    if (this.noteTextures.size > 200) {
+      for (const t of this.noteTextures.values()) t.dispose()
+      this.noteTextures.clear()
+    }
+    this.noteTextures.set(key, tex)
+    return tex
+  }
+
+  /** Nota rápida: el papel (con su textura) sobre su plano y sus leaders con punta de flecha. */
+  private buildNote(e: NoteEntity, color: THREE.Color): void {
+    const p = e.props
+    const pos = [notePoint(p, 0, 0), notePoint(p, 1, 0), notePoint(p, 1, 1), notePoint(p, 0, 1)].flat()
+    const geom = new THREE.BufferGeometry()
+    geom.setAttribute('position', this.local(pos))
+    geom.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2))
+    geom.setIndex([0, 1, 2, 0, 2, 3])
+    const mat = new THREE.MeshBasicMaterial({
+      map: this.noteTexture(p),
+      transparent: true,
+      alphaTest: 0.05,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    })
+    const mesh = new THREE.Mesh(geom, mat)
+    mesh.userData.entityId = e.id
+    this.entityGroup.add(mesh)
+    if (!p.leaders?.length) return
+    const n = [p.u[1] * p.v[2] - p.u[2] * p.v[1], p.u[2] * p.v[0] - p.u[0] * p.v[2], p.u[0] * p.v[1] - p.u[1] * p.v[0]]
+    const head = Math.min(p.size[0], p.size[1]) * 0.08
+    const seg: number[] = []
+    for (const l of p.leaders) {
+      const a = notePoint(p, l.at[0], l.at[1])
+      const d = [l.to[0] - a[0], l.to[1] - a[1], l.to[2] - a[2]]
+      const len = Math.hypot(d[0], d[1], d[2])
+      if (len < 1e-9) continue
+      const dir = d.map((x) => x / len)
+      let side = [dir[1] * n[2] - dir[2] * n[1], dir[2] * n[0] - dir[0] * n[2], dir[0] * n[1] - dir[1] * n[0]]
+      const sl = Math.hypot(side[0], side[1], side[2]) || 1
+      side = side.map((x) => x / sl)
+      const b = (k: number) => [l.to[0] - dir[0] * head + side[0] * head * 0.35 * k, l.to[1] - dir[1] * head + side[1] * head * 0.35 * k, l.to[2] - dir[2] * head + side[2] * head * 0.35 * k]
+      seg.push(...a, ...l.to, ...l.to, ...b(1), ...l.to, ...b(-1))
+    }
+    const lg = new THREE.BufferGeometry()
+    lg.setAttribute('position', this.local(seg))
+    const lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color }))
+    lines.userData.entityId = e.id
+    this.entityGroup.add(lines)
+  }
+
   private buildImage(e: ImageEntity, color: THREE.Color, selected: boolean): void {
     const p = e.props
     const tex = p.data ? this.imageTexture(p.data) : null

@@ -12,6 +12,7 @@ import { attdefText, textSnapPoints } from '../geom/text'
 import { meshVertices, meshWireframe } from '../editing/mesh'
 import { dimDisplay } from '../dimension/dimGeometry'
 import { viewportRing } from '../layout/viewport'
+import { noteRing } from '../geom/note'
 
 /**
  * Descomposición de entidades en puntos y segmentos de mundo. Vive aparte de `SnapService` porque
@@ -57,6 +58,8 @@ export function endpointsOfEntity(e: Entity): Pt[] {
       return viewportRing(e.props).slice(0, -1).map(fromVec3)
     case 'IMAGE':
       return imageRing(e.props).slice(0, -1).map(fromVec3)
+    case 'NOTE':
+      return noteRing(e.props).slice(0, -1).map(fromVec3)
     case 'CIRCLE':
     case 'INSERT': // las inserciones se expanden a geometría de mundo antes de llegar aquí
     case 'HATCH': // los sombreados no dan object snaps (OSOPTIONS del CAD clásico)
@@ -100,8 +103,8 @@ export function segmentsOfEntity(e: Entity): [Pt, Pt][] {
     }
   } else if (e.type === 'DIMENSION') {
     for (const [s, en] of dimDisplay(e.props).lines) segs.push([fromVec3(s), fromVec3(en)])
-  } else if (e.type === 'VIEWPORT' || e.type === 'IMAGE') {
-    const v = (e.type === 'VIEWPORT' ? viewportRing(e.props) : imageRing(e.props)).map(fromVec3)
+  } else if (e.type === 'VIEWPORT' || e.type === 'IMAGE' || e.type === 'NOTE') {
+    const v = (e.type === 'VIEWPORT' ? viewportRing(e.props) : e.type === 'NOTE' ? noteRing(e.props) : imageRing(e.props)).map(fromVec3)
     for (let i = 0; i < v.length - 1; i++) segs.push([v[i], v[i + 1]])
   }
   return segs

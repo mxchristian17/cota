@@ -48,6 +48,7 @@ export type EntityType =
   | 'POINT'
   | 'IMAGE'
   | 'REGION'
+  | 'NOTE'
 
 /** Nombre de un tipo de línea de la tabla del dibujo, p. ej. `CONTINUOUS`, `HIDDEN`, `CENTER`. */
 export type LineType = string
@@ -630,6 +631,7 @@ export type EntityProps =
   | ShadeProps
   | ImageProps
   | RegionProps
+  | NoteProps
 
 /**
  * Propiedades comunes de todo objeto: tipo de línea (ausente = ByLayer; `BYBLOCK` o un nombre de
@@ -811,6 +813,31 @@ export interface RegionEntity extends EntityCommon {
   props: RegionProps
 }
 
+/** Color del papel de una nota rápida. */
+export type NoteColor = 'yellow' | 'violet' | 'pink' | 'green' | 'blue' | 'orange'
+
+/**
+ * Nota rápida (NOTE, sólo en `.cota`): un papel de nota sobre un plano del dibujo. `origin` es la esquina inferior
+ * izquierda; `u` y `v`, los ejes unitarios del papel (ancho y alto); `size`, ancho y alto en unidades del dibujo. Cada
+ * leader sale de un punto del borde (`at`, fracción del ancho y del alto) y apunta a `to`.
+ */
+export interface NoteProps {
+  origin: Vec3
+  u: Vec3
+  v: Vec3
+  size: [number, number]
+  text: string
+  color: NoteColor
+  leaders?: Array<{ at: [number, number]; to: Vec3 }>
+}
+
+export interface NoteEntity extends EntityCommon {
+  id: string
+  type: 'NOTE'
+  layer: string
+  props: NoteProps
+}
+
 export type Entity =
   | PointEntity
   | LineEntity
@@ -831,6 +858,7 @@ export type Entity =
   | ShadeEntity
   | ImageEntity
   | RegionEntity
+  | NoteEntity
 
 /**
  * Entidad a agregar. Sin `lineType`/`ltScale` es un objeto nuevo y toma `CELTYPE`/`CELTSCALE`; con

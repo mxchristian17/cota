@@ -7,6 +7,7 @@ import type { Vec3 } from '../math'
 import type { Entity, EntityInput } from '../document/types'
 import { scaleSolid, translateSolid } from './solid'
 import { translateMesh } from './mesh'
+import { mapNote } from '../geom/note'
 
 /** Traslada las coordenadas de una entidad in-place (3D). */
 export function translateEntity(e: Entity, dx: number, dy: number, dz = 0): void {
@@ -65,6 +66,9 @@ export function translateEntity(e: Entity, dx: number, dy: number, dz = 0): void
     case 'IMAGE':
       Object.assign(e.props, mapImage(e.props, t))
       break
+    case 'NOTE':
+      Object.assign(e.props, mapNote(e.props, t))
+      break
     case 'VIEWPORT':
       // Se mueve el marco en el papel; la vista del modelo (target) no cambia.
       e.props.center = t(e.props.center)
@@ -121,6 +125,9 @@ export function scaleEntity(e: Entity, c: Vec3, f: number): void {
       break
     case 'IMAGE':
       Object.assign(e.props, mapImage(e.props, s))
+      break
+    case 'NOTE':
+      Object.assign(e.props, mapNote(e.props, s))
       break
     case 'SOLID3D':
       scaleSolid(e.props, c, f)

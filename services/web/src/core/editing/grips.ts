@@ -1,7 +1,7 @@
 import { hatchCenter } from '../hatch/edit'
 import { regionCenter } from '../region/region'
 import type { Vec3 } from '../math'
-import type { Entity } from '../document/types'
+import type { Entity, NoteProps } from '../document/types'
 import { translateEntity } from './edit'
 import { ellipseAxisPoints } from '../geom/ellipse'
 import { arcBasis, arcEndpoints, arcMidpoint, arcPointAtAngle, normAngle } from '../geom/arc'
@@ -9,6 +9,7 @@ import { solidWireframe } from './solid'
 import { meshWireframe } from './mesh'
 import { coverClip, viewportCorners } from '../layout/viewport'
 import { dimDisplay, fixLinearRotation } from '../dimension/dimGeometry'
+import { NOTE_ANCHORS, NOTE_RESIZE_ANCHOR, notePoint } from '../geom/note'
 
 /**
  * Grips (puntos de anclaje editables, estilo CAD clásico). Cada entidad expone su conjunto de grips y una
@@ -28,6 +29,7 @@ export type GripRole =
   | { t: 'dim-textpos' } // posición del texto de la cota
   | { t: 'dim-line' } // extremo de la línea de cota lineal: la desplaza en paralelo
   | { t: 'dim-text' } // texto de la cota: lo mueve según DIMTMOVE
+  | { t: 'note-anchor'; index: number } // borde de una nota: la esquina inferior derecha la agranda; las demás, un leader
 
 export interface Grip {
   point: Vec3
@@ -155,6 +157,11 @@ export function entityGrips(e: Entity): Grip[] {
       return []
     case 'IMAGE':
       return [{ point: e.props.origin, role: { t: 'move' } }]
+    case 'NOTE':
+      return [
+        { point: notePoint(e.props, 0.5, 0.5), role: { t: 'move' } },
+        ...NOTE_ANCHORS.map(([a, b], index) => ({ point: notePoint(e.props, a, b), role: { t: 'note-anchor' as const, index } })),
+      ]
     case 'VIEWPORT':
       // Recortado: un grip por vértice del contorno (VPCLIP), como el CAD clásico.
       if (e.props.clip && e.props.clip.length >= 3) {
@@ -199,6 +206,10 @@ export function applyGrip(e: Entity, grip: Grip, to: Vec3): void {
   const r = grip.role
   if (r.t === 'move') {
     translateEntity(e, to[0] - grip.point[0], to[1] - grip.point[1], to[2] - grip.point[2])
+    return
+  }
+  if (e.type === 'NOTE' && r.t === 'note-anchor') {
+    applyNoteAnchor(e.props, r.index, to)
     return
   }
   switch (e.type) {
@@ -299,4 +310,28 @@ export function applyGrip(e: Entity, grip: Grip, to: Vec3): void {
     case 'REGION':
       break // sólo grip de mover (ya resuelto arriba)
   }
+}
+
+/**
+ * Grip del borde de una nota: la esquina inferior derecha la agranda (la superior izquierda queda fija, con un mínimo);
+ * cualquier otro saca un leader desde ese punto hasta `to` (o mueve la punta del que ya salía de ahí).
+ */
+function applyNoteAnchor(p: NoteProps, index: number, to: Vec3): void {
+  const at = NOTE_ANCHORS[index]
+  if (!at) return
+  if (index === NOTE_RESIZE_ANCHOR) {
+    const tl = notePoint(p, 0, 1)
+    const d: Vec3 = [to[0] - tl[0], to[1] - tl[1], to[2] - tl[2]]
+    const min = Math.max(p.size[0], p.size[1]) * 0.05
+    const w = Math.max(min, d[0] * p.u[0] + d[1] * p.u[1] + d[2] * p.u[2])
+    const h = Math.max(min, -(d[0] * p.v[0] + d[1] * p.v[1] + d[2] * p.v[2]))
+    p.origin = [tl[0] - p.v[0] * h, tl[1] - p.v[1] * h, tl[2] - p.v[2] * h]
+    p.size = [w, h]
+    return
+  }
+  const leaders = p.leaders ?? []
+  const old = leaders.find((l) => l.at[0] === at[0] && l.at[1] === at[1])
+  if (old) old.to = [...to]
+  else leaders.push({ at: [at[0], at[1]], to: [...to] })
+  p.leaders = leaders
 }

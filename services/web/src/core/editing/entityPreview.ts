@@ -13,6 +13,7 @@ import { polylinePoints } from '../geom/polyline'
 import { attdefText, textCorners } from '../geom/text'
 import { dimDisplay } from '../dimension/dimGeometry'
 import { viewportRing } from '../layout/viewport'
+import { noteRing } from '../geom/note'
 
 /**
  * Genera las formas de previsualización (fantasma) de una entidad desplazada
@@ -77,6 +78,8 @@ export function entityPreviewShapes(e: Entity, dx: number, dy: number, dz = 0): 
       return [{ kind: 'polyline', points: shadeOutline(e.props).map(shift) }]
     case 'IMAGE':
       return [{ kind: 'polyline', points: imageRing(e.props).map(shift) }]
+    case 'NOTE':
+      return [{ kind: 'polyline', points: noteRing(e.props).map(shift) }]
     case 'HATCH':
     case 'REGION':
       return e.props.loops.map((l) => {

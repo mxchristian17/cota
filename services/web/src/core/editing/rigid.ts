@@ -11,6 +11,7 @@ import { linearDir } from '../dimension/dimGeometry'
 import { sweepStartRef } from './solid'
 import { insertXDir } from './block'
 import { mapOwnThreads } from '../thread/geometry'
+import { mapNote } from '../geom/note'
 
 /**
  * Transformaciones rígidas (rotación + traslación) de entidades y sólidos en 3D. Son la base
@@ -281,6 +282,8 @@ function transformEntityProps(e: Entity, r: Rigid): EntityInput | null {
       return { type: 'SHADE', layer, props: mapShade(e.props, (v) => tp(r, v)) }
     case 'IMAGE':
       return { type: 'IMAGE', layer, props: mapImage(e.props, (v) => tp(r, v)) }
+    case 'NOTE':
+      return { type: 'NOTE', layer, props: mapNote(e.props, (v) => tp(r, v)) }
     case 'HATCH': {
       // Lazos, origen y semillas se mueven; el ángulo del patrón gira con la base del plano.
       const h = e.props

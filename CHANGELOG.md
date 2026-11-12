@@ -4,6 +4,16 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.41.0] — 2026-11-12
+
+### Added
+- **Sticky notes** (`NOTE`, Insert menu): paste a paper note (yellow, violet, pink, green, blue or orange) with a folded
+  corner and a close cross on the working UCS, or on the face of a solid with the dynamic UCS. Its text resizes itself to
+  fill the note. Double-click to edit the text on the note itself, drag the bottom-right corner to resize it, and drag
+  any other corner or midpoint to draw a leader with object snaps. Notes move, copy, rotate, scale and mirror like any
+  object (a mirrored note still reads the right way), and are validated when a `.cota` file opens. DWG, DXF and PDF
+  leave them out.
+
 ## [2.40.0] — 2026-11-12
 
 ### Added

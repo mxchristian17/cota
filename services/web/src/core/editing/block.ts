@@ -9,6 +9,7 @@ import { attdefText } from '../geom/text'
 import { arcBasis, arcEndpoints, arcFromAngles, arcIsClockwise } from '../geom/arc'
 import { sweepStartRef } from './solid'
 import { mapOwnThreads } from '../thread/geometry'
+import { mapNote } from '../geom/note'
 
 /**
  * Bloques: transformación de la geometría de una definición al mundo según un INSERT
@@ -232,6 +233,8 @@ export function transformEntity(e: Entity, ins: InsertProps): Entity {
       return { ...e, props: mapShade(e.props, P) }
     case 'IMAGE':
       return { ...e, props: mapImage(e.props, P) }
+    case 'NOTE':
+      return { ...e, props: mapNote(e.props, P) }
     case 'POINT':
       return { ...e, props: { position: P(e.props.position) } }
     case 'LINE':
