@@ -360,8 +360,9 @@ Creates multiline text: one object with several lines, placed from its top-left 
 
 1. `Specify start point of text:` the top-left corner.
 2. The height and the rotation, as in TEXT.
-3. A text window opens on the drawing itself, at the text's place, height and angle, with a formatting bar: bold,
-   italic, height, font, justification (left, center, right) and the Ø, ° and ± symbols. <kbd>Enter</kbd> starts a new
+3. A text window opens on the drawing itself, at the text's place, height and angle, with a formatting bar. Bold,
+   italic, underline, color, font and relative size (0.5× to 2×) apply to the selected characters, so one word can be
+   bold or red; height and justification (left, center, right) apply to the whole text; Ø, ° and ± are inserted. <kbd>Enter</kbd> starts a new
    line; <kbd>Ctrl</kbd>+<kbd>Enter</kbd>, **OK** or a click away accepts; <kbd>Esc</kbd> cancels. From a script or
    an agent there is no window: `Line 1 (empty line to finish):`, `Line 2…` ask for each line and an empty line ends.
 

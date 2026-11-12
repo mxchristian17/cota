@@ -4,6 +4,13 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.43.0] — 2026-11-12
+
+### Added
+- **Partial formats in MTEXT**: the in-place text window formats the selected characters (bold, italic, underline,
+  color, font and relative size from 0.5× to 2×), so a single word can be bold, red or larger. The formats are saved
+  with the text and come back when you double-click it again.
+
 ## [2.42.0] — 2026-11-12
 
 ### Added
