@@ -4,6 +4,8 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.39.0] — 2026-11-11
+
 ### Added
 - **Exact solid kernel** (`SOLIDKERNEL`, on by default): 3D solids are built with an exact B-rep kernel that runs in
   its own thread and is downloaded once (about 5 MB compressed) the first time a drawing needs it. Fillets and

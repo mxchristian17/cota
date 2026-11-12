@@ -38,6 +38,10 @@ discussion.
 | planned | **Faster command line**: smarter autocomplete (by usage, aliases and system variables), searchable history, and editable aliases in a file. |
 | planned | Dynamic input next to the cursor (length, angle and coordinates typed in place) with keyboard-only workflows end to end. |
 | next | Scripts: several commands as one operation (one undo step), pasted in the command line, typed in SCRIPT, loaded from a `.scr` file or shared as a link. Recording macros comes later. |
+| planned | **TRIM and EXTEND by window**: pick the edges to cut with a window or crossing box, and hide object snap markers while trimming so they do not get in the way. |
+| planned | **Zoom during a window selection keeps its first corner** where it was in the drawing, so you can zoom in to pick exactly what the box takes. |
+| planned | **MTEXT edited in place**: a text window on the drawing itself, with the formatting toolbar, as in the classic CAD. |
+| planned | **Sticky notes**: notes pasted on the drawing with the look of a sticky note (yellow, violet and the usual colors), a close button, a corner to resize them with the text fitting the note, double-click to edit the text. They lie on the working UCS like a rectangle, on the working plane or on the face of any solid. Dragging one of their end or mid grips draws a leader to where you point, with object snaps. Saved in `.cota` files; other formats leave them out. |
 
 ## AI agents
 
