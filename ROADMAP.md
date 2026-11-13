@@ -12,9 +12,10 @@ discussion.
 | Status | Item |
 |---|---|
 | done | **DWG in the browser**: open and save `.dwg` files with no server (a permissively licensed reader, in a background thread), checked against a standard sample drawing saved in every DWG/DXF version. |
-| next | **3D solids from DWG/DXF with faces**: the ACIS data of 3DSOLID, REGION and BODY is already read for their edges; the faces are still missing. |
-| planned | Blocks and layouts on DXF/DWG export, and WIPEOUT masks. Full list in [DWG and DXF coverage](docs/dwg-coverage.md). |
-| next | Blocks from DXF/DWG: import `INSERT` references and attributes as Cota blocks. |
+| done | **3D solids from DWG/DXF with faces**: 3DSOLID, REGION and BODY open as meshes of their faces, read from their ACIS model (2.15.0). |
+| done | **WIPEOUT masks** from DWG/DXF: they cover what is under them and are exported back as WIPEOUT (2.23.0). |
+| done | **Blocks from DXF/DWG as Cota blocks**: named blocks open as block definitions and each `INSERT` as an insert, with its attribute values (invisible and constant ones included), nested blocks, scale, rotation and extrusion; anonymous blocks, external references and inserts whose attributes were moved are expanded as before (2.44.0). |
+| planned | Blocks and layouts on DXF/DWG export (today inserts are expanded and layouts stay out). Full list in [DWG and DXF coverage](docs/dwg-coverage.md). |
 | planned | STEP/IGES: test the import with real-world parts and assemblies; keep the assembly tree. |
 | idea | Export STEP from Cota solids. |
 
@@ -25,8 +26,8 @@ discussion.
 | next | EXTRUDE with a live solid preview; the height follows the side of the cursor. |
 | done | **Exact solid kernel**: booleans, fillets and chamfers of 3D solids are built with an exact B-rep kernel (OpenCascade compiled to WebAssembly, loaded only for 3D solids, `SOLIDKERNEL`), so any subset of edges of a sphere cut by a box rounds cleanly and a sphere–plane circle is one edge; the mesh stays as the fallback (2.39.0). |
 | next | **Exact topology**: edges, faces and snaps of solids taken from the B-rep instead of the mesh, exact projected views, STEP export and exact mass properties. |
-| planned | Per-object lineweight (ByLayer by default) and a toggle to show lineweights in the model. |
-| planned | Isolate / hide objects and quick select from the context menu. |
+| done | **Per-object lineweight** (ByLayer by default, `LWEIGHT`) and a toggle to show lineweights in the model (`LWDISPLAY`, LWT in the status bar) (2.4.0, 2.25.0). |
+| done | **Isolate / hide objects and quick select** (`ISOLATEOBJECTS`, `HIDEOBJECTS`, `QSELECT`), also from the context menu (2.3.0). |
 | done | **Edit a block by double-clicking it**: the block definition opens in the Block Editor (`BEDIT`, `BSAVE`, `BCLOSE`), as in the classic block editor, and saving updates every insert of that block (2.37.0). |
 | planned | Drawing in a UCS seen edge-on (the cursor stays on the view plane through the base point). |
 | idea | Parametric sketches with geometric and dimensional constraints. |
@@ -37,7 +38,8 @@ discussion.
 |---|---|
 | planned | **Faster command line**: smarter autocomplete (by usage, aliases and system variables), searchable history, and editable aliases in a file. |
 | planned | Dynamic input next to the cursor (length, angle and coordinates typed in place) with keyboard-only workflows end to end. |
-| next | Scripts: several commands as one operation (one undo step), pasted in the command line, typed in SCRIPT, loaded from a `.scr` file or shared as a link. Recording macros comes later. |
+| done | **Scripts**: several commands as one operation (one undo step), pasted in the command line, typed in `SCRIPT`, loaded from a `.scr` file or shared as a link (2.6.0). |
+| idea | Recording macros from what you do. |
 | done | **TRIM and EXTEND by window**: a click on empty space opens a crossing window, and object snap markers stay hidden while picking what to trim (2.40.0). |
 | done | **Zoom during a window selection keeps its first corner** where it was in the drawing, so you can zoom in to pick exactly what the box takes (2.40.0). |
 | done | **MTEXT edited in place**: a text window on the drawing itself, with the formatting toolbar, as in the classic CAD (2.42.0). |
@@ -48,12 +50,13 @@ discussion.
 | Status | Item |
 |---|---|
 | done | **Agent panel**: in the browser with your own API key (2.7.0) and with the optional server (Docker), where the key and the conversations live on the server (2.8.0). |
-| next | Providers: Anthropic, OpenAI, Google Gemini and OpenRouter or any OpenAI-compatible endpoint shipped in 2.7.0; direct DeepSeek, Kimi (Moonshot) and GLM (Zhipu) presets next. |
+| done | Providers: Anthropic, OpenAI, Google Gemini and OpenRouter or any OpenAI-compatible endpoint (2.7.0), and DeepSeek with its own key (2.19.0). |
+| next | Direct Kimi (Moonshot) and GLM (Zhipu) presets (today through OpenRouter or the OpenAI-compatible endpoint). |
 | planned | **Sub-agents**: the main agent can launch helpers for parallel work, each with its own model. |
 | next | **Scene context on demand** (objects in a box with bounding boxes and descriptions shipped in 2.7.0): the agent asks for a list of objects with their bounding boxes and short descriptions, picks what it needs, and can limit its context to one or more virtual boxes in space (on a large scene it only loads the region it is working on). |
 | planned | **Parametric geometry for agents**: objects are passed by their parameters (a cylinder is its axis, radius and height; a fillet is its edge and radius), never as raw vertices, to keep token use low. |
 | done | Context meter and a `COMPACT` command that summarizes a long conversation to free context (2.7.0). |
-| planned | **MCP server** so external agents (desktop and coding assistants) can model in Cota with the same tools. |
+| done | **MCP server**: external agents (desktop and coding assistants) model in the drawing open in Cota with the same tools, through the Cota bridge `cota-mcp.mjs` (2.20.0). |
 | idea | Scripting API to drive Cota from code (batch drawings, parametric parts). |
 
 ## Mobile and on site
@@ -61,6 +64,7 @@ discussion.
 | Status | Item |
 |---|---|
 | done | **Mobile view for the job site**: a reduced phone interface to open drawings, orbit comfortably with touch, measure with DIST and switch the visual style (shaded, wireframe, hidden) from big on-screen buttons; also views, layers only on screen and layouts. Not the full editor (2.10.0). |
+| done | **Full editor on a phone**: it fits the width of the screen, with the menus on a second row, the panels over the drawing and a button back to the mobile view (2.44.0). |
 
 ## Mechanisms and assemblies
 
@@ -107,6 +111,7 @@ discussion.
 
 | Status | Item |
 |---|---|
+| done | **Models with fillets open fast**: while the exact kernel works each solid shows a quick sketch instead of an approximate fillet, several threads share the work, and the results are kept in the browser, so reopening a drawing does not compute them again (2.44.0). |
 | next | Heavy models: faster rebuild after each change, orbit and selection with hundreds of filleted solids. |
 | planned | Drawing views: small glitches near rounded edges in some projections. |
 | done | **Session log and `TRACEBACK`**: Cota keeps a log of everything done since the window was opened, with all its parameters: commands and every input, geometry created or edited, selections, view and visual style changes, settings. It lives until the window is closed. `TRACEBACK` exports the last *n* lines or the last *n* minutes to a file, detailed enough that an agent can replay that interval exactly and reproduce a bug found by you or by a user. (2.38.0). |
