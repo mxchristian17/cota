@@ -1,6 +1,6 @@
 import { fromVec3, pt, toVec3, type Pt, type Vec3 } from '../math'
 import type { ArcProps, CircleProps, EllipseProps, Entity, SolidProps } from '../document/types'
-import { planarFaceNormal, rayFaces, solidTopology, type Topology } from '../editing/topology'
+import { planarFaceNormal, rayFaces, solidPending, solidTopology, type Topology } from '../editing/topology'
 import { ucsToWorld, worldToUcs, type Ucs } from '../ucs'
 import { snapEdgeMidpoint, solidCenters, solidQuadrants, solidSnapEdges, solidVertices } from '../editing/solid'
 import { ellipseMinorVec, ellipseParamSweep, ellipsePointAt, ellipsePoints, ellipseQuadrants, isEllipseArc } from '../geom/ellipse'
@@ -497,6 +497,7 @@ export function computeSnap(cursor: Pt, entities: Entity[], s: SnapSettings): Sn
     const nearCurves: Array<{ curve: Curve; z: number; self: boolean }> = []
     entities.forEach((e, idx) => {
       owner = e.id
+      if (e.type === 'SOLID3D' && solidPending(e.props)) return // en boceto hasta que llegue el resultado exacto
       if (e.type === 'POINT') {
         add(fromVec3(e.props.position), 'node') // NODE del CAD clásico
         return

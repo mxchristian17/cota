@@ -112,4 +112,67 @@ describe('cliente del núcleo exacto', () => {
     k.requestKernel(JSON.stringify(box(2)), box(2))
     expect(FakeWorker.all).toHaveLength(1)
   })
+
+  it('si el módulo no carga, avisa por los que esperaban (para dibujarlos con la malla)', async () => {
+    const k = await load()
+    const seen: string[] = []
+    k.onKernelResults((keys) => seen.push(...keys))
+    const [a, b, c] = [1, 2, 3].map(box)
+    for (const p of [a, b, c]) k.requestKernel(JSON.stringify(p), p)
+    const w = FakeWorker.all[0]
+    w.reply({ id: w.posted[0].id, ok: false, op: 'INIT', message: 'CompileError', fatal: true })
+    vi.advanceTimersByTime(60)
+    expect(seen.sort()).toEqual([a, b, c].map((p) => JSON.stringify(p)).sort())
+  })
+
+  it('con muchos pedidos esperando suma Workers en paralelo, hasta el máximo', async () => {
+    vi.stubGlobal('navigator', { hardwareConcurrency: 8, deviceMemory: 8 })
+    const k = await load()
+    const list = Array.from({ length: 30 }, (_, i) => box(i + 1))
+    for (const p of list) k.requestKernel(JSON.stringify(p), p)
+    expect(FakeWorker.all).toHaveLength(3)
+    for (const w of FakeWorker.all) expect(w.posted).toHaveLength(2)
+    // Cada uno sigue con lo que espera, el más nuevo primero.
+    const w = FakeWorker.all[1]
+    w.reply({ id: w.posted[0].id, ok: true, mesh: okMesh, stats: okStats })
+    expect(w.posted[2].props).toEqual(list[29])
+  })
+
+  it('pocos pedidos usan un solo Worker; el máximo depende de núcleos y memoria', async () => {
+    const k = await load()
+    for (const p of [1, 2, 3, 4, 5].map(box)) k.requestKernel(JSON.stringify(p), p)
+    expect(FakeWorker.all).toHaveLength(1)
+    expect(k.maxWorkers(2, 8)).toBe(1)
+    expect(k.maxWorkers(8, 2)).toBe(1)
+    expect(k.maxWorkers(8, 4)).toBe(2)
+    expect(k.maxWorkers(16, 8)).toBe(3)
+    expect(k.maxWorkers(8, undefined)).toBe(3)
+  })
+
+  it('busca primero en el caché persistente: lo guardado no va al Worker y lo nuevo se guarda', async () => {
+    const [a, b] = [1, 2].map(box)
+    const saved: string[] = []
+    vi.doMock('./kernelCache', () => ({
+      persistentCacheAvailable: () => true,
+      loadResults: async (keys: string[]) => new Map(keys.filter((x) => x === JSON.stringify(a)).map((x) => [x, { ok: true, mesh: okMesh, stats: okStats }])),
+      saveResult: (key: string) => void saved.push(key),
+    }))
+    const k = await load()
+    const seen: string[] = []
+    k.onKernelResults((keys) => seen.push(...keys))
+    k.requestKernel(JSON.stringify(a), a)
+    k.requestKernel(JSON.stringify(b), b)
+    k.requestKernel(JSON.stringify(b), b) // el repetido mientras se busca no se vuelve a pedir
+    expect(FakeWorker.all).toHaveLength(0)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(k.kernelResult(JSON.stringify(a))?.ok).toBe(true)
+    const w = FakeWorker.all[0]
+    expect(FakeWorker.all).toHaveLength(1)
+    expect(w.posted.map((m) => m.props)).toEqual([b])
+    w.reply({ id: w.posted[0].id, ok: true, mesh: okMesh, stats: okStats })
+    expect(saved).toEqual([JSON.stringify(b)])
+    vi.advanceTimersByTime(60)
+    expect(seen.sort()).toEqual([a, b].map((p) => JSON.stringify(p)).sort())
+    vi.doUnmock('./kernelCache')
+  })
 })

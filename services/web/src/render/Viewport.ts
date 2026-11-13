@@ -21,10 +21,10 @@ import { isWorldUcs, ORTHO_UCS, orthoUcs, sameUcs, ucsZ, WORLD_UCS, type OrthoUc
 import { sysvars } from '../core/commands/sysvars'
 import { isSmall, lodActive, sizeSignature, type SizeSig } from '../core/render/lod'
 import { faceUcsAt, type FaceHit } from '../core/editing/faceUcs'
-import { rayFaces, solidTopology } from '../core/editing/topology'
+import { rayFaces, solidPending, solidTopology } from '../core/editing/topology'
 import { DEFAULT_VISUAL_STYLE, type CameraMode, type ViewName, type VisualStyle } from '../core/view'
 import { CameraController } from './CameraController'
-import { previewSolidGeometry, solidEdgePositions, solidGeometry } from './csg'
+import { displaySolidEdges, displaySolidGeometry, displaySolidTopology, previewSolidGeometry } from './csg'
 import { meshRender, type MeshRender } from './meshBuffers'
 import { pointMarkTexture } from './pointMarks'
 import { ellipsePoints } from '../core/geom/ellipse'
@@ -1747,7 +1747,7 @@ export class Viewport {
     let best: { id: string; t: number } | null = null
     for (const e of solids) {
       if (e.type !== 'SOLID3D') continue
-      const topo = solidTopology(e.props)
+      const topo = displaySolidTopology(e.props)
       if (!topo) continue
       for (const h of rayFaces(topo, o, dir)) if (!best || h.t < best.t) best = { id: e.id, t: h.t }
     }
@@ -2412,7 +2412,7 @@ export class Viewport {
   }
 
   private buildSolid(e: SolidEntity, color: THREE.Color, selected: boolean): THREE.Object3D {
-    const g = this.styledSolidGroup(solidGeometry(e.props), color, selected, e.id, true, solidEdgePositions(e.props))
+    const g = this.styledSolidGroup(displaySolidGeometry(e.props), color, selected, e.id, true, displaySolidEdges(e.props))
     g.position.copy(this.origin).negate() // su geometría (compartida con el CSG) está en coordenadas del dibujo
     return g
   }
@@ -2637,7 +2637,7 @@ export class Viewport {
           continue
         }
         if (e.type === 'SOLID3D') {
-          const g = solidGeometry(e.props)
+          const g = displaySolidGeometry(e.props)
           if (showMesh) {
             const ng = g.index ? g.toNonIndexed() : g
             if (!ng.getAttribute('normal')) ng.computeVertexNormals()
@@ -2651,7 +2651,7 @@ export class Viewport {
             if (ng !== g) ng.dispose()
           }
           if (showEdges) {
-            const pa: ArrayLike<number> = solidEdgePositions(e.props)
+            const pa: ArrayLike<number> = displaySolidEdges(e.props)
             const b = getEdges(`${ro}|${this.edgeHex(colorHex)}${lwKey(layer, e.lineWeight)}`)
             b.ranges.push({ s: b.n, id: e.id })
             b.parts.push(this.origin.lengthSq() ? this.shifted(pa) : pa)
@@ -3053,7 +3053,7 @@ export class Viewport {
     for (const e of this.entities()) {
       if (e.type !== 'SOLID3D' || this.lodSmall.get(e.id)) continue
       const layer = layers.get(e.layer)
-      if (!layerVisible(layer)) continue
+      if (!layerVisible(layer) || solidPending(e.props)) continue // en boceto: sin siluetas hasta el resultado exacto
       const topo = solidTopology(e.props)
       if (!topo) continue
       const { verts, normals, triFace, links } = topo

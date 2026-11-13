@@ -8,6 +8,7 @@ import { arcEndpoints, tessellateArc } from '../geom/arc'
 import { ellipseEndpoints } from '../geom/ellipse'
 import { polylinePoints } from '../geom/polyline'
 import { solidSnapWireframe, solidVertices } from '../editing/solid'
+import { solidPending } from '../editing/topology'
 import { attdefText, textSnapPoints } from '../geom/text'
 import { meshVertices, meshWireframe } from '../editing/mesh'
 import { dimDisplay } from '../dimension/dimGeometry'
@@ -42,7 +43,7 @@ export function endpointsOfEntity(e: Entity): Pt[] {
       return cp.length ? [fromVec3(cp[0]), fromVec3(cp[cp.length - 1])] : []
     }
     case 'SOLID3D':
-      return solidVertices(e.props).map(fromVec3)
+      return solidPending(e.props) ? [] : solidVertices(e.props).map(fromVec3)
     case 'MESH3D':
       return meshVertices(e.props).map(fromVec3)
     case 'DIMENSION':
@@ -92,7 +93,7 @@ export function segmentsOfEntity(e: Entity): [Pt, Pt][] {
     // La curva (como se dibuja), no la poligonal de sus puntos: NEA, INT y PER caen sobre ella.
     for (const q of splineCurve(e.props.controlPoints, e.props.degree)?.prims ?? []) if (q.k === 'L') segs.push([fromVec3(q.a), fromVec3(q.b)])
   } else if (e.type === 'SOLID3D') {
-    for (const poly of solidSnapWireframe(e.props)) {
+    for (const poly of solidPending(e.props) ? [] : solidSnapWireframe(e.props)) {
       const v = poly.map(fromVec3)
       for (let i = 0; i < v.length - 1; i++) segs.push([v[i], v[i + 1]])
     }

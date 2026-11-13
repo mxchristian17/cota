@@ -5,7 +5,7 @@ import type { EdgeBlendProps, MeshProps, RevolveProps, SolidBasis, SolidProps } 
 import { revolveMesh } from '../core/editing/revolve'
 import { sweepStartRef } from '../core/editing/solid'
 import { positiveLeaf } from '../core/editing/solidLeaf'
-import { buildTopology, forgetAllSolidTopologies, forgetSolidTopology, registerSolidMesher, solidTopology, type SurfShape, type Topology } from '../core/editing/topology'
+import { buildTopology, forgetAllSolidTopologies, forgetSolidTopology, registerSolidMesher, registerSolidPending, solidTopology, type SurfShape, type Topology } from '../core/editing/topology'
 import { kernelAvailable, kernelResult, onKernelResults, requestKernel, type KernelResult } from './occtKernel'
 import { blendTools } from '../core/editing/edgeBlend'
 import { dropStrayTriangles, type BoolOp } from './csgClean'
@@ -729,17 +729,135 @@ export function onSolidsChanged(fn: SolidsListener): () => void {
 }
 
 onKernelResults((keys) => {
-  let changed = false
   for (const key of keys) {
-    const r = kernelResult(key)
-    if (!r?.ok) continue // falló: sigue la malla que ya se muestra
+    roughCache.delete(key)
+    if (!kernelResult(key)?.ok) continue // falló: queda (o se calcula ahora) la malla
     cache.delete(key)
     edgeCache.delete(key)
     forgetSolidTopology(key)
-    changed = true
   }
-  if (changed) for (const fn of solidsListeners) fn()
+  // También con las fallas: lo que se mostraba como boceto pasa a la malla.
+  if (keys.length) for (const fn of solidsListeners) fn()
 })
+
+/**
+ * Boceto de un sólido mientras el núcleo exacto lo calcula: lo que ya está listo de su árbol, sin calcular booleanas
+ * ni empalmes con la malla. Un empalme, chaflán o vaciado muestra su sólido original; una unión junta sus operandos;
+ * una resta o intersección muestra el primero (la pieza sin los agujeros nuevos). Antes se calculaba la malla entera
+ * con sus empalmes, que en un modelo con muchos sólidos tardaba más que el propio núcleo (trabando la pantalla) y se
+ * tiraba al llegar el resultado exacto.
+ */
+type Rough = { geom: THREE.BufferGeometry; edges: Float32Array; topo?: Topology }
+const roughCache = new LruCache<string, Rough>(2000)
+
+function rough(props: SolidProps, key: string): Rough {
+  const hit = roughCache.get(key)
+  if (hit) return hit
+  const parts: THREE.BufferGeometry[] = []
+  roughParts(props, parts)
+  const geom = mergeParts(parts)
+  geom.userData.rough = true
+  const eg = new THREE.EdgesGeometry(geom, 30)
+  const edges = Float32Array.from(eg.getAttribute('position').array as ArrayLike<number>)
+  eg.dispose()
+  const out: Rough = { geom, edges }
+  roughCache.set(key, out)
+  return out
+}
+
+function roughParts(props: SolidProps, out: THREE.BufferGeometry[]): void {
+  const key = JSON.stringify(props)
+  // Lo ya calculado del árbol (p. ej. el sólido que se acaba de empalmar) se muestra tal cual.
+  const ready = cache.get(key) ?? (kernelResult(key)?.ok ? solidGeometry(props) : meshCache.get(key))
+  if (ready) {
+    out.push(ready)
+    return
+  }
+  switch (props.op) {
+    case 'FILLETEDGE':
+    case 'CHAMFEREDGE':
+    case 'SHELL':
+      return roughParts(props.solid, out)
+    case 'UNION':
+      for (const o of Array.isArray(props.operands) ? props.operands : []) roughParts(o, out)
+      return
+    case 'SUBTRACT':
+    case 'INTERSECT':
+      if (Array.isArray(props.operands) && props.operands[0]) roughParts(props.operands[0], out)
+      return
+    default:
+      // Hoja: su malla es inmediata (sin booleanas).
+      try {
+        const g = evalTree(props)
+        if (hasFinitePositions(g)) out.push(g)
+      } catch {
+        /* hoja malformada: no se dibuja */
+      }
+  }
+}
+
+/** Junta las partes del boceto en una geometría sin índice, con normales. */
+function mergeParts(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  if (parts.length === 1 && !parts[0].getIndex() && parts[0].getAttribute('normal')) return parts[0]
+  const flat = parts.map((g) => {
+    const ng = g.getIndex() ? g.toNonIndexed() : g
+    if (!ng.getAttribute('normal')) {
+      const c = ng === g ? ng.clone() : ng
+      c.computeVertexNormals()
+      return c
+    }
+    return ng
+  })
+  const n = flat.reduce((k, g) => k + (g.getAttribute('position')?.count ?? 0), 0)
+  const pos = new Float32Array(n * 3)
+  const nor = new Float32Array(n * 3)
+  let o = 0
+  for (const g of flat) {
+    const p = g.getAttribute('position')
+    const q = g.getAttribute('normal')
+    if (!p) continue
+    for (let i = 0; i < p.count; i++, o++) {
+      pos[o * 3] = p.getX(i)
+      pos[o * 3 + 1] = p.getY(i)
+      pos[o * 3 + 2] = p.getZ(i)
+      nor[o * 3] = q.getX(i)
+      nor[o * 3 + 1] = q.getY(i)
+      nor[o * 3 + 2] = q.getZ(i)
+    }
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+  g.setAttribute('normal', new THREE.BufferAttribute(nor, 3))
+  return g
+}
+
+/**
+ * ¿El sólido espera al núcleo exacto? Sí si se usa el núcleo exacto, el árbol lo necesita, todavía no hay resultado y
+ * nadie calculó ya su malla (los snaps o una exportación la piden al momento). Si espera, se lo pide.
+ */
+function pendingExact(props: SolidProps, key: string): boolean {
+  if (cache.get(key) || sysvars.SOLIDKERNEL !== 'OCCT' || !kernelAvailable() || !wantsKernel(props) || kernelResult(key)) return false
+  requestKernel(key, props)
+  return true
+}
+
+/**
+ * Geometría que se dibuja de un sólido: la de `solidGeometry` o, mientras el núcleo exacto la calcula, su boceto (sin
+ * calcular la malla con empalmes, que se tiraría al llegar el resultado). Para medir, exportar o tomar aristas se usa
+ * `solidGeometry`, que nunca devuelve el boceto.
+ */
+export function displaySolidGeometry(props: SolidProps): THREE.BufferGeometry {
+  syncKernel()
+  const key = JSON.stringify(props)
+  return pendingExact(props, key) ? rough(props, key).geom : solidGeometry(props)
+}
+
+/** Aristas que se dibujan de un sólido (las del boceto mientras el núcleo exacto lo calcula). */
+export function displaySolidEdges(props: SolidProps): Float32Array {
+  syncKernel()
+  const key = JSON.stringify(props)
+  return pendingExact(props, key) ? rough(props, key).edges : solidEdgePositions(props)
+}
 
 let lastKernel = sysvars.SOLIDKERNEL
 /** Si cambió `SOLIDKERNEL`, se rehacen la geometría, las aristas y la topología de todos los sólidos. */
@@ -859,6 +977,21 @@ function triangleSurfaces(g: THREE.BufferGeometry): Float32Array | null {
   const out = new Float32Array(n)
   for (let t = 0; t < n; t++) out[t] = surf.getX(index ? index.getX(t * 3) : t * 3)
   return out
+}
+
+registerSolidPending((p) => {
+  syncKernel()
+  return pendingExact(p, JSON.stringify(p))
+})
+
+/** Topología para elegir el sólido bajo el cursor: la de su boceto mientras el núcleo exacto lo calcula. */
+export function displaySolidTopology(props: SolidProps): Topology | null {
+  syncKernel()
+  const key = JSON.stringify(props)
+  if (!pendingExact(props, key)) return solidTopology(props)
+  const r = rough(props, key)
+  r.topo ??= buildTopology(triangleSoup(r.geom))
+  return r.topo
 }
 
 registerSolidMesher((p) => {

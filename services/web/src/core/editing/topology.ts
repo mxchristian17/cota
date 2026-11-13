@@ -975,6 +975,19 @@ export function registerSolidMesher(fn: Mesher): void {
   cache.clear()
 }
 
+let pendingCheck: ((p: SolidProps) => boolean) | null = null
+/** Registra cómo saber si un sólido todavía espera al núcleo exacto (lo hace `render/csg`, que lo muestra en boceto). */
+export function registerSolidPending(fn: (p: SolidProps) => boolean): void {
+  pendingCheck = fn
+}
+/**
+ * ¿El sólido todavía espera al núcleo exacto? Mientras tanto no da snaps ni rastreo: calcular su malla para eso
+ * trabaría la pantalla y se tiraría al llegar el resultado exacto, enseguida.
+ */
+export function solidPending(p: SolidProps): boolean {
+  return pendingCheck?.(p) ?? false
+}
+
 /** Olvida la topología de un sólido (por su clave `JSON.stringify(props)`): su malla cambió (llegó la del núcleo exacto). */
 export function forgetSolidTopology(key: string): void {
   cache.delete(key)
