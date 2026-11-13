@@ -192,6 +192,11 @@ export interface AppState {
   /** Panel del agente abierto (abierto la primera vez) y pestaña "Agents" a la derecha cuando está cerrado. */
   agentOpen: boolean
   agentTab: boolean
+  /**
+   * El panel del agente se abrió a mano en esta sesión. En la vista completa del celular arranca cerrado aunque la
+   * preferencia diga abierto (taparía el dibujo); no se guarda.
+   */
+  agentShown: boolean
   setAgentPanel: (patch: { open?: boolean; tab?: boolean }) => void
   /** Vista para el celular (PRD076): `auto` = la mobile en teléfonos; `mobile`/`full` = elegida a mano. */
   viewMode: ViewMode
@@ -1761,6 +1766,7 @@ export const useStore = create<AppState>((set, get) => {
     viewCubeOn: true,
     agentOpen: true,
     agentTab: true,
+    agentShown: false,
     viewMode: 'auto',
     viewForce: mobileParam(),
     lastMeasure: null,
@@ -1769,7 +1775,11 @@ export const useStore = create<AppState>((set, get) => {
       get().viewports.forEach((vp) => vp.invalidate())
     },
     setAgentPanel: (patch) => {
-      set({ ...(patch.open !== undefined ? { agentOpen: patch.open } : {}), ...(patch.tab !== undefined ? { agentTab: patch.tab } : {}) })
+      set({
+        ...(patch.open !== undefined ? { agentOpen: patch.open } : {}),
+        ...(patch.open ? { agentShown: true } : {}),
+        ...(patch.tab !== undefined ? { agentTab: patch.tab } : {}),
+      })
       saveConfig()
     },
     viewNetStd: 'E',

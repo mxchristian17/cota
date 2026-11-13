@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import { useStore } from '../store/store'
+import { agentVisible } from '../core/ui/phone'
+import { isPhone } from '../ui/appWindow'
 import { idbGet, idbSet } from '../core/io/idb'
 import { agentBridge } from '../core/agentBridge'
 import { OPENAI_BASE, PROVIDERS, ProviderError, type ChatMessage, type ProviderConfig, type ProviderId } from './providers'
@@ -183,7 +185,7 @@ export const useAgentStore = create<AgentState>((set, get) => {
         },
         run: async (name, args): Promise<ToolResult> => {
           if (name === 'run_commands' && get().settings.mode === 'ask') {
-            if (!useStore.getState().agentOpen) useStore.getState().setAgentPanel({ open: true }) // la pregunta tiene que verse
+            if (!agentVisible(useStore.getState(), isPhone())) useStore.getState().setAgentPanel({ open: true }) // la pregunta tiene que verse
             const ok = await new Promise<boolean>((resolve) => set({ pending: { script: String(args.script ?? ''), resolve } }))
             if (!ok) {
               set({ feed: [...get().feed, { kind: 'tool', name: `external ${name}`, summary: 'rejected by the user', isError: true }] })
@@ -205,7 +207,7 @@ export const useAgentStore = create<AgentState>((set, get) => {
     keyAwaitingDecision: null,
     // Abierto/cerrado es una preferencia de la interfaz (se guarda con las demás, por usuario): vive en el store.
     toggle: (open) => {
-      const next = open ?? !useStore.getState().agentOpen
+      const next = open ?? !agentVisible(useStore.getState(), isPhone())
       useStore.getState().setAgentPanel({ open: next })
     },
     load: async () => {

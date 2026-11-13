@@ -4,13 +4,15 @@ import { PROVIDERS, type ProviderId } from '../agent/providers'
 import { BRIDGE_FILE, EXTERNAL_PORT } from '../agent/external'
 import { focusCommandLine } from './focus'
 import { useStore } from '../store/store'
+import { agentVisible } from '../core/ui/phone'
+import { isPhone } from './appWindow'
 
 /**
  * Panel del agente (colapsable, a la derecha): conversación con un LLM que maneja Cota con las herramientas del
  * agente. Cada usuario usa su propia key; las conversaciones quedan en el navegador.
  */
 export function AgentPanel() {
-  const open = useStore((s) => s.agentOpen)
+  const open = useStore((s) => agentVisible(s, isPhone()))
   const tab = useStore((s) => s.agentTab)
   const setPanel = useStore((s) => s.setAgentPanel)
   if (open) return <AgentBody />

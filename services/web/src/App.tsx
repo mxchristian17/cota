@@ -40,6 +40,7 @@ import { useStore } from './store/store'
 import { canAutosave } from './core/io/autosave'
 import { sysvars } from './core/commands/sysvars'
 import { docsUrl } from './core/about'
+import { backButtonPos } from './core/ui/phone'
 
 /**
  * ¿Se está editando texto ahora mismo? El foco de Cota vive en la línea de comandos, así que si se
@@ -357,12 +358,14 @@ export default function App() {
 
   // Vista para el celular en obra (PRD076): reemplaza el editor completo.
   if (mobile) return <MobileApp />
+  const phone = isPhone()
 
   return (
     <>
     {/* En un celular con la vista completa abierta: un toque vuelve a la vista para el celular (encima de todo). */}
-    {isPhone() && createPortal(<BackToMobile />, document.body)}
-    <div className="app">
+    {phone && createPortal(<BackToMobile />, document.body)}
+    {/* En un celular la vista completa se ajusta al ancho de la pantalla (barras en dos filas, paneles encima). */}
+    <div className={phone ? 'app app-phone' : 'app'}>
       <header className="topbar">
         <button
           className="icon-btn"
@@ -498,25 +501,46 @@ export default function App() {
 }
 
 /**
- * Botón para volver a la vista del celular desde la vista completa. Esa vista es más grande que la pantalla del teléfono
- * y lo visible (el «visual viewport») puede quedar corrido o con zoom: el botón lo sigue para estar siempre a la vista.
+ * Botón para volver a la vista del celular desde la vista completa: abajo a la derecha del dibujo. Si el navegador quedó
+ * con zoom o corrido (el «visual viewport»), lo sigue para estar siempre a la vista y del mismo tamaño.
  */
 function BackToMobile() {
+  const ref = useRef<HTMLButtonElement>(null)
   const [pos, setPos] = useState({ left: 10, top: 10, scale: 1 })
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
-    const update = () => setPos({ left: vv.offsetLeft + 10 / vv.scale, top: vv.offsetTop + 10 / vv.scale, scale: 1 / vv.scale })
+    let watched: Element | null = null
+    const ro = new ResizeObserver(() => update())
+    function update() {
+      const draw = document.querySelector('.app .center > .viewport')
+      // El dibujo cambia de elemento al pasar del modelo a un layout: se observa el actual.
+      if (draw !== watched) {
+        if (watched) ro.unobserve(watched)
+        if (draw) ro.observe(draw)
+        watched = draw
+      }
+      const el = ref.current
+      const size = { w: el?.offsetWidth ?? 140, h: el?.offsetHeight ?? 40 }
+      const next = backButtonPos(draw?.getBoundingClientRect() ?? null, vv!, size)
+      setPos((p) => (p.left === next.left && p.top === next.top && p.scale === next.scale ? p : next))
+    }
     update()
+    const center = document.querySelector('.app .center')
+    if (center) ro.observe(center)
     vv.addEventListener('resize', update)
     vv.addEventListener('scroll', update)
+    window.addEventListener('resize', update)
     return () => {
+      ro.disconnect()
       vv.removeEventListener('resize', update)
       vv.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
     }
   }, [])
   return (
     <button
+      ref={ref}
       className="back-to-mobile"
       data-testid="back-to-mobile"
       title="Back to the phone view"
