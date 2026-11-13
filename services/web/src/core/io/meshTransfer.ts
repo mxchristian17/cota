@@ -47,7 +47,7 @@ export function packMesh(m: { vertices: ArrayLike<ArrayLike<number>>; faces: Arr
   return { packed: { pos, faces: packFaces(m.faces) } }
 }
 
-const specsOf = (r: DxfImportResult): DxfEntitySpec[][] => [r.entities, ...(r.layouts ?? []).map((l) => l.entities)]
+const specsOf = (r: DxfImportResult): DxfEntitySpec[][] => [r.entities, ...(r.layouts ?? []).map((l) => l.entities), ...(r.blocks ?? []).map((b) => b.entities)]
 
 /** Empaqueta (en el lugar) las mallas del resultado y devuelve los buffers a transferir. */
 export function packMeshes(r: DxfImportResult): ArrayBuffer[] {

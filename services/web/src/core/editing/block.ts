@@ -328,6 +328,11 @@ export interface ExpandOptions {
   keepLayers?: boolean
   /** Capas congeladas: se omiten las inserciones en ellas y lo que el bloque tenga en ellas. */
   skipLayers?: Set<string>
+  /**
+   * Capas congeladas al exportar: el contenido de una inserción en una de ellas va entero a esa capa (en el CAD
+   * clásico, congelar la capa de una inserción la oculta entera, aunque su contenido esté en otras capas).
+   */
+  frozenInto?: Set<string>
 }
 
 /** Id de la capa `0`: lo que un bloque tiene en ella toma la capa de la inserción (como el CAD clásico). */
@@ -350,17 +355,27 @@ function attributeText(child: Extract<Entity, { type: 'ATTDEF' }>, ins: InsertPr
  * Tipo de línea de un objeto del bloque: ByBlock toma el de la inserción (y si la inserción es
  * ByLayer, el de su capa); la escala propia se multiplica por la de la inserción.
  */
-function byBlockCommon(child: Entity, ins: { lineType?: string; ltScale?: number; layer: string }, sr: number): Pick<Entity, 'lineType' | 'ltScale'> {
-  const out: Pick<Entity, 'lineType' | 'ltScale'> = {}
+function byBlockCommon(child: Entity, ins: InsertCommon & { layer: string }, sr: number): Pick<Entity, 'lineType' | 'ltScale' | 'color' | 'lineWeight'> {
+  const out: Pick<Entity, 'lineType' | 'ltScale' | 'color' | 'lineWeight'> = {}
   const lt = child.lineType?.toUpperCase()
   if (lt === BYBLOCK) out.lineType = ins.lineType && ins.lineType.toUpperCase() !== BYBLOCK ? ins.lineType : BYLAYER_OF + ins.layer
   else if (child.lineType !== undefined) out.lineType = child.lineType
   const s = (child.ltScale ?? 1) * (lt === BYBLOCK ? (ins.ltScale ?? 1) : 1) * sr
   if (s !== 1) out.ltScale = s
+  // Color y grosor ByBlock (de un bloque traído de un DWG/DXF): los propios de la inserción; si es ByLayer, los de
+  // la capa del objeto (la de la inserción si está en la capa 0).
+  if (child.color?.toUpperCase() === BYBLOCK) out.color = ins.color?.startsWith('#') || ins.color?.toUpperCase() === BYBLOCK ? ins.color : undefined
+  if (child.lineWeight === BYBLOCK_WEIGHT) out.lineWeight = ins.lineWeight !== undefined && (ins.lineWeight >= 0 || ins.lineWeight === BYBLOCK_WEIGHT) ? ins.lineWeight : undefined
   return out
 }
 
-function expandInsert(props: InsertProps, byName: Map<string, BlockDef>, ownerId: string, depth: number, opts: ExpandOptions, layer: string, insCommon: { lineType?: string; ltScale?: number } = {}): Entity[] {
+/** Grosor ByBlock de un objeto de un bloque (el 370 = -2 del DXF): toma el de la inserción. */
+export const BYBLOCK_WEIGHT = -2
+
+/** Lo propio de una inserción que pasa a lo ByBlock de su bloque. */
+type InsertCommon = Pick<Entity, 'lineType' | 'ltScale' | 'color' | 'lineWeight'>
+
+function expandInsert(props: InsertProps, byName: Map<string, BlockDef>, ownerId: string, depth: number, opts: ExpandOptions, layer: string, insCommon: InsertCommon = {}, frozenAs: string | null = null): Entity[] {
   if (depth > MAX_DEPTH) return []
   const def = byName.get(props.name)
   if (!def) return []
@@ -368,18 +383,22 @@ function expandInsert(props: InsertProps, byName: Map<string, BlockDef>, ownerId
   const sr = planarScale(props.scale)
   const ins = { ...insCommon, layer }
   for (const child of def.entities) {
-    const lay = child.layer === LAYER0 && !opts.keepLayers ? layer : child.layer
+    // `frozenAs`: todo el contenido de una inserción en una capa congelada va a esa capa (ver `frozenInto`).
+    const lay = frozenAs ?? (child.layer === LAYER0 && !opts.keepLayers ? layer : child.layer)
     if (opts.skipLayers?.has(lay)) continue
     // EXPLODE (keepLayers) conserva las propiedades tal cual; al dibujar, ByBlock toma las de la inserción.
     const common = opts.keepLayers ? {} : byBlockCommon(child, ins, sr)
     if (child.type === 'INSERT') {
       // Expande el bloque anidado y luego aplica la transform de ESTA inserción.
-      for (const ge of expandInsert(child.props, byName, ownerId, depth + 1, opts, lay, { lineType: common.lineType, ltScale: common.ltScale })) {
+      const nested: InsertCommon = { lineType: common.lineType, ltScale: common.ltScale, color: 'color' in common ? common.color : child.color, lineWeight: 'lineWeight' in common ? common.lineWeight : child.lineWeight }
+      for (const ge of expandInsert(child.props, byName, ownerId, depth + 1, opts, lay, nested, frozenAs)) {
         out.push({ ...transformEntity(ge, props), id: ownerId })
       }
     } else if (child.type === 'ATTDEF' && !opts.attdefs) {
       const t = attributeText(child, props, opts.attdisp ?? 'normal')
-      if (t) out.push({ ...transformEntity(t, props), id: ownerId, layer: lay })
+      // Con el color y el grosor del ATTDEF (ByBlock, los de la inserción).
+      const own = { ...(child.color !== undefined ? { color: child.color } : {}), ...(child.lineWeight !== undefined ? { lineWeight: child.lineWeight } : {}) }
+      if (t) out.push({ ...transformEntity(t, props), id: ownerId, layer: lay, ...own, ...common })
     } else {
       out.push({ ...transformEntity(child, props), id: ownerId, layer: lay, ...common })
     }
@@ -397,7 +416,8 @@ export function expandEntities(entities: Entity[], blocks: BlockDef[] | undefine
   const byName = new Map(blocks.map((b) => [b.name, b]))
   const out: Entity[] = []
   for (const e of list) {
-    if (e.type === 'INSERT') out.push(...expandInsert(e.props, byName, e.id, 0, opts, e.layer, { lineType: e.lineType, ltScale: e.ltScale }))
+    if (e.type === 'INSERT')
+      out.push(...expandInsert(e.props, byName, e.id, 0, opts, e.layer, { lineType: e.lineType, ltScale: e.ltScale, color: e.color, lineWeight: e.lineWeight }, opts.frozenInto?.has(e.layer) ? e.layer : null))
     else out.push(e)
   }
   return out

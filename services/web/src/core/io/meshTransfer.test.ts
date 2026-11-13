@@ -11,10 +11,12 @@ describe('mallas entre el lector y la pantalla', () => {
     const r = {
       entities: [{ type: 'MESH3D', layerName: '0', props: a }, { type: 'LINE', layerName: '0', props: { start: [0, 0, 0], end: [1, 0, 0] } }],
       layouts: [{ entities: [{ type: 'MESH3D', layerName: '0', props: b }] }],
+      // Las mallas de los bloques que pasan a Cota (un sólido dentro de un bloque) viajan igual.
+      blocks: [{ name: 'Perno', entities: [{ type: 'MESH3D', layerName: '0', props: structuredClone(b) }] }],
     } as unknown as DxfImportResult
     const before = structuredClone(r)
     const transfer = packMeshes(r)
-    expect(transfer).toHaveLength(3) // dos de vértices y uno de caras
+    expect(transfer).toHaveLength(5) // tres de vértices y dos de caras (las del bloque son otra lista)
     const copy = structuredClone(r, { transfer })
     unpackMeshes(copy)
     expect(copy).toEqual(before)

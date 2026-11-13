@@ -6,7 +6,8 @@ import { NAMED_COLORS, colorLabel } from '../core/document/objectProps'
  */
 export function ColorSelect(props: { value: string | undefined; onPick: (v: string) => void; testId: string; className: string; label?: string; title?: string }) {
   const { value } = props
-  const own = value && value !== 'BYLAYER' && !NAMED_COLORS.some(([c]) => c === value.toLowerCase()) ? value.toLowerCase() : null
+  const special = value === 'BYLAYER' || value === 'BYBLOCK'
+  const own = value && !special && !NAMED_COLORS.some(([c]) => c === value.toLowerCase()) ? value.toLowerCase() : null
   const pickOther = () => {
     const input = document.createElement('input')
     input.type = 'color'
@@ -18,12 +19,14 @@ export function ColorSelect(props: { value: string | undefined; onPick: (v: stri
     <select
       className={props.className}
       title={props.title}
-      value={value === undefined ? '' : value === 'BYLAYER' ? 'BYLAYER' : value.toLowerCase()}
+      value={value === undefined ? '' : special ? value : value.toLowerCase()}
       onChange={(e) => (e.target.value === '__other' ? pickOther() : props.onPick(e.target.value))}
       data-testid={props.testId}
     >
       {value === undefined && <option value="">*VARIES*</option>}
       <option value="BYLAYER">ByLayer</option>
+      {/* ByBlock: el de la inserción (objetos de un bloque traído de un DWG/DXF). */}
+      <option value="BYBLOCK">ByBlock</option>
       {NAMED_COLORS.map(([c, name]) => (
         <option key={c} value={c}>
           {name}

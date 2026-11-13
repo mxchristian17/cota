@@ -2,7 +2,7 @@ import { BASELINE_DROP, attdefText, lineSpacingOf, textAxes, textSize } from '..
 import { loopPolyline } from '../region/region'
 import { decodeTextCodes, encodeTextCodes } from '../text/codes'
 import type { Vec3 } from '../math'
-import type { DimensionProps, DrawingVars, Entity, EntityProps, EntityType, ImageProps, InsertProps, Layer, TextRun, LineType, LinetypeDefData, RectangleProps, TextProps } from '../document/types'
+import type { AttdefProps, AttributeValue, DimensionProps, DrawingVars, Entity, EntityProps, EntityType, ImageProps, InsertProps, Layer, TextRun, LineType, LinetypeDefData, RectangleProps, TextProps } from '../document/types'
 import { pointMap, transformEntity as transformInsertEntity } from '../editing/block'
 import { BYBLOCK, BYLAYER, CONTINUOUS, linetypeLabel, patternLength } from '../linetype/linetypes'
 import { hatchDxf, parseHatch } from './dxfHatch'
@@ -44,8 +44,9 @@ function commonCodes(e: Entity): string {
     const aci = hexToAci(e.color)
     out += p(62, aci)
     if (aciToHex(aci).toLowerCase() !== e.color.toLowerCase()) out += p(420, hexToTruecolor(e.color))
-  }
+  } else if (e.color?.toUpperCase() === BYBLOCK) out += p(62, 0)
   if (e.lineWeight !== undefined && e.lineWeight >= 0) out += p(370, e.lineWeight === 0 ? -3 : Math.round(e.lineWeight * 100))
+  else if (e.lineWeight === -2) out += p(370, -2) // ByBlock
   if (e.transparency) out += p(440, 0x02000000 | Math.round((1 - Math.min(1, e.transparency)) * 255))
   return out
 }
@@ -54,7 +55,7 @@ function commonCodes(e: Entity): string {
  * Color, grosor y transparencia propios de un record (62/420, 370, 440); ByLayer/ByBlock/Default de color quedan sin
  * color propio. La transparencia (440) es 0x020000AA con la opacidad AA (0–255).
  */
-function ownColorWeight(codes: Rec['codes']): Pick<DxfEntitySpec, 'color' | 'lineWeight' | 'transparency'> {
+function ownColorWeight(codes: Rec['codes'], inBlock = false): Pick<DxfEntitySpec, 'color' | 'lineWeight' | 'transparency'> {
   const out: Pick<DxfEntitySpec, 'color' | 'lineWeight' | 'transparency'> = {}
   const tr = num(codes, 440, -1)
   if (tr >= 0 && tr & 0x02000000) {
@@ -65,9 +66,12 @@ function ownColorWeight(codes: Rec['codes']): Pick<DxfEntitySpec, 'color' | 'lin
   const aci = num(codes, 62, 256)
   if (tc) out.color = truecolorToHex(Number(tc[1]))
   else if (aci >= 1 && aci <= 255) out.color = aciToHex(aci)
+  // Dentro de un bloque, ByBlock (62 = 0, 370 = -2) toma lo de la inserción.
+  else if (inBlock && aci === 0) out.color = BYBLOCK
   const lw = num(codes, 370, -1)
   if (lw === -3) out.lineWeight = 0
   else if (lw >= 0) out.lineWeight = lw / 100
+  else if (inBlock && lw === -2) out.lineWeight = -2
   return out
 }
 
@@ -428,6 +432,19 @@ export interface DxfImportResult {
   simplified?: Record<string, number>
   /** Espacio papel: las hojas con contenido, en mm del papel. */
   layouts?: DxfLayoutSpec[]
+  /**
+   * Definiciones de bloque que pasan a ser bloques de Cota (las con nombre, ni anónimas ni de referencias externas),
+   * con su contenido relativo al punto base. Las inserciones del modelo que Cota dibuja igual las referencian; las
+   * demás (anónimas de cotas, tablas y sombreados, bloques dinámicos, referencias externas, atributos que no caen
+   * donde los pondría su definición) se desarman como antes.
+   */
+  blocks?: DxfBlockSpec[]
+}
+
+/** Bloque del archivo como bloque de Cota: su contenido (con sus ATTDEF y bloques anidados) relativo al punto base. */
+export interface DxfBlockSpec {
+  name: string
+  entities: DxfEntitySpec[]
 }
 
 /** VIEWPORT de una hoja: su rectángulo en el papel (mm) y la vista del modelo que muestra. */
@@ -461,8 +478,53 @@ interface BlockItem {
   spec?: DxfEntitySpec
   insert?: Rec
   viewport?: Rec
+  /** ATTDEF de la definición: el bloque de Cota lo trae como atributo; al desarmar sólo se dibuja si es constante. */
+  attdef?: Rec
   /** Handle del objeto (orden de dibujo). */
   h?: string
+}
+
+/** Definición de la sección BLOCKS: punto base, contenido, nombre como viene y banderas (70: anónimo, xref…). */
+interface BlockDefRec {
+  base: Vec3
+  items: BlockItem[]
+  name: string
+  flags: number
+}
+
+/** Color, grosor y tipo de línea propios de una inserción para lo ByBlock de su bloque (ausente = ByLayer). */
+interface ByBlockOwn {
+  color?: string
+  lineWeight?: number
+  lineType?: string
+}
+
+/** ATTRIB/ATTDEF como TEXT: su justificación vertical va en el 74 (el 73 es el largo del campo). */
+const attribAsText = (c: Rec['codes']): Rec => ({ type: 'TEXT', codes: c.filter(([k]) => k !== 73).map(([k, v]): [number, string] => (k === 74 ? [73, v] : [k, v])) })
+
+/**
+ * ¿Dos textos se ven igual? Para decidir si Cota dibuja el atributo de una inserción (el ATTDEF ubicado por la
+ * inserción) donde el archivo tiene su ATTRIB. Tolerancia: una milésima del alto.
+ */
+function sameText(a: TextProps, b: TextProps): boolean {
+  const h = Math.max(Math.abs(a.height), Math.abs(b.height))
+  const tol = Math.max(1e-9, 1e-3 * h) + 1e-12 * Math.max(...a.position.map(Math.abs))
+  const d = Math.hypot(a.position[0] - b.position[0], a.position[1] - b.position[1], a.position[2] - b.position[2])
+  const turn = Math.abs(normAngle(a.rotation - b.rotation + Math.PI) - Math.PI)
+  // Sin normalizar: la de un texto de una inserción escalada viene escalada.
+  const n = (a.normal[0] * b.normal[0] + a.normal[1] * b.normal[1] + a.normal[2] * b.normal[2]) / (Math.hypot(...a.normal) * Math.hypot(...b.normal) || 1)
+  return (
+    d <= tol &&
+    Math.abs(a.height - b.height) <= 1e-4 * h &&
+    turn <= 1e-4 &&
+    a.justify === b.justify &&
+    n >= 1 - 1e-9 &&
+    Math.abs((a.widthFactor ?? 1) - (b.widthFactor ?? 1)) <= 1e-4 &&
+    (a.font ?? '') === (b.font ?? '') &&
+    !!a.bold === !!b.bold &&
+    !!a.italic === !!b.italic &&
+    !!a.stroke === !!b.stroke
+  )
 }
 
 /** Dueño de un objeto (código 330 fuera de los grupos 102, p. ej. el bloque de un espacio). */
@@ -652,8 +714,11 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
   /** Handle → nombre de BLOCK_RECORD (flechas de DIMSTYLE en R2000+). */
   const blockNames = new Map<string, string>()
   /** Definiciones de la sección BLOCKS (punto base + contenido) e inserciones a expandir. */
-  const blocks = new Map<string, { base: Vec3; items: BlockItem[] }>()
-  let block: { base: Vec3; items: BlockItem[] } | null = null
+  const blocks = new Map<string, BlockDefRec>()
+  let block: BlockDefRec | null = null
+  /** Los ATTRIB de cada inserción (vienen después de ella, hasta el SEQEND), del modelo o de un bloque. */
+  const attribsOf = new Map<Rec, Rec[]>()
+  let lastInsert: Rec | null = null
   /** Lo que mostraba una cota según su bloque (el texto, ya armado) y su medida real (42): ver `styled`. */
   const dimShown = (rec: Rec): { shownText?: string; measured?: number } => {
     const b = blocks.get((str(rec.codes, 2) ?? '').toUpperCase())
@@ -730,7 +795,7 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
       case 'ATTDEF': {
         // Fuera de un bloque se ve su etiqueta.
         const tag = str(c, 2) ?? ''
-        const t = parseEntity({ type: 'TEXT', codes: [...c.filter(([k]) => k !== 1), [1, tag]] })
+        const t = parseEntity(attribAsText([...c.filter(([k]) => k !== 1), [1, tag]]))
         return t ? [t] : null
       }
       case 'HELIX': {
@@ -803,10 +868,10 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
     return { type: 'MESH3D', props: m as unknown as EntityProps }
   }
   /** Entidades (tipo de línea por objeto incluido) de un record; null si no se soporta. */
-  const specsOf = (rec: Rec): DxfEntitySpec[] | null => {
+  const specsOf = (rec: Rec, inBlock = false): DxfEntitySpec[] | null => {
     // Un atributo invisible (70 bit 1) no se dibuja, como en el CAD clásico.
     if ((rec.type === 'ATTRIB' || rec.type === 'ATTDEF') && num(rec.codes, 70, 0) & 1) return []
-    const one = rec.type === 'HATCH' ? hatchSpec(rec) : rec.type === 'ATTRIB' ? parseEntity({ type: 'TEXT', codes: rec.codes }) : (solidMesh(rec) ?? parseEntity(rec))
+    const one = rec.type === 'HATCH' ? hatchSpec(rec) : rec.type === 'ATTRIB' ? parseEntity(attribAsText(rec.codes)) : (solidMesh(rec) ?? parseEntity(rec))
     const pieces = one ? [one] : piecesOf(rec)
     if (!pieces) return null
     const lt = str(rec.codes, 6)
@@ -816,7 +881,7 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
       layerName: str(rec.codes, 8) ?? '0',
       ...(lt && lt.toUpperCase() !== BYLAYER ? { lineType: lt.toUpperCase() } : {}),
       ...(lts !== 1 && lts > 0 ? { ltScale: lts } : {}),
-      ...ownColorWeight(rec.codes),
+      ...ownColorWeight(rec.codes, inBlock),
     }))
   }
   /** Cota nativa, con su color, grosor y transparencia propios (las partes ByBlock de su bloque los toman). */
@@ -937,11 +1002,20 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
       continue
     }
 
+    // Los ATTRIB y su SEQEND siguen a su INSERT; cualquier otro record lo cierra.
+    if (rec.type === 'ATTRIB' && lastInsert) {
+      let list = attribsOf.get(lastInsert)
+      if (!list) attribsOf.set(lastInsert, (list = []))
+      list.push(rec)
+      continue
+    }
+    if (rec.type !== 'SEQEND') lastInsert = rec.type === 'INSERT' && num(rec.codes, 67, 0) !== 1 ? rec : null
+
     if (section === 'BLOCKS') {
       const n0 = block?.items.length ?? 0
       if (rec.type === 'BLOCK') {
         const name = str(rec.codes, 2) ?? ''
-        block = { base: [num(rec.codes, 10), num(rec.codes, 20), num(rec.codes, 30)], items: [] }
+        block = { base: [num(rec.codes, 10), num(rec.codes, 20), num(rec.codes, 30)], items: [], name, flags: num(rec.codes, 70, 0) }
         // Los anónimos de sombreados (*X) y el espacio modelo no se insertan a mano. Los de cotas (*D), sí: los usan las
         // cotas de arco y de radio grande, que se dibujan con su bloque.
         if (!name.startsWith('*') || /^\*[UTD]/i.test(name)) blocks.set(name.toUpperCase(), block)
@@ -952,13 +1026,14 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
       } else if (rec.type === 'ENDBLK') block = null
       else if (block && rec.type === 'INSERT') block.items.push({ insert: rec })
       else if (block && rec.type === 'VIEWPORT') block.items.push({ viewport: rec })
-      else if (block && rec.type !== 'ATTDEF') {
+      else if (block && rec.type === 'ATTDEF') block.items.push({ attdef: rec })
+      else if (block) {
         const dim = blockDim(rec)
         if (dim) block.items.push({ insert: dim })
         else if (rec.type === 'DIMENSION') {
           const d = dimSpec(rec)
           if (d) block.items.push({ spec: d })
-        } else for (const spec of specsOf(rec) ?? []) block.items.push({ spec })
+        } else for (const spec of specsOf(rec, true) ?? []) block.items.push({ spec })
       }
       if (block && rec.type !== 'BLOCK') for (let k = n0; k < block.items.length; k++) block.items[k].h = str(rec.codes, 5)?.toUpperCase()
       continue
@@ -1013,8 +1088,7 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
     }
     const n0 = entities.length
     if (rec.type === 'ATTRIB') {
-      // Valores de los atributos de la inserción anterior: ya vienen en coordenadas del dibujo, como textos (y en su
-      // lugar del orden de dibujo).
+      // Un ATTRIB suelto (sin su INSERT antes): como texto, en su lugar del orden de dibujo.
       for (const spec of specsOf(rec) ?? []) entities.push(spec)
     } else if (rec.type === 'DIMENSION') {
       const dim = dimSpec(rec)
@@ -1081,11 +1155,183 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
   /** Caras invertidas de las mallas de bloques insertados espejados (una vez por malla). */
   const flipped = new Map<Uint32Array, Uint32Array>()
   // Capas congeladas: en el CAD clásico una inserción en una capa congelada se oculta entera, aunque su contenido esté
-  // en otras capas. Como acá el bloque se desarma, todo lo que hay debajo de esa inserción pasa a su capa congelada.
+  // en otras capas. Lo que se desarma de esa inserción pasa a su capa congelada (los bloques de Cota hacen lo mismo).
   const frozenNames = new Set(layers.filter((l) => l.frozen).map((l) => l.name.toUpperCase()))
   for (const b of blocks.values()) b.items = byDrawOrder(b.items, sortTables.get(listOwner.get(b.items) ?? ''), (it) => it.h)
   for (const [k, items] of paper) paper.set(k, byDrawOrder(items, sortTables.get(listOwner.get(items) ?? ''), (it) => it.h))
-  const expand = (rec: Rec, after: InsertProps[], layer: string, depth: number, frozenAs: string | null = null, out: DxfEntitySpec[] = entities): void => {
+
+  /**
+   * Celdas de un MINSERT (70 columnas × 71 filas, separadas 44/45 en el plano de la inserción, giradas con ella): una
+   * inserción por celda. La primera es la original (con sus atributos).
+   */
+  const cells = (rec: Rec): Rec[] => {
+    const cols = Math.max(1, Math.round(num(rec.codes, 70, 1)))
+    const rows = Math.max(1, Math.round(num(rec.codes, 71, 1)))
+    if (cols * rows <= 1 || cols * rows > 100_000) return [rec]
+    const [dc, dr] = [num(rec.codes, 44, 0), num(rec.codes, 45, 0)]
+    const rot = (num(rec.codes, 50, 0) * Math.PI) / 180
+    const [c, s] = [Math.cos(rot), Math.sin(rot)]
+    const [x, y] = [num(rec.codes, 10), num(rec.codes, 20)]
+    const out: Rec[] = []
+    for (let r = 0; r < rows; r++)
+      for (let k = 0; k < cols; k++) {
+        if (!r && !k) {
+          out.push(rec)
+          continue
+        }
+        const [u, v] = [k * dc, r * dr]
+        const at = (code: number, val: number): [number, string] => [code, String(val)]
+        out.push({ type: 'INSERT', codes: [...rec.codes.filter(([q]) => q !== 10 && q !== 20 && q !== 70 && q !== 71), at(10, x + u * c - v * s), at(20, y + u * s + v * c)] })
+      }
+    return out
+  }
+
+  /** Lo ByBlock de un objeto del bloque toma lo de la inserción (o queda ByBlock si la inserción también lo es). */
+  const byBlockOf = (spec: DxfEntitySpec, own: ByBlockOwn): DxfEntitySpec => {
+    if (spec.color !== BYBLOCK && spec.lineWeight !== -2 && spec.lineType !== BYBLOCK) return spec
+    const out = { ...spec }
+    if (spec.color === BYBLOCK) {
+      if (own.color) out.color = own.color
+      else delete out.color
+    }
+    if (spec.lineWeight === -2) {
+      if (own.lineWeight !== undefined) out.lineWeight = own.lineWeight
+      else delete out.lineWeight
+    }
+    if (spec.lineType === BYBLOCK) {
+      if (own.lineType) out.lineType = own.lineType
+      else delete out.lineType
+    }
+    return out
+  }
+  /** Color, grosor y tipo de línea propios de una inserción; los ByBlock, los de la que la contiene. */
+  const ownOf = (rec: Rec, outer: ByBlockOwn): ByBlockOwn => {
+    const own = ownColorWeight(rec.codes, true)
+    const lt = str(rec.codes, 6)?.toUpperCase()
+    return {
+      color: own.color === BYBLOCK ? outer.color : own.color,
+      lineWeight: own.lineWeight === -2 ? outer.lineWeight : own.lineWeight,
+      lineType: lt === BYBLOCK ? outer.lineType : lt && lt !== BYLAYER ? lt : undefined,
+    }
+  }
+  /** Un objeto del bloque llevado a otro sistema (el del dibujo o el del punto base); las mallas, punto por punto. */
+  const placed = (spec: DxfEntitySpec, chain: InsertProps[]): DxfEntitySpec => {
+    const packed = packedOf(spec.props)
+    if (packed) {
+      // Malla de un sólido (empaquetada): se ubica punto por punto, sin armar listas; las caras son las del bloque.
+      const maps = chain.map(pointMap)
+      const pos = new Float64Array(packed.pos.length)
+      for (let i = 0; i < pos.length; i += 3) {
+        let q: Vec3 = [packed.pos[i], packed.pos[i + 1], packed.pos[i + 2]]
+        for (const P of maps) q = P(q)
+        pos[i] = q[0]
+        pos[i + 1] = q[1]
+        pos[i + 2] = q[2]
+      }
+      // Una inserción espejada (escala negativa) da vuelta el sentido de las caras: se corrige.
+      const flip = chain.reduce((sg, t) => sg * Math.sign(t.scale[0] * t.scale[1] * t.scale[2] || 1), 1) < 0
+      let faces = packed.faces
+      if (flip) {
+        faces = flipped.get(packed.faces) ?? reversePackedFaces(packed.faces)
+        flipped.set(packed.faces, faces)
+      }
+      return { ...spec, props: { packed: { pos, faces } } as unknown as EntityProps }
+    }
+    let e = { id: '', type: spec.type, layer: '', props: spec.props } as unknown as Entity
+    for (const t of chain) e = transformInsertEntity(e, t)
+    // El tipo puede cambiar al transformar (un RECTANGLE girado o fuera de planta pasa a POLYLINE).
+    return { ...spec, type: e.type, props: e.props as EntityProps }
+  }
+
+  /** ATTDEF de una definición como atributo de Cota, relativo al punto base; null si no se puede leer. */
+  const attdefSpec = (rec: Rec, def: BlockDefRec): DxfEntitySpec | null => {
+    const t = parseEntity(attribAsText(rec.codes))
+    if (!t) return null
+    const text = placed({ type: 'TEXT', layerName: '', props: t.props }, [shift(def.base)]).props as TextProps
+    const flags = num(rec.codes, 70, 0)
+    const { text: value, ...rest } = text
+    const props: AttdefProps = {
+      ...rest,
+      tag: str(rec.codes, 2) ?? '',
+      prompt: str(rec.codes, 3) ?? '',
+      value,
+      ...(flags & 1 ? { invisible: true } : {}),
+      ...(flags & 2 ? { constant: true } : {}),
+      ...(flags & 8 ? { preset: true } : {}),
+    }
+    const lt = str(rec.codes, 6)
+    return { type: 'ATTDEF', layerName: str(rec.codes, 8) ?? '0', props: props as unknown as EntityProps, ...(lt && lt.toUpperCase() !== BYLAYER ? { lineType: lt.toUpperCase() } : {}), ...ownColorWeight(rec.codes, true) }
+  }
+  /** ATTDEF de cada definición por tag (el primero de cada uno), ya relativos al punto base. */
+  const attdefCache = new Map<BlockDefRec, Map<string, DxfEntitySpec & { props: AttdefProps }>>()
+  const attdefsOf = (def: BlockDefRec): Map<string, DxfEntitySpec & { props: AttdefProps }> => {
+    let m = attdefCache.get(def)
+    if (m) return m
+    m = new Map()
+    for (const it of def.items) {
+      if (!it.attdef) continue
+      const a = attdefSpec(it.attdef, def) as (DxfEntitySpec & { props: AttdefProps }) | null
+      if (a && !m.has(a.props.tag.toUpperCase())) m.set(a.props.tag.toUpperCase(), a)
+    }
+    attdefCache.set(def, m)
+    return m
+  }
+  /**
+   * Bloques que pasan a ser bloques de Cota: con nombre, ni anónimos (70 & 1) ni de referencias externas (4…64, `|`) ni
+   * los de los espacios de un DXF R12 (`$MODEL_SPACE`, `$PAPER_SPACE`).
+   */
+  const keeps = (def: BlockDefRec | undefined): def is BlockDefRec =>
+    !!def && !def.name.startsWith('*') && !/^\$(MODEL|PAPER)_SPACE/i.test(def.name) && !(def.flags & 125) && !def.name.includes('|')
+
+  /**
+   * Inserción de Cota para un INSERT (una celda), con los valores de sus atributos; null si Cota no la dibujaría igual
+   * y hay que desarmarla: bloque anónimo, de referencia externa o que falta, MINSERT con atributos, o algún ATTRIB que
+   * no corresponde a un ATTDEF del bloque o no cae donde lo pondría su definición (movido, de otro estilo, en una
+   * inserción espejada o de escala no uniforme).
+   */
+  const insertSpec = (rec: Rec, attribs: Rec[], multi: boolean, inBlock: boolean): DxfEntitySpec | null => {
+    const def = blocks.get((str(rec.codes, 2) ?? '').toUpperCase())
+    if (!keeps(def) || (multi && attribs.length)) return null
+    const props: InsertProps = { ...insertOf(rec), name: def.name }
+    const defs = attdefsOf(def)
+    const values: AttributeValue[] = []
+    const seen = new Set<string>()
+    for (const a of attribs) {
+      const tag = (str(a.codes, 2) ?? '').toUpperCase()
+      const spec = defs.get(tag)
+      const d = spec?.props
+      if (!spec || !d || seen.has(tag) || !!(num(a.codes, 70, 0) & 1) !== !!d.invisible) return null
+      seen.add(tag)
+      // En la capa, el color y el grosor de su ATTDEF (Cota dibuja el atributo con los del ATTDEF).
+      const own = ownColorWeight(a.codes, true)
+      if ((str(a.codes, 8) ?? '0').toUpperCase() !== spec.layerName.toUpperCase() || own.color !== spec.color || own.lineWeight !== spec.lineWeight) return null
+      const t = parseEntity(attribAsText(a.codes))?.props as TextProps | undefined
+      if (!t) return null
+      // Cota lo dibuja con el ATTDEF ubicado por la inserción: tiene que caer donde el archivo tiene el ATTRIB.
+      const want = transformInsertEntity({ id: '', type: 'TEXT', layer: '', props: { ...attdefText(d), text: t.text } } as Entity, props).props as TextProps
+      if (!sameText(want, t)) return null
+      if (!d.constant) values.push({ tag: d.tag, value: t.text })
+    }
+    if (values.length) props.attributes = values
+    const lt = str(rec.codes, 6)
+    const lts = num(rec.codes, 48, 1)
+    return {
+      type: 'INSERT',
+      layerName: str(rec.codes, 8) ?? '0',
+      props: props as unknown as EntityProps,
+      ...(lt && lt.toUpperCase() !== BYLAYER ? { lineType: lt.toUpperCase() } : {}),
+      ...(lts !== 1 && lts > 0 ? { ltScale: lts } : {}),
+      ...ownColorWeight(rec.codes, inBlock),
+    }
+  }
+
+  /**
+   * Desarma una inserción en su geometría (anidadas incluidas), llevada por `after` al sistema de quien la contiene.
+   * Lo que está en la capa 0 dentro del bloque toma la capa de la inserción y lo ByBlock, su color, grosor y tipo de
+   * línea, como en el CAD clásico. Sus atributos (ATTRIB, en el sistema de quien la contiene) quedan como textos, y los
+   * constantes de la definición también.
+   */
+  const expand = (rec: Rec, after: InsertProps[], layer: string, depth: number, frozenAs: string | null = null, out: DxfEntitySpec[] = entities, outer: ByBlockOwn = {}): void => {
     const def = blocks.get((str(rec.codes, 2) ?? '').toUpperCase())
     if (!def || depth > 8) {
       if (!def) unsupported.add('INSERT')
@@ -1093,46 +1339,54 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
     }
     const here = (str(rec.codes, 8) ?? '0') === '0' ? layer : (str(rec.codes, 8) ?? '0')
     const frozen = frozenAs ?? (frozenNames.has(here.toUpperCase()) ? here : null)
+    const own = ownOf(rec, outer)
     const chain = [shift(def.base), insertOf(rec), ...after]
+    const put = (spec: DxfEntitySpec, base: InsertProps[]) => {
+      const layerName = frozen ?? (spec.layerName === '0' ? here : spec.layerName)
+      out.push({ ...placed(byBlockOf(spec, own), base), layerName })
+    }
     for (const it of def.items) {
-      if (it.insert) {
-        expand(it.insert, chain, here, depth + 1, frozen, out)
-        continue
+      if (it.insert) for (const cell of cells(it.insert)) expand(cell, chain, here, depth + 1, frozen, out, own)
+      else if (it.spec) put(it.spec, chain)
+      else if (it.attdef && (num(it.attdef.codes, 70, 0) & 3) === 2) {
+        // Atributo constante y visible: se ve su valor en cada inserción.
+        const t = parseEntity(attribAsText(it.attdef.codes))
+        if (t && (t.props as TextProps).text) put({ ...t, layerName: str(it.attdef.codes, 8) ?? '0', ...ownColorWeight(it.attdef.codes, true) }, chain)
       }
-      if (!it.spec) continue
-      const layerName = frozen ?? (it.spec.layerName === '0' ? here : it.spec.layerName)
-      const packed = packedOf(it.spec.props)
-      if (packed) {
-        // Malla de un sólido (empaquetada): se ubica punto por punto, sin armar listas; las caras son las del bloque.
-        const maps = chain.map(pointMap)
-        const pos = new Float64Array(packed.pos.length)
-        for (let i = 0; i < pos.length; i += 3) {
-          let q: Vec3 = [packed.pos[i], packed.pos[i + 1], packed.pos[i + 2]]
-          for (const P of maps) q = P(q)
-          pos[i] = q[0]
-          pos[i + 1] = q[1]
-          pos[i + 2] = q[2]
-        }
-        // Una inserción espejada (escala negativa) da vuelta el sentido de las caras: se corrige.
-        const flip = chain.reduce((sg, t) => sg * Math.sign(t.scale[0] * t.scale[1] * t.scale[2] || 1), 1) < 0
-        let faces = packed.faces
-        if (flip) {
-          faces = flipped.get(packed.faces) ?? reversePackedFaces(packed.faces)
-          flipped.set(packed.faces, faces)
-        }
-        out.push({ ...it.spec, props: { packed: { pos, faces } } as unknown as EntityProps, layerName })
-        continue
-      }
-      let e = { id: '', type: it.spec.type, layer: '', props: it.spec.props } as unknown as Entity
-      for (const t of chain) e = transformInsertEntity(e, t)
-      // El tipo puede cambiar al transformar (un RECTANGLE girado o fuera de planta pasa a POLYLINE).
-      out.push({ ...it.spec, type: e.type, props: e.props as EntityProps, layerName })
+    }
+    for (const a of attribsOf.get(rec) ?? []) for (const spec of specsOf(a) ?? []) out.push({ ...placed(spec, after), layerName: frozen ?? spec.layerName })
+  }
+  /** Una inserción (con sus celdas, si es un MINSERT) como inserciones de Cota o, si no se puede, desarmada. */
+  const place = (rec: Rec, out: DxfEntitySpec[], toDef: InsertProps[] = [], outer: ByBlockOwn = {}): void => {
+    const list = cells(rec)
+    for (const cell of list) {
+      const ins = insertSpec(cell, cell === rec ? (attribsOf.get(rec) ?? []) : [], list.length > 1, toDef.length > 0)
+      if (ins) out.push(toDef.length ? placed(ins, toDef) : ins)
+      else expand(cell, toDef, toDef.length ? '0' : (str(cell.codes, 8) ?? '0'), toDef.length ? 1 : 0, null, out, outer)
     }
   }
   for (const rec of inserts) {
     const from = entities.length
-    expand(rec, [], str(rec.codes, 8) ?? '0', 0)
+    place(rec, entities)
     for (let k = from; k < entities.length; k++) drawTag.set(entities[k], drawTag.get(rec)!)
+  }
+  // Las definiciones que pasan a Cota: su contenido relativo al punto base. Lo anidado que no puede ser una inserción de
+  // Cota queda desarmado adentro; lo ByBlock queda ByBlock (lo resuelve cada inserción al dibujarse).
+  const keepByBlock: ByBlockOwn = { color: BYBLOCK, lineWeight: -2, lineType: BYBLOCK }
+  const blockSpecs: DxfBlockSpec[] = []
+  for (const def of blocks.values()) {
+    if (!keeps(def)) continue
+    const toDef = [shift(def.base)]
+    const list: DxfEntitySpec[] = []
+    for (const it of def.items) {
+      if (it.insert) place(it.insert, list, toDef, keepByBlock)
+      else if (it.spec) list.push(placed(it.spec, toDef))
+      else if (it.attdef) {
+        const a = attdefSpec(it.attdef, def)
+        if (a) list.push(a)
+      }
+    }
+    blockSpecs.push({ name: def.name, entities: list })
   }
   // El modelo en su orden de dibujo: el del archivo (las inserciones en su lugar) y, si hay, el de su SORTENTSTABLE.
   const tagOf = (e: DxfEntitySpec) => drawTag.get(e) ?? { fi: Infinity }
@@ -1140,8 +1394,9 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
   const drawn = byDrawOrder(inFileOrder, sortTables.get(modelOwner ?? ''), (e) => tagOf(e).h)
   drawn.forEach((e, i) => (entities[i] = e))
 
+  // El espacio papel sigue desarmando sus inserciones (rótulos y demás quedan como antes).
   const layouts = buildLayouts(paper, layoutRecs, blockNames, (it, toPaper, out) => {
-    if (it.insert) expand(it.insert, [toPaper], str(it.insert.codes, 8) ?? '0', 0, null, out)
+    if (it.insert) for (const cell of cells(it.insert)) expand(cell, [toPaper], str(cell.codes, 8) ?? '0', 0, null, out)
     else if (it.spec) {
       const e = transformInsertEntity({ id: '', type: it.spec.type, layer: '', props: it.spec.props } as unknown as Entity, toPaper)
       out.push({ ...it.spec, type: e.type, props: e.props as EntityProps })
@@ -1163,6 +1418,7 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
     ...(meshedSolids ? { meshedSolids } : {}),
     ...(Object.keys(simplified).length ? { simplified } : {}),
     ...(layouts.length ? { layouts } : {}),
+    ...(blockSpecs.length ? { blocks: blockSpecs } : {}),
   }
 }
 

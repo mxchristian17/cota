@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { importedView } from '../../test/importedView'
 import { ACadVersion, BlockRecord, CadDocument, Circle, DwgWriter, DxfWriter, Field, FieldList, Hatch, HatchPattern, HatchPatternLine, Insert, Layer, Line, ModelerGeometryWire, Solid3D, XY, XYZ } from '@node-projects/acad-ts'
 import { CadTimeoutError, dwgToDxfText, dwgVersion, importCadInWorker } from './dwg'
 import { importDxf } from './dxf'
@@ -40,11 +41,13 @@ describe('DWG en el navegador (acad-ts)', () => {
     expect(dwgVersion(data)).toBe('AC1032')
     const r = importDxf(await dwgToDxfText(data))
     expect(r.layers.map((l) => l.name)).toContain('Ejes')
-    const line = r.entities.find((e) => e.type === 'LINE')!
+    const shown = importedView(r)
+    const line = shown.find((e) => e.type === 'LINE')!
     expect(line.layerName).toBe('Ejes')
-    const circles = r.entities.filter((e) => e.type === 'CIRCLE').map((e) => e.props as unknown as { center: number[]; radius: number })
+    const circles = shown.filter((e) => e.type === 'CIRCLE').map((e) => e.props as unknown as { center: number[]; radius: number })
     expect(circles.find((c) => c.radius === 10)?.center.slice(0, 2)).toEqual([50, 50])
-    // El bloque se expande en cada inserción.
+    // El bloque queda como bloque de Cota y se dibuja en cada inserción.
+    expect(r.entities.filter((e) => e.type === 'INSERT')).toHaveLength(2)
     const heads = circles.filter((c) => c.radius === 3).map((c) => c.center[0]).sort((a, b) => a - b)
     expect(heads).toEqual([200, 300])
   })
@@ -171,8 +174,9 @@ describe('mensajes de error de DWG', () => {
     DxfWriter.writeToStream({ write: (t: string) => void parts.push(t), flush: () => {}, close: () => {} } as unknown as Parameters<typeof DxfWriter.writeToStream>[0], doc, false)
     const r = importDxf(parts.join(''))
     expect(r.unsupported).not.toContain('3DSOLID')
-    const lines = r.entities.filter((e) => e.type === 'LINE')
-    const polys = r.entities.filter((e) => e.type === 'POLYLINE')
+    const shown = importedView(r)
+    const lines = shown.filter((e) => e.type === 'LINE')
+    const polys = shown.filter((e) => e.type === 'POLYLINE')
     expect(lines).toHaveLength(2) // una del modelo y la del bloque insertado
     expect(polys).toHaveLength(1)
     expect((polys[0].props as unknown as { vertices: number[][] }).vertices).toEqual([[0, 0, 0], [0, 5, 0], [0, 5, 8]])

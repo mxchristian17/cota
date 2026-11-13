@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { importedView } from '../../test/importedView'
 import { exportDxf, importDxf, mtextIndent, plainMtext, shownDecimals } from './dxf'
 import { textTop } from '../geom/text'
 import type { TextProps } from '../document/types'
@@ -402,7 +403,14 @@ describe('importDxf ▸ bloques', () => {
       [0, 'ENDSEC'], [0, 'EOF'],
     ])
     const r = importDxf(text)
-    const line = r.entities.find((e) => e.type === 'LINE')!
+    // Bloques de Cota: la inserción del modelo y la anidada referencian sus definiciones.
+    expect(r.entities.map((e) => e.type)).toEqual(['INSERT'])
+    expect(r.blocks?.map((b) => b.name).sort()).toEqual(['Grupo', 'Tuerca'])
+    const grupo = r.blocks!.find((b) => b.name === 'Grupo')!
+    expect(grupo.entities.map((e) => e.type).sort()).toEqual(['CIRCLE', 'INSERT'])
+    // Dibujada por Cota, la geometría queda donde quedaba desarmada.
+    const shown = importedView(r)
+    const line = shown.find((e) => e.type === 'LINE')!
     const { start, end } = line.props as unknown as { start: number[]; end: number[] }
     // La línea del bloque va de 0 a 10 respecto de su base; escalada ×2 y girada 90° desde (100, 50).
     expect(start[0]).toBeCloseTo(100, 9)
@@ -410,7 +418,7 @@ describe('importDxf ▸ bloques', () => {
     expect(end[0]).toBeCloseTo(100, 9)
     expect(end[1]).toBeCloseTo(70, 9)
     expect(line.layerName).toBe('Piezas') // estaba en la capa 0 dentro del bloque
-    const c = r.entities.find((e) => e.type === 'CIRCLE')!
+    const c = shown.find((e) => e.type === 'CIRCLE')!
     expect((c.props as unknown as { radius: number }).radius).toBeCloseTo(4, 9)
     expect(c.layerName).toBe('Fija')
     expect(r.unsupported).not.toContain('INSERT')
@@ -427,8 +435,8 @@ describe('importDxf ▸ bloques', () => {
       [0, 'INSERT'], [8, 'C'], [2, 'Caja'], [10, 0], [20, 0], [30, 0], [210, -1], [220, 0], [230, 0],
       [0, 'ENDSEC'], [0, 'EOF'],
     ])
-    const r = importDxf(text)
-    const byLayer = (l: string) => r.entities.find((e) => e.layerName === l)!
+    const shown = importedView(importDxf(text))
+    const byLayer = (l: string) => shown.find((e) => e.layerName === l)!
     expect(byLayer('A').type).toBe('RECTANGLE') // sin giro sigue siendo rectángulo
     for (const l of ['B', 'C']) {
       const e = byLayer(l)
@@ -446,7 +454,7 @@ describe('importDxf ▸ bloques', () => {
       [0, 'INSERT'], [8, 'A'], [2, 'Eje'], [10, -188], [20, 0], [30, 126], [50, 180], [210, -1], [220, 0], [230, 0],
       [0, 'ENDSEC'], [0, 'EOF'],
     ])
-    const line = importDxf(text).entities[0].props as unknown as { start: number[]; end: number[] }
+    const line = importedView(importDxf(text))[0].props as unknown as { start: number[]; end: number[] }
     ;[-126, 188, 0].forEach((v, i) => expect(line.start[i]).toBeCloseTo(v))
     ;[-126, 198, 0].forEach((v, i) => expect(line.end[i]).toBeCloseTo(v))
   })
@@ -461,7 +469,7 @@ describe('importDxf ▸ bloques', () => {
       [0, 'INSERT'], [8, 'B'], [2, 'Cara'], [10, 0], [20, 0], [30, 0], [41, -1],
       [0, 'ENDSEC'], [0, 'EOF'],
     ])
-    for (const e of importDxf(text).entities) {
+    for (const e of importedView(importDxf(text))) {
       const m = e.props as unknown as { vertices: number[][]; faces: number[][] }
       const [a, b, c] = m.faces[0].map((i) => m.vertices[i])
       const nz = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
@@ -546,16 +554,128 @@ describe('importDxf ▸ orden de dibujo (como el CAD clásico)', () => {
   const order = (text: string) => importDxf(text).entities.map((e) => (e.type === 'LINE' ? `L${(e.props as { start: number[] }).start[1]}` : e.type))
 
   it('las inserciones se dibujan en su lugar del archivo, no al final', () => {
-    expect(order(dxf([...blocks, ...ents, [0, 'EOF']]))).toEqual(['L1', 'CIRCLE', 'L3'])
+    expect(order(dxf([...blocks, ...ents, [0, 'EOF']]))).toEqual(['L1', 'INSERT', 'L3'])
   })
 
   it('la SORTENTSTABLE del espacio reordena por handle de orden (el propio si no está en la tabla)', () => {
     const sortents: Array<[number, string | number]> = [[0, 'SECTION'], [2, 'OBJECTS'], [0, 'SORTENTSTABLE'], [5, 'C1'], [330, 'C0'], [100, 'AcDbSortentsTable'], [330, '1F'], [331, 'A3'], [5, '10'], [331, 'A1'], [5, 'A5'], [0, 'ENDSEC']]
     // A3 → 10 (atrás de todo); A1 → A5 (después del INSERT A2).
-    expect(order(dxf([...blocks, ...ents, ...sortents, [0, 'EOF']]))).toEqual(['L3', 'CIRCLE', 'L1'])
+    expect(order(dxf([...blocks, ...ents, ...sortents, [0, 'EOF']]))).toEqual(['L3', 'INSERT', 'L1'])
     // La de otro dueño no afecta al modelo.
     const other = sortents.map(([c, v]): [number, string | number] => (c === 330 && v === '1F' ? [330, '99'] : [c, v]))
-    expect(order(dxf([...blocks, ...ents, ...other, [0, 'EOF']]))).toEqual(['L1', 'CIRCLE', 'L3'])
+    expect(order(dxf([...blocks, ...ents, ...other, [0, 'EOF']]))).toEqual(['L1', 'INSERT', 'L3'])
+  })
+})
+
+describe('importDxf ▸ bloques de Cota con atributos', () => {
+  type P = Array<[number, string | number]>
+  const dxf = (pairs: P) => pairs.map(([c, v]) => `${c}\n${v}`).join('\n') + '\n'
+  const attdef = (tag: string, value: string, x: number, y: number, h: number, flags = 0): P => [[0, 'ATTDEF'], [8, '0'], [10, x], [20, y], [30, 0], [40, h], [1, value], [3, `${tag}?`], [2, tag], [70, flags]]
+  const attrib = (tag: string, value: string, x: number, y: number, h: number, rot = 0, flags = 0): P => [[0, 'ATTRIB'], [8, '0'], [10, x], [20, y], [30, 0], [40, h], [1, value], [2, tag], [70, flags], [50, rot]]
+  // Tuerca: base (5, 5); círculo en la capa 0, línea ByBlock, atributos visible, invisible y constante.
+  const tuerca: P = [
+    [0, 'BLOCK'], [8, '0'], [2, 'Tuerca'], [70, 2], [10, 5], [20, 5], [30, 0],
+    [0, 'CIRCLE'], [8, '0'], [10, 5], [20, 5], [30, 0], [40, 3],
+    [0, 'LINE'], [8, '0'], [62, 0], [10, 2], [20, 5], [30, 0], [11, 8], [21, 5], [31, 0],
+    ...attdef('MARCA', 'M8', 5, 9, 2.5), ...attdef('CODIGO', 'X', 9, 5, 1.5, 1), ...attdef('NORMA', 'ISO 4032', 1, 0.5, 1, 2),
+    [0, 'ENDBLK'],
+  ]
+  const file = (blocks: P, ents: P) => dxf([[0, 'SECTION'], [2, 'BLOCKS'], ...blocks, [0, 'ENDSEC'], [0, 'SECTION'], [2, 'ENTITIES'], ...ents, [0, 'ENDSEC'], [0, 'EOF']])
+  const seqend: P = [[0, 'SEQEND'], [8, '0']]
+
+  it('la definición queda relativa al punto base, con sus ATTDEF; la inserción, con los valores de sus ATTRIB', () => {
+    const r = importDxf(file(tuerca, [[0, 'INSERT'], [8, 'Piezas'], [66, 1], [2, 'Tuerca'], [10, 100], [20, 50], [30, 0], ...attrib('MARCA', 'M12', 100, 54, 2.5), ...attrib('CODIGO', 'X-1', 104, 50, 1.5, 0, 1), ...seqend]))
+    expect(r.entities).toHaveLength(1)
+    expect(r.entities[0]).toMatchObject({ type: 'INSERT', layerName: 'Piezas', props: { name: 'Tuerca', position: [100, 50, 0], scale: [1, 1, 1], rotation: 0 } })
+    // El invisible también guarda su valor; el constante no se pide (sale de la definición).
+    expect((r.entities[0].props as unknown as { attributes: unknown }).attributes).toEqual([{ tag: 'MARCA', value: 'M12' }, { tag: 'CODIGO', value: 'X-1' }])
+    const def = r.blocks!.find((b) => b.name === 'Tuerca')!
+    expect(def.entities.find((e) => e.type === 'CIRCLE')?.props).toMatchObject({ center: [0, 0, 0], radius: 3 })
+    expect(def.entities.find((e) => e.type === 'LINE')?.color).toBe('BYBLOCK')
+    const defs = def.entities.filter((e) => e.type === 'ATTDEF').map((e) => e.props as unknown as Record<string, unknown>)
+    expect(defs.map((a) => [a.tag, a.prompt, a.value, !!a.invisible, !!a.constant])).toEqual([['MARCA', 'MARCA?', 'M8', false, false], ['CODIGO', 'CODIGO?', 'X', true, false], ['NORMA', 'NORMA?', 'ISO 4032', false, true]])
+    expect(defs[0].position).toEqual([0, 4, 0])
+    // Dibujada por Cota: el atributo donde estaba, el invisible no y el constante sí.
+    const texts = importedView(r).filter((e) => e.type === 'TEXT').map((e) => [(e.props as unknown as TextProps).text, (e.props as unknown as TextProps).position])
+    expect(texts).toEqual([['M12', [100, 54, 0]], ['ISO 4032', [96, 45.5, 0]]])
+  })
+
+  it('girada y escalada: el atributo que cae donde lo pone la definición se conserva', () => {
+    const a = Math.PI / 6
+    const at = (x: number, y: number) => [100 + 1.5 * (x * Math.cos(a) - y * Math.sin(a)), 50 + 1.5 * (x * Math.sin(a) + y * Math.cos(a))]
+    const [x, y] = at(0, 4)
+    const r = importDxf(file(tuerca, [[0, 'INSERT'], [8, 'Piezas'], [66, 1], [2, 'Tuerca'], [10, 100], [20, 50], [30, 0], [41, 1.5], [42, 1.5], [43, 1.5], [50, 30], ...attrib('MARCA', 'M16', x, y, 3.75, 30), ...seqend]))
+    expect(r.entities.map((e) => e.type)).toEqual(['INSERT'])
+    const t = importedView(r).find((e) => (e.props as unknown as TextProps).text === 'M16')!.props as unknown as TextProps
+    expect(t.position[0]).toBeCloseTo(x, 9)
+    expect(t.position[1]).toBeCloseTo(y, 9)
+    expect(t.height).toBeCloseTo(3.75, 9)
+    expect(t.rotation).toBeCloseTo(a, 9)
+  })
+
+  it('un atributo movido a mano, o sin su ATTDEF, desarma la inserción como antes', () => {
+    const moved = importDxf(file(tuerca, [[0, 'INSERT'], [8, 'Piezas'], [66, 1], [2, 'Tuerca'], [10, 100], [20, 50], [30, 0], ...attrib('MARCA', 'MOVIDO', 105, 57, 2.5), ...seqend]))
+    expect(moved.entities.some((e) => e.type === 'INSERT')).toBe(false)
+    const t = moved.entities.find((e) => e.type === 'TEXT' && (e.props as unknown as TextProps).text === 'MOVIDO')!
+    expect((t.props as unknown as TextProps).position).toEqual([105, 57, 0])
+    expect(moved.entities.find((e) => e.type === 'CIRCLE')?.props).toMatchObject({ center: [100, 50, 0] })
+    // El bloque igual queda definido (se puede insertar).
+    expect(moved.blocks?.map((b) => b.name)).toEqual(['Tuerca'])
+    const orphan = importDxf(file(tuerca, [[0, 'INSERT'], [8, 'Piezas'], [66, 1], [2, 'Tuerca'], [10, 0], [20, 0], [30, 0], ...attrib('OTRO', 'x', 0, 0, 1), ...seqend]))
+    expect(orphan.entities.some((e) => e.type === 'INSERT')).toBe(false)
+  })
+
+  it('anidados: la inserción de adentro, con su atributo, también es de Cota; lo ByBlock toma lo de la inserción', () => {
+    const grupo: P = [
+      [0, 'BLOCK'], [8, '0'], [2, 'Grupo'], [70, 0], [10, 0], [20, 0], [30, 0],
+      [0, 'INSERT'], [8, '0'], [62, 0], [66, 1], [2, 'Tuerca'], [10, 0], [20, 0], [30, 0], ...attrib('MARCA', 'M10', 0, 4, 2.5), ...seqend,
+      [0, 'ENDBLK'],
+    ]
+    const r = importDxf(file([...tuerca, ...grupo], [[0, 'INSERT'], [8, 'Piezas'], [62, 1], [2, 'Grupo'], [10, 0], [20, 200], [30, 0], [50, 90]]))
+    const g = r.blocks!.find((b) => b.name === 'Grupo')!
+    expect(g.entities).toHaveLength(1)
+    expect(g.entities[0]).toMatchObject({ type: 'INSERT', props: { name: 'Tuerca', attributes: [{ tag: 'MARCA', value: 'M10' }] } })
+    const shown = importedView(r)
+    // Girada 90° desde (0, 200): el atributo (4 arriba de la base de la tuerca) queda 4 a la izquierda.
+    const m10 = shown.find((e) => (e.props as unknown as TextProps).text === 'M10')!.props as unknown as TextProps
+    expect(m10.position[0]).toBeCloseTo(-4, 9)
+    expect(m10.position[1]).toBeCloseTo(200, 9)
+    // La línea ByBlock de la tuerca (insertada ByBlock) sale del color de la inserción de afuera (roja); el círculo, de
+    // la capa. Desarmada en el archivo con la de adentro ByLayer, sería del color de la capa.
+    expect(g.entities[0].color).toBe('BYBLOCK')
+    expect(shown.find((e) => e.type === 'LINE')?.color).toBe('#ff0000')
+    expect(shown.find((e) => e.type === 'CIRCLE')?.color).toBeUndefined()
+    expect(shown.find((e) => e.type === 'CIRCLE')?.layerName).toBe('Piezas')
+  })
+
+  it('MINSERT: una inserción por celda (columnas y filas, giradas con ella)', () => {
+    const r = importDxf(file(tuerca, [[0, 'INSERT'], [8, 'Piezas'], [2, 'Tuerca'], [10, 10], [20, 20], [30, 0], [50, 90], [70, 3], [71, 2], [44, 50], [45, 40]]))
+    const at = r.entities.map((e) => (e.props as unknown as { position: number[] }).position.map((v) => Math.round(v)))
+    expect(r.entities.every((e) => e.type === 'INSERT')).toBe(true)
+    expect(at).toEqual([[10, 20, 0], [10, 70, 0], [10, 120, 0], [-30, 20, 0], [-30, 70, 0], [-30, 120, 0]])
+  })
+
+  it('los anónimos (bloques dinámicos) y las referencias externas se desarman como antes', () => {
+    const anon: P = [[0, 'BLOCK'], [8, '0'], [2, '*U3'], [70, 1], [10, 0], [20, 0], [30, 0], [0, 'LINE'], [8, '0'], [10, 0], [20, 0], [30, 0], [11, 10], [21, 0], [31, 0], [0, 'ENDBLK']]
+    const xref: P = [[0, 'BLOCK'], [8, '0'], [2, 'Plano|Marco'], [70, 16], [10, 0], [20, 0], [30, 0], [0, 'LINE'], [8, '0'], [10, 0], [20, 0], [30, 0], [11, 0], [21, 5], [31, 0], [0, 'ENDBLK']]
+    const r = importDxf(file([...anon, ...xref], [[0, 'INSERT'], [8, 'A'], [2, '*U3'], [10, 1], [20, 1], [30, 0], [0, 'INSERT'], [8, 'A'], [2, 'Plano|Marco'], [10, 0], [20, 0], [30, 0]]))
+    expect(r.entities.map((e) => e.type)).toEqual(['LINE', 'LINE'])
+    expect(r.blocks).toBeUndefined()
+  })
+
+  it('escala no uniforme y extrusión: la inserción las guarda y la geometría cae donde caía desarmada', () => {
+    const placa: P = [[0, 'BLOCK'], [8, '0'], [2, 'Placa'], [70, 0], [10, 0], [20, 0], [30, 0], [0, 'LINE'], [8, '0'], [10, 0], [20, 0], [30, 0], [11, 40], [21, 20], [31, 0], [0, 'ENDBLK']]
+    const r = importDxf(file(placa, [[0, 'INSERT'], [8, 'A'], [2, 'Placa'], [10, 300], [20, 0], [30, 0], [41, 2], [42, 0.5], [0, 'INSERT'], [8, 'B'], [2, 'Placa'], [10, -400], [20, 0], [30, 0], [210, 0], [220, 0], [230, -1]]))
+    expect(r.entities[0].props).toMatchObject({ scale: [2, 0.5, 1] })
+    expect(r.entities[1].props).toMatchObject({ position: [400, 0, 0], normal: [0, 0, -1] })
+    const lines = importedView(r).map((e) => e.props as unknown as { start: number[]; end: number[] })
+    expect(lines[0].end).toEqual([380, 10, 0])
+    ;[360, 20, 0].forEach((v, i) => expect(lines[1].end[i]).toBeCloseTo(v, 9))
+  })
+
+  it('ATTRIB y ATTDEF: la justificación vertical va en el 74 (arriba: el punto 11 baja un alto)', () => {
+    const r = importDxf(dxf([[0, 'SECTION'], [2, 'ENTITIES'], [0, 'ATTDEF'], [8, '0'], [10, 0], [20, 0], [30, 0], [11, 3], [21, 10], [31, 0], [40, 2], [1, ''], [2, 'TAG'], [3, ''], [70, 0], [72, 0], [73, 0], [74, 3], [0, 'ENDSEC'], [0, 'EOF']]))
+    expect((r.entities[0].props as unknown as TextProps).position).toEqual([3, 8, 0])
   })
 })
 
@@ -577,7 +697,10 @@ describe('importDxf ▸ capas congeladas (como en el CAD clásico)', () => {
     ]
     const r = importDxf(pairs.map(([c, v]) => `${c}\n${v}`).join('\n') + '\n')
     expect(r.layers.find((l) => l.name === 'Pieza')?.frozen).toBe(true)
-    expect(r.entities.map((e) => e.layerName).sort()).toEqual(['Ejes', 'Pieza'])
+    expect(r.entities.map((e) => `${e.type} ${e.layerName}`).sort()).toEqual(['INSERT Ejes', 'INSERT Pieza'])
+    // Al dibujar, la inserción en la capa congelada no se ve (su línea está en otra capa); al exportar, va a esa capa.
+    expect(importedView(r, { skipLayers: new Set(['Pieza']) }).map((e) => e.layerName)).toEqual(['Ejes'])
+    expect(importedView(r, { frozenInto: new Set(['Pieza']) }).map((e) => e.layerName).sort()).toEqual(['Ejes', 'Pieza'])
   })
 })
 

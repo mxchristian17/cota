@@ -17,7 +17,7 @@ import { CommandEngine } from '../core/commands/CommandEngine'
 import { registerDefaultCommands } from '../core/commands/registry'
 import { applySysvars, persistedSysvars, sysvars, type PersistedSysvars } from '../core/commands/sysvars'
 import type { AppHooks, Command, Measure } from '../core/commands/types'
-import type { DimensionProps, DocumentData, DrawingVars, Entity, HatchIsland, SolidProps, EntityProps, EntityType, ImageEntity, ImageProps, LineType, NoteColor, PageSetup } from '../core/document/types'
+import type { DimensionProps, DocumentData, DrawingVars, Entity, HatchIsland, InsertProps, SolidProps, EntityProps, EntityType, ImageEntity, ImageProps, LineType, NoteColor, PageSetup } from '../core/document/types'
 import { IMAGE_EXTS, imageFileName, isImageFile } from '../core/geom/image'
 import { drawingImages } from '../core/commands/impl/image'
 import { rebuildHatchLoops } from '../core/hatch/assoc'
@@ -70,7 +70,7 @@ import { PAPER_SIZES, defaultPageSetup } from '../core/layout/paper'
 import { newViewportProps } from '../core/layout/viewport'
 import { fieldContextFor, resolveFieldTexts } from '../core/fields/context'
 import { exportObj, importObj, type ObjMesh } from '../core/io/obj'
-import { exportDxf, importDxf, type DxfImportResult } from '../core/io/dxf'
+import { exportDxf, importDxf, type DxfEntitySpec, type DxfImportResult } from '../core/io/dxf'
 import { dwgErrorMessage, dwgVersion, dxfTextToDwg, importCadInWorker } from '../core/io/dwg'
 import {
   ensurePermission,
@@ -717,12 +717,38 @@ export const useStore = create<AppState>((set, get) => {
         /* nombre duplicado: reutilizar el existente */
       }
     }
+    // Bloques del archivo como bloques de Cota. Al importar en otro dibujo, un nombre que ya existe se renombra (así lo
+    // importado se ve como en su archivo y lo del dibujo no cambia).
+    const blockName = new Map<string, string>()
+    for (const b of r.blocks ?? []) {
+      let name = b.name
+      for (let i = 2; (!asDrawing && doc.getBlock(name)) || [...blockName.values()].includes(name); i++) name = `${b.name} (${i})`
+      blockName.set(b.name, name)
+    }
+    const renamed = (e: DxfEntitySpec): EntityProps => (e.type === 'INSERT' && blockName.has((e.props as InsertProps).name) ? { ...(e.props as InsertProps), name: blockName.get((e.props as InsertProps).name)! } : e.props)
+    for (const b of r.blocks ?? []) {
+      const list: Entity[] = b.entities.map((e) => {
+        const child = { id: doc.nextEntityId(), type: e.type, layer: idByName.get(e.layerName.toLowerCase()) ?? doc.firstLayerId, props: renamed(e) } as Entity
+        // Como las del dibujo, sin ByLayer guardado; ByBlock sí (lo resuelve cada inserción).
+        if (e.lineType && e.lineType !== 'BYLAYER') child.lineType = e.lineType
+        if (e.ltScale !== undefined && e.ltScale !== 1) child.ltScale = e.ltScale
+        if (e.color) child.color = e.color
+        if (e.lineWeight !== undefined) child.lineWeight = e.lineWeight
+        if (e.transparency) child.transparency = e.transparency
+        if (child.lineType && child.lineType !== 'BYBLOCK') doc.loadLinetype(child.lineType)
+        if (child.type === 'DIMENSION' && doc.dimStyleDef(child.props.styleName ?? '')) doc.restyleDimension(child.props, child.props.styleName, child.props.overrides)
+        return child
+      })
+      doc.setBlock({ name: blockName.get(b.name)!, entities: list })
+    }
     for (const e of entities) {
       const layerId = idByName.get(e.layerName.toLowerCase()) ?? doc.firstLayerId
-      const added = doc.addEntity({ type: e.type, layer: layerId, props: e.props, lineType: e.lineType ?? 'BYLAYER', ltScale: e.ltScale ?? 1, color: e.color ?? 'BYLAYER', lineWeight: e.lineWeight ?? -1, ...(e.transparency ? { transparency: e.transparency } : {}) })
+      const added = doc.addEntity({ type: e.type, layer: layerId, props: renamed(e), lineType: e.lineType ?? 'BYLAYER', ltScale: e.ltScale ?? 1, color: e.color ?? 'BYLAYER', lineWeight: e.lineWeight ?? -1, ...(e.transparency ? { transparency: e.transparency } : {}) })
       if (added.lineType && added.lineType !== 'BYBLOCK') doc.loadLinetype(added.lineType)
       if (added.type === 'DIMENSION' && doc.dimStyleDef(added.props.styleName ?? '')) doc.restyleDimension(added.props, added.props.styleName, added.props.overrides)
     }
+    const inserts = entities.filter((e) => e.type === 'INSERT').length
+    if (inserts) print(`${inserts} block reference(s) kept as blocks (${r.blocks?.length ?? 0} block definition(s)).`)
     if (unsupported.length) print(`Unsupported entities skipped: ${unsupported.join(', ')}.`)
     if (r.meshedSolids) print(`${r.meshedSolids} 3D solid(s) read with their faces (as meshes).`)
     if (r.wireSolids) print(`${r.wireSolids} 3D solid(s) shown by their edges (wireframe): their faces could not be read.`)
@@ -2444,6 +2470,7 @@ export const useStore = create<AppState>((set, get) => {
           // 'BYLAYER' (o vacío) vuelve al color de la capa.
           const c = String(value)
           if (!c || c.toUpperCase() === 'BYLAYER') delete e.color
+          else if (c.toUpperCase() === 'BYBLOCK') e.color = 'BYBLOCK' // el de la inserción, dentro de un bloque
           else e.color = c.toLowerCase()
         } else if (key === 'lineWeight') {
           const v = Number(value)
@@ -3147,7 +3174,8 @@ export const useStore = create<AppState>((set, get) => {
         download(exportObj(meshes), 'obj', 'text/plain')
         return
       }
-      const dxf = exportDxf(solidsAsMeshes(expandEntities(doc.entities, doc.blocks, { attdisp: doc.attdisp })), doc.layers, get().currentLayerId, doc.dimStyles, {
+      // Las inserciones salen desarmadas; lo de una inserción en una capa congelada, en esa capa (así sigue oculto).
+      const dxf = exportDxf(solidsAsMeshes(expandEntities(doc.entities, doc.blocks, { attdisp: doc.attdisp, frozenInto: frozenLayerIds(doc.layers) })), doc.layers, get().currentLayerId, doc.dimStyles, {
         linetypes: doc.linetypes,
         vars: doc.toJSON().vars,
       })

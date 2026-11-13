@@ -86,3 +86,33 @@ describe('capas en bloques', () => {
     expect(expandEntities([ins('A')], [def], { skipLayers: new Set(['X']) }).map((e) => e.layer)).toEqual(['A'])
   })
 })
+
+describe('color y grosor ByBlock (bloques traídos de un DWG/DXF)', () => {
+  const def: BlockDef = {
+    name: 'B',
+    entities: [
+      { id: 'c1', type: 'LINE', layer: '0', color: 'BYBLOCK', lineWeight: -2, props: { start: [0, 0, 0], end: [1, 0, 0] } },
+      { id: 'c2', type: 'LINE', layer: 'X', color: '#00ff00', props: { start: [0, 1, 0], end: [1, 1, 0] } },
+      { id: 'c3', type: 'ATTDEF', layer: '0', color: '#0000ff', props: { position: [0, 2, 0], height: 1, rotation: 0, justify: 'left', normal: [0, 0, 1], tag: 'T', prompt: '', value: '' } },
+    ],
+  }
+  const outer: BlockDef = { name: 'O', entities: [{ id: 'n', type: 'INSERT', layer: '0', color: 'BYBLOCK', props: { name: 'B', position: [0, 0, 0], scale: [1, 1, 1], rotation: 0 } }] }
+  const ins = (name: string, extra: Partial<Entity> = {}): Entity => ({ id: 'i', type: 'INSERT', layer: 'A', props: { name, position: [0, 0, 0], scale: [1, 1, 1], rotation: 0, attributes: [{ tag: 'T', value: 'v' }] }, ...extra }) as Entity
+
+  it('toma el color y el grosor propios de la inserción; si es ByLayer, los de la capa', () => {
+    const red = expandEntities([ins('B', { color: '#ff0000', lineWeight: 0.5 })], [def])
+    expect(red.map((e) => [e.color, e.lineWeight])).toEqual([['#ff0000', 0.5], ['#00ff00', undefined], ['#0000ff', undefined]])
+    const plain = expandEntities([ins('B')], [def])
+    expect(plain[0].color).toBeUndefined() // ByLayer de la capa A (la de la inserción)
+    expect(plain[0].lineWeight).toBeUndefined()
+  })
+
+  it('anidada ByBlock: pasa el de la inserción de afuera', () => {
+    expect(expandEntities([ins('O', { color: '#ff0000' })], [def, outer])[0].color).toBe('#ff0000')
+  })
+
+  it('al exportar, lo de una inserción en una capa congelada va entero a esa capa', () => {
+    expect(expandEntities([ins('B')], [def], { frozenInto: new Set(['A']) }).map((e) => e.layer)).toEqual(['A', 'A', 'A'])
+    expect(expandEntities([ins('B')], [def]).map((e) => e.layer)).toEqual(['A', 'X', 'A'])
+  })
+})

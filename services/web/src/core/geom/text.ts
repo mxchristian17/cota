@@ -52,8 +52,9 @@ const addv = (p: Vec3, q: Vec3, s = 1): Vec3 => [p[0] + q[0] * s, p[1] + q[1] * 
 /** Líneas del texto (separadas por `\n`). */
 /** Un ATTDEF suelto se dibuja (y se mide) como un texto con su tag, como el CAD clásico. */
 export function attdefText(p: AttdefProps): TextProps {
-  const { font, bold, italic, widthFactor, stroke } = p
-  return { position: p.position, text: p.tag, height: p.height, rotation: p.rotation, justify: p.justify, normal: p.normal, ...defined({ font, bold, italic, widthFactor, stroke }) }
+  // `kind`: los ATTDEF traídos de un DWG/DXF son texto de un renglón (el punto, sobre la línea base) como sus ATTRIB.
+  const { font, bold, italic, widthFactor, stroke, kind } = p
+  return { position: p.position, text: p.tag, height: p.height, rotation: p.rotation, justify: p.justify, normal: p.normal, ...defined({ font, bold, italic, widthFactor, stroke, kind }) }
 }
 
 export function textLines(t: TextProps): string[] {

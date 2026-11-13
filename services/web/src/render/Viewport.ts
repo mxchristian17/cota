@@ -1,7 +1,7 @@
 import type { WindowPlane } from '../core/commands/selectionSets'
 import { lineSpan } from '../core/geom/xline'
 import { solidThreads, threadHelixSegments } from '../core/thread/geometry'
-import { hiddenLayerIds, layerEditable, layerVisible } from '../core/layers/visibility'
+import { frozenLayerIds, hiddenLayerIds, layerEditable, layerVisible } from '../core/layers/visibility'
 import type { Deferred } from '../core/geom/tangency'
 import * as THREE from 'three'
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
@@ -1777,7 +1777,7 @@ export class Viewport {
   private entities(): Entity[] {
     const d = this.data
     if (!d) return []
-    if (!this.expanded) this.expanded = expandEntities(d.entities, d.blocks, { attdisp: d.attdisp })
+    if (!this.expanded) this.expanded = expandEntities(d.entities, d.blocks, { attdisp: d.attdisp, skipLayers: frozenLayerIds(d.layers) })
     return this.expanded
   }
 
@@ -3746,7 +3746,8 @@ export class Viewport {
       this.lastRevision = data.revision
       this.lastAnnoScale = data.annoScale
       this.lastSelectionKey = selKey
-      this.expanded = expandEntities(data.entities, data.blocks, { attdisp: data.attdisp })
+      // Una inserción en una capa congelada no se ve entera, aunque su contenido esté en otras capas (CAD clásico).
+      this.expanded = expandEntities(data.entities, data.blocks, { attdisp: data.attdisp, skipLayers: frozenLayerIds(data.layers) })
       this.snapList = null
       this.hasFieldTexts = this.expanded.some(
         (e) => (e.type === 'TEXT' && hasFields(e.props.text)) || (e.type === 'DIMENSION' && !!e.props.textOverride && hasFields(e.props.textOverride)),
