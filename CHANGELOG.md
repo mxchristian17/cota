@@ -4,6 +4,35 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.44.0] — 2026-11-12
+
+### Added
+- **Blocks from DWG and DXF stay blocks**: named blocks open as Cota block definitions (relative to their base point,
+  with their attribute definitions and nested blocks) and each reference as an insert you select, move, edit with
+  `BEDIT` or explode as one object. Attribute values come with each insert (invisible ones too; constant ones are shown
+  from the block) and open with a double click. Non-uniform scale, rotation, extrusion and MINSERT arrays (one insert
+  per cell) are kept; objects on layer 0 take the layer of the insert and ByBlock ones its color, lineweight and
+  linetype. Dimension, table and hatch blocks, dynamic blocks, external references, sheets (paper space) and inserts
+  whose attributes were moved by hand are expanded as before. DWG, DXF and PDF exports write the inserts expanded.
+  Importing a drawing whose block names already exist renames the imported blocks.
+
+### Changed
+- **Models with fillets show their final shape much sooner**: while the exact solid kernel works, each solid is drawn
+  at once as a quick sketch (without its new fillets, holes and booleans) instead of computing an approximate fillet
+  that was thrown away when the exact one arrived. With many solids pending, several threads share the work, and the
+  results are kept in the browser, so reopening or reloading a drawing shows the exact solids right away. Opening the
+  example crank–slider went from about 10 s with a frozen screen (15 s to the exact result) to the sketch at once and
+  the exact result in about 5 s; a model with 280 filleted plates, from 35 s frozen (46 s to the exact result) to the
+  sketch at once and the exact result in 7 to 13 s; reopening either one takes a fraction of a second.
+
+### Fixed
+- **Full editor on a phone**: it fits the width of the screen (it was wider than the phone and scrolled sideways).
+  The menus go on a second row, the command prompt wraps, the suggestions fit, the Properties palette and the agent
+  panel open over the drawing (the agent starts closed on a phone), and the **📱 Mobile view** button sits at the
+  bottom right of the drawing, under menus and dialogs.
+- An insert on a frozen layer is hidden whole, also when its objects are on other layers.
+- Attributes with a vertical alignment (middle, top) open at their height; constant attributes of blocks are shown.
+
 ## [2.43.1] — 2026-11-12
 
 ### Fixed

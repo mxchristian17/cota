@@ -10,14 +10,16 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 | LINE, POINT, CIRCLE, ARC, ELLIPSE, SPLINE | Native | Native | |
 | LWPOLYLINE, POLYLINE (2D and 3D) | Native | Native | Bulges and widths kept |
 | POLYLINE (polyface and M×N mesh), 3DFACE, MESH | Mesh | 3DFACE | |
-| TEXT, MTEXT, ATTRIB | Native, with the font of their text style (TrueType fonts are shown with one of the same width), its width factor, and the formatting inside a multiline text (bold, italic, underline, font, height, color, paragraph indent) | Native (width factor; font and width as MTEXT formatting) | Text height is the height of the capitals, as in classic CAD; SHX fonts are drawn with Cota's single-stroke font; multiline text keeps its line spacing; stacked fractions as "1/2" |
-| ATTDEF | Native in blocks; its tag outside them | As text | |
+| TEXT, MTEXT | Native, with the font of their text style (TrueType fonts are shown with one of the same width), its width factor, and the formatting inside a multiline text (bold, italic, underline, font, height, color, paragraph indent) | Native (width factor; font and width as MTEXT formatting) | Text height is the height of the capitals, as in classic CAD; SHX fonts are drawn with Cota's single-stroke font; multiline text keeps its line spacing; stacked fractions as "1/2" |
+| ATTDEF | Native in blocks (tag, prompt, default value; invisible, constant and preset); its tag outside them | As text | |
+| ATTRIB | The values of the attributes of each insert (invisible ones included; constant ones come from the block) | As text, in the exported insert | An insert whose attributes are not where their definition puts them (moved by hand, another style, in a mirrored or non-uniformly scaled insert) is expanded, with its attributes as texts |
 | HATCH, SOLID, TRACE | Native | Native | |
 | DIMENSION | Native, with the overrides of each dimension, the font of its text style and its own color, lineweight and transparency | Exploded to lines, arrows and text | |
 | ARC_DIMENSION, LARGE_RADIAL_DIMENSION | By their stored block | Exploded | |
 | LEADER | Polyline | Polyline | Without the arrow |
 | MLEADER (MULTILEADER) | Lines, arrows and text | The same pieces | Block content only from DWG |
-| INSERT, ACAD_TABLE | Expanded | Expanded | Blocks are not kept as blocks |
+| INSERT (named blocks) | Cota blocks: the definition relative to its base point and one insert per reference, with nested blocks, scale (also non-uniform), rotation and extrusion. Objects on layer 0 take the layer of the insert and ByBlock ones its color, lineweight and linetype. An insert on a frozen layer is hidden whole | Expanded (on a frozen layer, its content goes to that layer) | MINSERT: one insert per cell. On a sheet (paper space), inserts are expanded. Importing into a drawing that already has a block of the same name renames the imported one |
+| INSERT of anonymous blocks, external references, ACAD_TABLE | Expanded | Expanded | Dimension, table and hatch blocks, dynamic blocks (`*U`) and external references (named with a vertical bar) |
 | XLINE, RAY | Native infinite lines | Native | |
 | MLINE | One polyline per element | Polylines | Without the style's end caps |
 | TOLERANCE | Frame, symbols and text | The same pieces | |
@@ -45,5 +47,5 @@ about half the triangles (18 segments per full turn instead of 36), and texts sm
 ## Next, by impact
 
 1. NURBS faces of ACIS solids following their surface (today, over their best-fit plane).
-2. Blocks and layouts on export (today blocks are expanded and layouts stay out of the file).
+2. Blocks and layouts on export (today inserts are expanded and layouts stay out of the file).
 3. Proxy entities in DWG files (the reader drops them).

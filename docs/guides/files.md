@@ -5,7 +5,7 @@ Formats Cota opens and saves, and where drawings are stored.
 | Format | Open | Save / export | Notes |
 | --- | --- | --- | --- |
 | `.cota` | `OPEN` | `SAVE` | Native format (JSON). Keeps everything: model, layouts, layers, styles, views |
-| `.dxf` | `OPEN`, `IMPORT` | `EXPORT DXF` | Geometry, layers, linetypes, hatches, dimensions, blocks, layouts on open; see [DWG and DXF coverage](../dwg-coverage.md) |
+| `.dxf` | `OPEN`, `IMPORT` | `EXPORT DXF` | Geometry, layers, linetypes, hatches, dimensions, blocks (kept as Cota blocks, with their attributes), layouts on open; see [DWG and DXF coverage](../dwg-coverage.md) |
 | `.png`, `.jpg`… | with the drawing, `IMAGE`, or by dropping them | — | The pictures a DXF or DWG uses (it stores only their path): choose them together with the drawing in `OPEN`, drop them on Cota, or press **Load…** in the picture's properties (`IMAGE`). From the working folder, the ones next to the drawing load on their own. They are saved inside the `.cota` |
 | `.dwg` | `OPEN`, `IMPORT` | `EXPORT DWG` | Opened and saved in the browser; the file is not uploaded. 3D solids stored as ACIS data open as meshes. See [DWG and DXF coverage](../dwg-coverage.md) |
 | `.step`, `.iges` | `OPEN` | — | 3D models, read with OpenCascade, which loads only when you open one of these files |
