@@ -11,6 +11,17 @@ export function meshVertices(p: MeshProps): Vec3[] {
   return p.vertices
 }
 
+/**
+ * Las ediciones reemplazan las listas de vértices de las mallas, así que lo calculado por lista vale mientras la lista
+ * sea la misma. La única excepción es la limpieza del ruido numérico (`cleanNumbers`), que las corrige en el lugar:
+ * avisa con `meshVerticesCleaned` y lo recordado por lista se descarta (una vez por dibujo abierto).
+ */
+let cleanedRev = 0
+export const meshVerticesRev = (): number => cleanedRev
+export function meshVerticesCleaned(): void {
+  cleanedRev++
+}
+
 /** Aristas de cada lista de caras: las caras no se modifican en el lugar (ver `cloneDocument`), así que se calculan una vez. */
 const edgesOf = new WeakMap<number[][], ArrayLike<number>>()
 
@@ -66,10 +77,10 @@ export function meshWireframe(p: MeshProps): Vec3[][] {
 }
 
 /** Caja de las aristas de una malla (lo que abarca `meshWireframe`), por su lista de vértices; null si no tiene. */
-const boxOf = new WeakMap<Vec3[], { faces: number[][]; box: [number, number, number, number, number, number] | null }>()
+const boxOf = new WeakMap<Vec3[], { faces: number[][]; rev: number; box: [number, number, number, number, number, number] | null }>()
 export function meshEdgeBox(p: MeshProps): [number, number, number, number, number, number] | null {
   const hit = boxOf.get(p.vertices)
-  if (hit && hit.faces === p.faces) return hit.box
+  if (hit && hit.faces === p.faces && hit.rev === cleanedRev) return hit.box
   const pairs = meshEdges(p.faces)
   let [x0, y0, z0, x1, y1, z1] = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]
   // Cada vértice de una arista una vez (los comparten varias).
@@ -87,6 +98,6 @@ export function meshEdgeBox(p: MeshProps): [number, number, number, number, numb
     }
   }
   const box: [number, number, number, number, number, number] | null = isFinite(x0) ? [x0, y0, z0, x1, y1, z1] : null
-  boxOf.set(p.vertices, { faces: p.faces, box })
+  boxOf.set(p.vertices, { faces: p.faces, rev: cleanedRev, box })
   return box
 }

@@ -1,6 +1,7 @@
 import { viewDimFactor } from '../drawing/viewDims'
 import type { NamedView } from '../view'
 import { cleanNumbersDeep } from '../geom/clean'
+import { meshVerticesCleaned } from '../editing/mesh'
 import { cloneDocument, cloneEntity } from './cloneShared'
 import { modelToPaperEntity, parseProxyId } from '../layout/transspatial'
 import { setModelAnnoScale } from '../dimension/dimGeometry'
@@ -956,7 +957,9 @@ export class DocumentModel {
         if (e.type !== 'MESH3D') n += cleanNumbersDeep(e.props)
         else if (e.props.vertices && !cleanMeshVerts.has(e.props.vertices)) {
           // Las caras son índices (enteros); los vértices, una vez: las ediciones reemplazan la lista entera.
-          n += cleanNumbersDeep(e.props.vertices)
+          const k = cleanNumbersDeep(e.props.vertices)
+          if (k) meshVerticesCleaned() // corregida en el lugar: lo recordado por lista de vértices ya no vale
+          n += k
           cleanMeshVerts.add(e.props.vertices)
         }
       }

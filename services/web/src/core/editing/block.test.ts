@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ExpandMemo, expandEntities, transformEntity } from './block'
+import { meshVerticesCleaned } from './mesh'
 import type { BlockDef, Entity, InsertProps } from '../document/types'
 
 const lineDef = (): Entity => ({ id: 'a', type: 'LINE', layer: '0', props: { start: [0, 0, 0], end: [10, 0, 0] } })
@@ -156,6 +157,25 @@ describe('mallas de bloques recordadas entre expansiones (ExpandMemo)', () => {
     // Editar la malla de la definición reemplaza su lista: se recalcula con la nueva.
     const edited: BlockDef[] = [{ ...inner, entities: [mesh('a', 3)] }, outer]
     expect(expandEntities(moved, edited, { memo })).toEqual(expandEntities(moved, edited))
+  })
+
+  it('vértices corregidos en el lugar (limpieza de ruido) o un cero con otro signo: se recalcula', () => {
+    const memo = new ExpandMemo()
+    const a = expandEntities(doc(), blocks, { memo })
+    const v = (inner.entities[0] as Extract<Entity, { type: 'MESH3D' }>).props.vertices
+    const was = v[1][0]
+    v[1][0] = was + 1e-12 // como cleanNumbers: en el lugar, misma lista
+    meshVerticesCleaned()
+    const b = expandEntities(doc(), blocks, { memo })
+    expect(verts(b)[1]).not.toBe(verts(a)[1])
+    expect(b).toEqual(expandEntities(doc(), blocks))
+    v[1][0] = was
+    meshVerticesCleaned()
+    const neg = doc()
+    ;(neg[2].props as InsertProps).position = [0, 50, -0]
+    const c = expandEntities(neg, blocks, { memo })
+    const d = expandEntities(doc(), blocks, { memo })
+    expect(verts(c)[4]).not.toBe(verts(d)[4])
   })
 
   it('suelta lo que una expansión no usó', () => {

@@ -10,6 +10,7 @@ import { arcBasis, arcEndpoints, arcFromAngles, arcIsClockwise } from '../geom/a
 import { sweepStartRef } from './solid'
 import { mapOwnThreads } from '../thread/geometry'
 import { mapNote } from '../geom/note'
+import { meshVerticesRev } from './mesh'
 
 /**
  * Bloques: transformación de la geometría de una definición al mundo según un INSERT
@@ -343,8 +344,12 @@ export interface ExpandOptions {
   memo?: ExpandMemo
 }
 
+/** Número exacto como texto (con el signo del cero: la transform puede dar -0). */
+const exact = (v: number): string => (Object.is(v, -0) ? '-0' : String(v))
+
 /** Clave de la transform de una inserción: lo que usa `pointMap`. */
-const placementKey = (ins: InsertProps): string => `${ins.position.join(',')}|${ins.rotation}|${ins.scale.join(',')}|${ins.normal?.join(',') ?? ''}`
+const placementKey = (ins: InsertProps): string =>
+  `${ins.position.map(exact).join(',')}|${exact(ins.rotation)}|${ins.scale.map(exact).join(',')}|${ins.normal?.map(exact).join(',') ?? ''}`
 
 /**
  * Mallas de los bloques llevadas al mundo, recordadas de una expansión a la siguiente (el dibujo expande en cada
@@ -358,6 +363,7 @@ export class ExpandMemo {
   private cur = new Map<Vec3[], Map<string, Vec3[]>>()
   private prev = new Map<Vec3[], Map<string, Vec3[]>>()
   private readonly via = new WeakMap<Vec3[], { root: Vec3[]; key: string }>()
+  private rev = meshVerticesRev()
 
   private origin(src: Vec3[], ins: InsertProps): { root: Vec3[]; key: string } {
     const from = this.via.get(src)
@@ -373,6 +379,12 @@ export class ExpandMemo {
 
   /** Malla llevada al mundo por una inserción del dibujo: la misma lista de la expansión anterior si nada cambió. */
   readonly world: MeshMap = (src, ins, P) => {
+    if (this.rev !== meshVerticesRev()) {
+      // Se limpió el ruido de vértices en el lugar (`cleanNumbers`): lo de antes ya no es exacto.
+      this.rev = meshVerticesRev()
+      this.cur.clear()
+      this.prev.clear()
+    }
     const { root, key } = this.origin(src, ins)
     let byKey = this.cur.get(root)
     let out = byKey?.get(key)

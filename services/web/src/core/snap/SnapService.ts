@@ -1,6 +1,6 @@
 import { fromVec3, pt, toVec3, type Pt, type Vec3 } from '../math'
 import type { ArcProps, CircleProps, EllipseProps, Entity, MeshProps, SolidProps } from '../document/types'
-import { meshEdges } from '../editing/mesh'
+import { meshEdges, meshVerticesRev } from '../editing/mesh'
 import { planarFaceNormal, rayFaces, solidPending, solidTopology, type Topology } from '../editing/topology'
 import { ucsToWorld, worldToUcs, type Ucs } from '../ucs'
 import { snapEdgeMidpoint, solidCenters, solidQuadrants, solidSnapEdges, solidVertices } from '../editing/solid'
@@ -194,6 +194,7 @@ function screenGapXY(cursorPx: [number, number], ax: number, ay: number, bx: num
 /** Una malla en pantalla: píxeles (x, y) de cada vértice (NaN si no se ve) y la caja de los que se ven. */
 interface MeshScreen {
   key?: string
+  rev: number
   xy: Float64Array
   box: [number, number, number, number]
 }
@@ -204,7 +205,7 @@ const meshScreens = new WeakMap<Vec3[], MeshScreen>()
 /** Los vértices de una malla en pantalla, recordados mientras la vista sea la misma. */
 function meshScreen(vertices: Vec3[], s: SnapSettings): MeshScreen {
   const hit = s.viewKey === undefined ? undefined : meshScreens.get(vertices)
-  if (hit && hit.key === s.viewKey) return hit
+  if (hit && hit.key === s.viewKey && hit.rev === meshVerticesRev()) return hit
   const xy = new Float64Array(vertices.length * 2).fill(NaN)
   const box: MeshScreen['box'] = [Infinity, Infinity, -Infinity, -Infinity]
   for (let i = 0; i < vertices.length; i++) {
@@ -217,7 +218,7 @@ function meshScreen(vertices: Vec3[], s: SnapSettings): MeshScreen {
     box[2] = Math.max(box[2], pr[0])
     box[3] = Math.max(box[3], pr[1])
   }
-  const out = { key: s.viewKey, xy, box }
+  const out = { key: s.viewKey, rev: meshVerticesRev(), xy, box }
   if (s.viewKey !== undefined) meshScreens.set(vertices, out)
   return out
 }

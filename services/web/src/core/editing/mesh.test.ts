@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { meshEdgeBox, meshEdges, meshWireframe } from './mesh'
+import { meshEdgeBox, meshEdges, meshVerticesCleaned, meshVerticesRev, meshWireframe } from './mesh'
+import { DocumentModel } from '../document/DocumentModel'
 import type { MeshProps } from '../document/types'
 import type { Vec3 } from '../math'
 
@@ -58,5 +59,18 @@ describe('aristas de una malla', () => {
     expect(b).toEqual([0, 1, 2].map((i) => Math.min(...pts.map((p) => p[i]))).concat([0, 1, 2].map((i) => Math.max(...pts.map((p) => p[i])))))
     expect(meshEdgeBox(m)).toBe(b)
     expect(meshEdgeBox({ vertices: [[1, 1, 1]], faces: [] })).toBeNull()
+  })
+
+  it('la limpieza de ruido corrige los vértices en el lugar y avisa: la caja se recalcula', () => {
+    const m: MeshProps = { vertices: [[0, 0, 0], [1, 0, 0], [0, 1, 0]], faces: [[0, 1, 2]] }
+    expect(meshEdgeBox(m)![3]).toBe(1)
+    m.vertices[1][0] = 2
+    meshVerticesCleaned()
+    expect(meshEdgeBox(m)![3]).toBe(2)
+    const doc = DocumentModel.createDefault('t')
+    doc.addEntity({ type: 'MESH3D', layer: '0', props: { vertices: [[0.9999999999995, 0, 0], [1, 1, 0], [0, 1, 0]], faces: [[0, 1, 2]] } })
+    const rev = meshVerticesRev()
+    doc.cleanNumbers()
+    expect(meshVerticesRev()).toBeGreaterThan(rev)
   })
 })
