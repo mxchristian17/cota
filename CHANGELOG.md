@@ -4,7 +4,7 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
-## [2.44.0] — 2026-11-12
+## [2.44.0] — 2026-11-13
 
 ### Added
 - **Blocks from DWG and DXF stay blocks**: named blocks open as Cota block definitions (relative to their base point,
@@ -26,6 +26,10 @@ All notable changes to Cota are documented here. The project follows [Semantic V
   sketch at once and the exact result in 7 to 13 s; reopening either one takes a fraction of a second.
 
 ### Fixed
+- **3D models with many objects**: in a 3D view, a part could show through another one in front of it, and lines drawn
+  late in the file could show through solids (the draw order of large DWG files moved later objects up to a few
+  centimeters toward the screen). The draw order now applies only when looking straight at the plan (of the world or
+  the UCS) and never to solids and meshes; in 3D views the real depth decides, as in the shaded styles of a classic CAD.
 - **Full editor on a phone**: it fits the width of the screen (it was wider than the phone and scrolled sideways).
   The menus go on a second row, the command prompt wraps, the suggestions fit, the Properties palette and the agent
   panel open over the drawing (the agent starts closed on a phone), and the **📱 Mobile view** button sits at the

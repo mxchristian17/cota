@@ -34,7 +34,7 @@ import { BASELINE_DROP, attdefText, cssFontStack, fontMetrics, lineSpacingOf, te
 import { entityGrips, type Grip } from '../core/editing/grips'
 import { viewportRing } from '../core/layout/viewport'
 import { evaluateFields, fieldSegments, hasFields, type FieldContext } from '../core/fields/fields'
-import { RANK_ATTR, rankArray, rankStep, ranked } from './drawRank'
+import { RANK_ATTR, rankArray, rankScale, rankStep, ranked } from './drawRank'
 import { entityPattern, type LinetypeContext } from '../core/linetype/linetypes'
 import { entityDashes, linetypePaths, type DashResult } from '../core/linetype/dash'
 import { hatchFrame, hatchRegions, hatchRings, hatchStrokesCached, isSolidHatch, to3, type Ring } from '../core/hatch/geometry'
@@ -764,6 +764,17 @@ export class Viewport {
     const box = this.contentBox()
     if (box.isEmpty() || ![box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z].every(isFinite)) return null
     return { min: [box.min.x, box.min.y, box.min.z], max: [box.max.x, box.max.y, box.max.z] }
+  }
+
+  /**
+   * ¿Rige el orden de dibujo? Mirando en planta del mundo o de la UCS (y en el papel). En una vista 3D manda la
+   * profundidad real (ver `drawRank.ts`).
+   */
+  private drawOrderOn(): boolean {
+    if (this.kind !== 'model' || this.isPlanView()) return true
+    const v = this.controller.viewDirection()
+    const z = ucsZ(this.ucs)
+    return Math.abs(z[0] * v.x + z[1] * v.y + z[2] * v.z) > 0.9998
   }
 
   /** ¿La vista mira en planta (a lo largo de ±Z del mundo)? */
@@ -1557,6 +1568,7 @@ export class Viewport {
 
   /** Imagen de la vista (PNG, lado mayor ≤ `max` px) para el agente: se dibuja y se lee en el mismo paso. */
   captureImage(max = 1024): string {
+    rankScale.value = this.drawOrderOn() ? 1 : 0
     this.renderer.render(this.scene, this.controller.camera)
     const src = this.renderer.domElement
     const k = Math.min(1, max / Math.max(src.width, src.height))
@@ -2504,7 +2516,8 @@ export class Viewport {
     // su objeto y el shader lo acerca a la cámara (drawRank.ts), así el orden no depende del lote. Los textos van
     // encima de todo (como los de fuente, que son HTML) y lo seleccionado arriba de todo. En 3D manda la profundidad.
     const n = entities.length
-    const rank = new Map(entities.map((e, i) => [e.id, (e.type === 'TEXT' || e.type === 'ATTDEF' ? n : 0) + i + 1]))
+    // Los cuerpos 3D (sólidos y mallas) no entran en el orden: ni en planta una pieza de abajo debe tapar a una de arriba.
+    const rank = new Map(entities.map((e, i) => [e.id, isBody(e) ? 0 : (e.type === 'TEXT' || e.type === 'ATTDEF' ? n : 0) + i + 1]))
     const top = 2 * n + 2
     this.rankOf = (id) => rank.get(id) ?? 0
     this.rankK = rankStep(top)
@@ -2517,7 +2530,7 @@ export class Viewport {
       for (const c of this.entityGroup.children.slice(from))
         c.traverse((o) => {
           o.renderOrder = sel ? 1 : 0
-          this.rankObject(o, sel && !o.userData.raster ? top : this.rankOf(e.id))
+          this.rankObject(o, sel && !o.userData.raster && !isBody(e) ? top : this.rankOf(e.id))
         })
     }
     const style = this.visualStyle
@@ -3858,6 +3871,7 @@ export class Viewport {
         this.aimLights()
         this.updateLineweights()
         this.updateSilhouettes()
+        rankScale.value = this.drawOrderOn() ? 1 : 0
         this.renderer.render(this.scene, this.controller.camera)
         this.dirty = false
       }
@@ -3904,4 +3918,9 @@ function darkerHex(hex: string, k: number): string {
   if (!Number.isFinite(n)) return '#555555'
   const c = (v: number) => Math.round(v * k).toString(16).padStart(2, '0')
   return `#${c((n >> 16) & 255)}${c((n >> 8) & 255)}${c(n & 255)}`
+}
+
+/** Sólido o malla 3D: en pantalla manda su profundidad real, no el orden de dibujo. */
+function isBody(e: Entity): boolean {
+  return e.type === 'SOLID3D' || e.type === 'MESH3D'
 }
