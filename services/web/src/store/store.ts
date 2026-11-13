@@ -3252,10 +3252,9 @@ export const useStore = create<AppState>((set, get) => {
           return
         }
         const label = undoLabels.get(e)
-        const redoSnap = doc.toJSON()
+        const redoSnap = doc.swap(e, true) // el guardado pasa a ser el dibujo y el de ahora queda para rehacer
         if (label) undoLabels.set(redoSnap, label)
         redoStack.push(redoSnap)
-        doc.load(e, true)
         afterRestore()
         print(stepMessage('Undo', label))
         return
@@ -3277,10 +3276,9 @@ export const useStore = create<AppState>((set, get) => {
           return
         }
         const label = undoLabels.get(e)
-        const undoSnap = doc.toJSON()
+        const undoSnap = doc.swap(e, true)
         if (label) undoLabels.set(undoSnap, label)
         undoStack.push(undoSnap)
-        doc.load(e, true)
         afterRestore()
         print(stepMessage('Redo', label))
         return

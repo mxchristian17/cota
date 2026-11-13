@@ -58,9 +58,11 @@ export class CameraController {
     return this.height
   }
 
+  private readonly ndcScratch = new THREE.Vector3()
+
   /** Proyecta un punto de mundo a píxeles del canvas (origen arriba-izquierda). null si queda detrás. */
   project(v: THREE.Vector3): [number, number] | null {
-    const ndc = v.clone().project(this.camera)
+    const ndc = this.ndcScratch.copy(v).project(this.camera) // sin copia nueva: el snap proyecta miles de puntos por cuadro
     if (ndc.z > 1) return null // detrás de la cámara / más allá del far
     return [(ndc.x * 0.5 + 0.5) * this.width, (-ndc.y * 0.5 + 0.5) * this.height]
   }

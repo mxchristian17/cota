@@ -1,5 +1,6 @@
 import { fromVec3, pt, toVec3, type Pt, type Vec3 } from '../math'
-import type { ArcProps, CircleProps, EllipseProps, Entity, SolidProps } from '../document/types'
+import type { ArcProps, CircleProps, EllipseProps, Entity, MeshProps, SolidProps } from '../document/types'
+import { meshEdges } from '../editing/mesh'
 import { planarFaceNormal, rayFaces, solidPending, solidTopology, type Topology } from '../editing/topology'
 import { ucsToWorld, worldToUcs, type Ucs } from '../ucs'
 import { snapEdgeMidpoint, solidCenters, solidQuadrants, solidSnapEdges, solidVertices } from '../editing/solid'
@@ -99,6 +100,11 @@ export interface SnapSettings {
   acquired?: Acquisition[]
   /** Rayo del cursor en mundo (origen y dirección unitaria): para los snaps de caras. */
   ray?: { o: Vec3; d: Vec3 }
+  /**
+   * Clave exacta de la vista que usa `project` (matrices de la cámara y tamaño): mientras no cambie, los vértices de
+   * las mallas proyectados en una consulta sirven para la siguiente (mover el cursor no mueve la vista).
+   */
+  viewKey?: string
 }
 
 /** Tipos de candidato de object snap (todos menos la grilla y el tracking). */
@@ -153,16 +159,95 @@ const lerp = (a: Pt, b: Pt, t: number): Pt =>
 const sub3 = (a: Pt, b: Pt): Vec3 => [a.x - b.x, a.y - b.y, a.z - b.z]
 const dot3 = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 
+/** El proyector, recordando lo ya proyectado (por punto) mientras dura una consulta. */
+function projectOnce(project: Projector): Projector {
+  const done = new Map<Pt, [number, number] | null>()
+  return (p) => {
+    let r = done.get(p)
+    if (r === undefined) done.set(p, (r = project(p)))
+    return r
+  }
+}
+
+/**
+ * Distancia en píxeles del cursor al tramo a→b proyectado (0 si un extremo no se ve). El punto de mundo más cercano que
+ * da `nearestOnSegmentScreen` cae sobre ese tramo de pantalla (la proyección lleva tramos a tramos), así que nunca está
+ * más cerca del cursor que esto.
+ */
+function screenGap(cursorPx: [number, number], a: Pt, b: Pt, project: Projector): number {
+  const pa = project(a)
+  const pb = project(b)
+  if (!pa || !pb) return 0
+  return screenGapXY(cursorPx, pa[0], pa[1], pb[0], pb[1])
+}
+
+/** `screenGap` con los extremos ya proyectados (NaN = no se ve: 0, como allá). */
+function screenGapXY(cursorPx: [number, number], ax: number, ay: number, bx: number, by: number): number {
+  if (Number.isNaN(ax) || Number.isNaN(bx)) return 0
+  const abx = bx - ax
+  const aby = by - ay
+  const len2 = abx * abx + aby * aby
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((cursorPx[0] - ax) * abx + (cursorPx[1] - ay) * aby) / len2))
+  return Math.hypot(ax + abx * t - cursorPx[0], ay + aby * t - cursorPx[1])
+}
+
+/** Una malla en pantalla: píxeles (x, y) de cada vértice (NaN si no se ve) y la caja de los que se ven. */
+interface MeshScreen {
+  key?: string
+  xy: Float64Array
+  box: [number, number, number, number]
+}
+
+/** Vértices de malla en pantalla de la última vista en que se proyectaron (por lista de vértices). */
+const meshScreens = new WeakMap<Vec3[], MeshScreen>()
+
+/** Los vértices de una malla en pantalla, recordados mientras la vista sea la misma. */
+function meshScreen(vertices: Vec3[], s: SnapSettings): MeshScreen {
+  const hit = s.viewKey === undefined ? undefined : meshScreens.get(vertices)
+  if (hit && hit.key === s.viewKey) return hit
+  const xy = new Float64Array(vertices.length * 2).fill(NaN)
+  const box: MeshScreen['box'] = [Infinity, Infinity, -Infinity, -Infinity]
+  for (let i = 0; i < vertices.length; i++) {
+    const v = vertices[i]
+    const pr = v ? s.project(fromVec3(v)) : null
+    if (!pr) continue
+    ;[xy[2 * i], xy[2 * i + 1]] = pr
+    box[0] = Math.min(box[0], pr[0])
+    box[1] = Math.min(box[1], pr[1])
+    box[2] = Math.max(box[2], pr[0])
+    box[3] = Math.max(box[3], pr[1])
+  }
+  const out = { key: s.viewKey, xy, box }
+  if (s.viewKey !== undefined) meshScreens.set(vertices, out)
+  return out
+}
+
 /** Punto más cercano (en pantalla) sobre el segmento 3D a→b respecto del cursor en píxeles. */
 function nearestOnSegmentScreen(cursorPx: [number, number], a: Pt, b: Pt, project: Projector): Pt | null {
   const pa = project(a)
   const pb = project(b)
   if (!pa || !pb) return null
-  const abx = pb[0] - pa[0]
-  const aby = pb[1] - pa[1]
+  return nearestBetween(cursorPx, a, b, pa[0], pa[1], pb[0], pb[1])
+}
+
+/** `nearestBetween` con los extremos como vértices de malla (los mismos números, sin armar sus puntos). */
+function nearestBetweenV(cursorPx: [number, number], a: Vec3, b: Vec3, ax: number, ay: number, bx: number, by: number): Pt {
+  const abx = bx - ax
+  const aby = by - ay
+  const len2 = abx * abx + aby * aby
+  if (len2 === 0) return { x: a[0], y: a[1], z: a[2] }
+  let t = ((cursorPx[0] - ax) * abx + (cursorPx[1] - ay) * aby) / len2
+  t = Math.max(0, Math.min(1, t))
+  return pt(a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), a[2] + t * (b[2] - a[2]))
+}
+
+/** `nearestOnSegmentScreen` con los extremos ya proyectados en (ax, ay) y (bx, by). */
+function nearestBetween(cursorPx: [number, number], a: Pt, b: Pt, ax: number, ay: number, bx: number, by: number): Pt {
+  const abx = bx - ax
+  const aby = by - ay
   const len2 = abx * abx + aby * aby
   if (len2 === 0) return { x: a.x, y: a.y, z: a.z }
-  let t = ((cursorPx[0] - pa[0]) * abx + (cursorPx[1] - pa[1]) * aby) / len2
+  let t = ((cursorPx[0] - ax) * abx + (cursorPx[1] - ay) * aby) / len2
   t = Math.max(0, Math.min(1, t))
   return lerp(a, b, t)
 }
@@ -318,13 +403,19 @@ function pick(cands: Cand[], depth?: (p: Pt) => number): Cand | null {
  * centro, intersecciones, quadrant, node, GCEN sobre el centroide); 2) objeto bajo el cursor (PER,
  * TAN, CEN desde la curva, GCEN desde el borde); 3) nearest.
  */
-export function computeSnap(cursor: Pt, entities: Entity[], s: SnapSettings): SnapResult {
+export function computeSnap(cursor: Pt, entities: Entity[], settings: SnapSettings): SnapResult {
+  // Cada punto se proyecta una vez por consulta (los tramos seguidos de una curva comparten sus extremos).
+  const s: SnapSettings = { ...settings, project: projectOnce(settings.project) }
   if (s.esnap) {
     const [cx, cy] = s.cursorPx
     const thr = s.pixelThreshold
     const cands: Cand[] = []
     const pxDist = (p: Pt): number => {
       const pr = s.project(p)
+      return pr ? Math.hypot(pr[0] - cx, pr[1] - cy) : Infinity
+    }
+    const rawPxDist = (p: Pt): number => {
+      const pr = settings.project(p)
       return pr ? Math.hypot(pr[0] - cx, pr[1] - cy) : Infinity
     }
     /** Nivel 1: el punto de snap está bajo el cursor. */
@@ -495,6 +586,45 @@ export function computeSnap(cursor: Pt, entities: Entity[], s: SnapSettings): Sn
     /** Segmentos cercanos con su entidad y si ésta tiene curva analítica (su INT real va por `nearCurves`). */
     const nearSegs: Array<{ a: Pt; b: Pt; owner: number; exact: boolean }> = []
     const nearCurves: Array<{ curve: Curve; z: number; self: boolean }> = []
+    /**
+     * Malla: lo mismo que el recorrido general de abajo para una malla (END en sus vértices, nearest sobre sus aristas y
+     * las aristas cercanas para INT; sin MID ni PER, por facetada), con sus vértices proyectados una vez por vista (ver
+     * `meshScreen`): en un ensamble grande, proyectar cada vértice y cada arista en cada movimiento del cursor era casi
+     * todo el costo. Sólo las aristas que pasan cerca del cursor arman sus puntos.
+     */
+    const meshSnaps = (p: MeshProps, idx: number): void => {
+      const vs = p.vertices
+      const { xy, box } = meshScreen(vs, settings)
+      // Lo que sigue pide d ≤ thr (END, NEA) o d ≤ 4·thr (INT), y d nunca es menor que la distancia al tramo en pantalla
+      // (ni que la distancia a la caja de la malla en pantalla).
+      const reach = (wantInt ? 4 * thr : thr) + 1
+      if (Math.hypot(Math.max(box[0] - cx, 0, cx - box[2]), Math.max(box[1] - cy, 0, cy - box[3])) > reach) return
+      if (s.osnap.endpoint) {
+        for (let i = 0; i < vs.length; i++) {
+          if (vs[i] && Math.hypot(xy[2 * i] - cx, xy[2 * i + 1] - cy) <= thr) add(fromVec3(vs[i]), 'endpoint')
+        }
+      }
+      if (!s.osnap.nearest && !wantInt) return // sus aristas sólo dan NEA e INT
+      const pairs = meshEdges(p.faces)
+      for (let k = 0; k < pairs.length; k += 2) {
+        // Sin NEA y con el cupo de tramos para INT lleno, las aristas que quedan no dan nada.
+        if (!s.osnap.nearest && nearSegs.length >= MAX_INTERSECT_SEGS) return
+        const va = vs[pairs[k]]
+        const vb = vs[pairs[k + 1]]
+        if (!va || !vb) continue
+        const ax = xy[2 * pairs[k]]
+        const bx = xy[2 * pairs[k + 1]]
+        if (Number.isNaN(ax) || Number.isNaN(bx)) continue // un extremo no se ve
+        const ay = xy[2 * pairs[k] + 1]
+        const by = xy[2 * pairs[k + 1] + 1]
+        if (screenGapXY(s.cursorPx, ax, ay, bx, by) > reach) continue
+        const np = nearestBetweenV(s.cursorPx, va, vb, ax, ay, bx, by)
+        const d = rawPxDist(np) // como `addNearest` + `pxDist` (sin recordar: cada punto se mide una vez)
+        if (s.osnap.nearest && d <= thr) cands.push({ point: np, type: 'nearest', tier: 3, d, owner })
+        if (wantInt && d <= 4 * thr && nearSegs.length < MAX_INTERSECT_SEGS) nearSegs.push({ a: fromVec3(va), b: fromVec3(vb), owner: idx, exact: false })
+      }
+    }
+
     entities.forEach((e, idx) => {
       owner = e.id
       if (e.type === 'SOLID3D' && solidPending(e.props)) return // en boceto hasta que llegue el resultado exacto
@@ -517,6 +647,10 @@ export function computeSnap(cursor: Pt, entities: Entity[], s: SnapSettings): Sn
       const sampled = faceted || e.type === 'ARC' || bulged || e.type === 'SPLINE'
       const smooth = e.type === 'CIRCLE' || e.type === 'ELLIPSE'
       const perSegPerp = !sampled && !smooth
+      if (e.type === 'MESH3D') {
+        meshSnaps(e.props, idx)
+        return
+      }
       for (const v of endpointsOfEntity(e)) add(v, 'endpoint')
 
       const segs: [Pt, Pt][] =
@@ -531,6 +665,9 @@ export function computeSnap(cursor: Pt, entities: Entity[], s: SnapSettings): Sn
       let near = false
       for (const [a, b] of segs) {
         if (!sampled && !smooth) add(mid(a, b), 'midpoint')
+        // Un tramo que en pantalla pasa lejos del cursor no da nada (abajo todo pide d ≤ 4·thr) y su punto más cercano
+        // queda al menos así de lejos: no se calcula (en una malla grande, casi todas sus aristas).
+        if (screenGap(s.cursorPx, a, b, s.project) > 4 * thr + 1) continue
         const np = nearestOnSegmentScreen(s.cursorPx, a, b, s.project)
         if (!np) continue
         const d = pxDist(np)

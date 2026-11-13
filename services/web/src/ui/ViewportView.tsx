@@ -109,6 +109,10 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
         openContextMenu(x, y, world)
       },
       isSelectMode: () => isSelectMode(),
+      isPickOnly: () => {
+        const { engine } = useStore.getState()
+        return !engine.hasPending && !engine.busy
+      },
       selectionArea: () => useStore.getState().selectionArea(),
       isCommandActive: () => useStore.getState().engine.busy,
       onCameraChange: (az, el, mode) => {

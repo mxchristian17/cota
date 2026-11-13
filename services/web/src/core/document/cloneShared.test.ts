@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DocumentModel } from './DocumentModel'
-import { cloneDocument, cloneEntity } from './cloneShared'
+import { cloneDocument, cloneEntity, plainClone } from './cloneShared'
 import type { DocumentData, Entity, MeshEntity } from './types'
 
 const mesh = (id: string): MeshEntity => ({ id, type: 'MESH3D', layer: '0', props: { vertices: [[0, 0, 0], [1, 0, 0], [0, 1, 0]], faces: [[0, 1, 2]] } })
@@ -50,5 +50,38 @@ describe('copias del dibujo que comparten las mallas', () => {
     expect((d.entities[0].props as { data: string }).data).toBe(data)
     expect(copy.entities[0].props).not.toBe(img.props)
     expect((cloneEntity(img).props as { data: string }).data).toBe(data)
+  })
+})
+
+describe('plainClone (la copia para deshacer)', () => {
+  it('igual a structuredClone con datos simples, sin compartir nada con el original', () => {
+    const d = { a: [1, -0, NaN, Infinity, null, undefined, 'x', true, [2, [3]]], b: { c: { d: [[1, 2], [3]] }, e: undefined }, f: 12n }
+    const c = plainClone(d)
+    expect(c).toEqual(structuredClone(d))
+    expect(Object.is(c.a[1], -0)).toBe(true)
+    expect('e' in c.b).toBe(true)
+    expect(c.b.c).not.toBe(d.b.c)
+    expect(c.a[8]).not.toBe(d.a[8])
+  })
+
+  it('con otra cosa (Map, Date, arreglos tipados, referencias circulares) copia structuredClone', () => {
+    const odd = { m: new Map([[1, 2]]), t: new Date(5), f: new Float32Array([1, 2]) }
+    const c = plainClone(odd)
+    expect(c.m).toBeInstanceOf(Map)
+    expect(c.t).toBeInstanceOf(Date)
+    expect(c.f).toBeInstanceOf(Float32Array)
+    const cyc: Record<string, unknown> = { x: 1 }
+    cyc.self = cyc
+    const cc = plainClone(cyc)
+    expect(cc.self).toBe(cc)
+    expect(() => plainClone({ fn: () => 1 })).toThrow() // como structuredClone
+  })
+
+  it('el dibujo: una copia independiente, con las mallas compartidas', () => {
+    const data = { entities: [mesh('a'), line('b')], blocks: [{ name: 'B', base: [0, 0, 0], entities: [mesh('d'), line('e')] }] } as unknown as DocumentData
+    const copy = cloneDocument(data)
+    expect(copy).toEqual(structuredClone(data))
+    expect((copy.entities[0] as MeshEntity).props.vertices).toBe((data.entities[0] as MeshEntity).props.vertices)
+    expect(copy.blocks![0].entities[1]).not.toBe(data.blocks![0].entities[1])
   })
 })

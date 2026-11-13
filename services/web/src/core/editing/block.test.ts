@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { expandEntities, transformEntity } from './block'
+import { ExpandMemo, expandEntities, transformEntity } from './block'
 import type { BlockDef, Entity, InsertProps } from '../document/types'
 
 const lineDef = (): Entity => ({ id: 'a', type: 'LINE', layer: '0', props: { start: [0, 0, 0], end: [10, 0, 0] } })
@@ -114,5 +114,56 @@ describe('color y grosor ByBlock (bloques traídos de un DWG/DXF)', () => {
   it('al exportar, lo de una inserción en una capa congelada va entero a esa capa', () => {
     expect(expandEntities([ins('B')], [def], { frozenInto: new Set(['A']) }).map((e) => e.layer)).toEqual(['A', 'A', 'A'])
     expect(expandEntities([ins('B')], [def]).map((e) => e.layer)).toEqual(['A', 'X', 'A'])
+  })
+})
+
+describe('mallas de bloques recordadas entre expansiones (ExpandMemo)', () => {
+  const mesh = (id: string, x: number): Entity => ({ id, type: 'MESH3D', layer: '0', props: { vertices: [[x, 0, 0], [x + 1, 0, 0], [x, 1, 0], [x, 0, 1]], faces: [[0, 1, 2], [0, 2, 3]] } })
+  const inner: BlockDef = { name: 'IN', entities: [mesh('a', 0)] }
+  const outer: BlockDef = { name: 'OUT', entities: [mesh('b', 5), { id: 'n', type: 'INSERT', layer: '0', props: ins({ name: 'IN', position: [10, 0, 0], scale: [1, -1, 1], rotation: 0.5 }) }] }
+  const blocks = [inner, outer]
+  const doc = (): Entity[] => [
+    { id: 'i1', type: 'INSERT', layer: '0', props: ins({ name: 'OUT', scale: [2, 2, 2], rotation: 0.1 }) },
+    { id: 'i2', type: 'INSERT', layer: '0', props: ins({ name: 'OUT', position: [50, 0, 0], normal: [0, 1, 0] }) },
+    { id: 'i3', type: 'INSERT', layer: '0', props: ins({ name: 'IN', position: [0, 50, 0], scale: [-1, 1, 1], rotation: 2 }) },
+  ]
+  const verts = (list: Entity[]) => list.flatMap((e) => (e.type === 'MESH3D' ? [e.props.vertices] : []))
+
+  it('da lo mismo que sin memo, con las mismas listas de vértices en la expansión siguiente', () => {
+    const memo = new ExpandMemo()
+    const plain = expandEntities(doc(), blocks)
+    const a = expandEntities(doc(), blocks, { memo })
+    const b = expandEntities(doc(), blocks, { memo })
+    expect(a).toEqual(plain)
+    expect(b).toEqual(plain)
+    expect(verts(b)).toHaveLength(5)
+    verts(b).forEach((v, i) => expect(v).toBe(verts(a)[i]))
+    // Las caras de las copias espejadas también son las mismas listas.
+    b.forEach((e, i) => e.type === 'MESH3D' && expect(e.props.faces).toBe((a[i] as typeof e).props.faces))
+  })
+
+  it('una inserción movida (o una malla editada) se recalcula; las demás siguen iguales', () => {
+    const memo = new ExpandMemo()
+    const a = expandEntities(doc(), blocks, { memo })
+    const moved = doc()
+    ;(moved[0].props as InsertProps).position = [1, 2, 3]
+    const b = expandEntities(moved, blocks, { memo })
+    expect(b).toEqual(expandEntities(moved, blocks))
+    expect(verts(b)[0]).not.toBe(verts(a)[0]) // las de i1
+    expect(verts(b)[1]).not.toBe(verts(a)[1])
+    expect(verts(b).slice(2)).toEqual(verts(a).slice(2))
+    verts(b).slice(2).forEach((v, i) => expect(v).toBe(verts(a)[i + 2]))
+    // Editar la malla de la definición reemplaza su lista: se recalcula con la nueva.
+    const edited: BlockDef[] = [{ ...inner, entities: [mesh('a', 3)] }, outer]
+    expect(expandEntities(moved, edited, { memo })).toEqual(expandEntities(moved, edited))
+  })
+
+  it('suelta lo que una expansión no usó', () => {
+    const memo = new ExpandMemo()
+    const a = expandEntities(doc(), blocks, { memo })
+    expandEntities(doc().slice(2), blocks, { memo }) // sin i1 ni i2
+    const c = expandEntities(doc(), blocks, { memo })
+    expect(verts(c)[0]).not.toBe(verts(a)[0])
+    expect(verts(c)[4]).toBe(verts(a)[4]) // i3 siguió en uso
   })
 })

@@ -1065,11 +1065,26 @@ export class DocumentModel {
    * `keepBlockEditor` (deshacer/rehacer): el editor de bloques sigue abierto si el bloque todavía existe.
    */
   load(data: DocumentData, keepBlockEditor = false): void {
+    this.install(cloneDocument(data), keepBlockEditor)
+  }
+
+  /**
+   * Deshacer/rehacer: el dibujo pasa a ser `data` tal cual, sin copiarlo, y devuelve el que había (que ya no se toca),
+   * para la otra pila. `data` es una copia guardada que salió de su pila: nadie más la usa. Copiar los dos (el actual
+   * para rehacer y el guardado al cargarlo) demoraba cada Ctrl+Z en un dibujo con decenas de miles de objetos.
+   */
+  swap(data: DocumentData, keepBlockEditor = false): DocumentData {
+    const before = this.data
+    this.install(data, keepBlockEditor)
+    return before
+  }
+
+  private install(data: DocumentData, keepBlockEditor: boolean): void {
     const ed = keepBlockEditor ? this.blockEd : null
     const tab = this.activeTab
     const ms = this.msVp
     const max = this.maxVp
-    this.data = cloneDocument(data)
+    this.data = data
     this.hatchSigs.clear()
     this.normalize()
     this.reseed()

@@ -80,3 +80,53 @@ describe('entitiesInScreenBox', () => {
     expect(ids).toEqual([])
   })
 })
+
+describe('entitiesInScreenBox con mallas (cada vértice se proyecta una vez)', () => {
+  let seed = 3
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+  const mesh = (id: string, x: number, y: number): Entity => ({
+    id,
+    type: 'MESH3D',
+    layer: '0',
+    props: { vertices: Array.from({ length: 12 }, () => [x + rnd() * 6, y + rnd() * 6, rnd() * 4]), faces: Array.from({ length: 16 }, () => [0, 1, 2].map(() => Math.floor(rnd() * 12))) },
+  })
+  // Proyección con perspectiva simple (los puntos con z > 3.5 quedan "detrás" y no se ven).
+  const project: Projector = (p) => (p.z > 3.5 ? null : [p.x * 10 + p.z, p.y * 10 - p.z * 2])
+  const def: BlockDef = { name: 'M', entities: [mesh('a', 0, 0), mesh('b', 8, 1)] }
+  const ents: Entity[] = [mesh('m1', 10, 10), mesh('m2', 30, 5), { id: 'i1', type: 'INSERT', layer: '0', props: { name: 'M', position: [20, 20, 0], scale: [1, 1, 1], rotation: 0.4 } }, line]
+  const expand = (e: Entity) => expandEntities([e], [def])
+
+  it('selecciona igual que proyectando el contorno arista por arista', () => {
+    // Referencia: cada malla como sus aristas sueltas (líneas) dentro de una inserción falsa por objeto.
+    const asLines = (e: Entity): Entity[] =>
+      (e.type === 'INSERT' ? expand(e) : [e]).flatMap((x) => {
+        if (x.type !== 'MESH3D') return [x]
+        const seen = new Set<string>()
+        const out: Entity[] = []
+        for (const f of x.props.faces)
+          for (let i = 0; i < f.length; i++) {
+            const [a, b] = [f[i], f[(i + 1) % f.length]]
+            const k = a < b ? `${a}_${b}` : `${b}_${a}`
+            if (a === b || seen.has(k)) continue
+            seen.add(k)
+            out.push({ id: e.id, type: 'LINE', layer: '0', props: { start: x.props.vertices[a], end: x.props.vertices[b] } })
+          }
+        return out
+      })
+    const lineDefs: BlockDef[] = ents.map((e) => ({ name: `R${e.id}`, entities: asLines(e) }))
+    const asRefs: Entity[] = ents.map((e) => ({ id: e.id, type: 'INSERT', layer: '0', props: { name: `R${e.id}`, position: [0, 0, 0], scale: [1, 1, 1], rotation: 0 } }))
+    const expandRef = (e: Entity) => expandEntities([e], lineDefs)
+    let picked = 0
+    for (let k = 0; k < 300; k++) {
+      const x0 = rnd() * 400 - 20
+      const y0 = rnd() * 300 - 40
+      const rect = { minX: x0, minY: y0, maxX: x0 + rnd() * 250, maxY: y0 + rnd() * 200 }
+      for (const crossing of [false, true]) {
+        const got = entitiesInScreenBox(ents, rect, crossing, project, expand)
+        expect(got).toEqual(entitiesInScreenBox(asRefs, rect, crossing, project, expandRef))
+        picked += got.length
+      }
+    }
+    expect(picked).toBeGreaterThan(100)
+  })
+})

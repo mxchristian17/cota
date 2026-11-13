@@ -407,3 +407,41 @@ describe('sin intersecciones en el facetado de un sólido', () => {
     expect(corner.type).toBe('intersection')
   })
 })
+
+describe('snaps de mallas (vértices proyectados una vez por vista)', () => {
+  // Una placa de 10 × 10 en cuatro triángulos, con el vértice 4 en el centro.
+  const plate: Entity = {
+    id: 'm1',
+    type: 'MESH3D',
+    layer: '0',
+    props: { vertices: [[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0], [5, 5, 0]], faces: [[0, 1, 4], [1, 2, 4], [2, 3, 4], [3, 0, 4]] },
+  }
+  const cross: LineEntity = { id: 'l2', type: 'LINE', layer: '0', props: { start: [3, -5, 0], end: [3, 20, 0] } }
+  const scaled = (k: number) => (p: Pt): [number, number] => [p.x * k, p.y * k]
+
+  it('END en sus vértices, NEA sobre sus aristas, INT con otros objetos y sin MID (es facetada)', () => {
+    const at = (x: number, y: number, over: Partial<SnapSettings> = {}) => computeSnap(pt(x, y), [plate, cross], base(pt(x, y), { viewKey: 'v', pixelThreshold: 1, ...over }))
+    expect(at(10.5, 9.6)).toMatchObject({ type: 'endpoint', point: pt(10, 10, 0) })
+    expect(at(3.2, 0.1)).toMatchObject({ type: 'intersection', point: pt(3, 0, 0) })
+    expect(at(7, -0.4, { osnap: { ...ALL_OFF, nearest: true } })).toMatchObject({ type: 'nearest', point: pt(7, 0, 0) })
+    expect(at(5, 0.2, { osnap: { ...ALL_OFF, midpoint: true } }).type).toBeNull()
+  })
+
+  it('lo recordado por vista da lo mismo que proyectar cada vez, y otra vista se proyecta de nuevo', () => {
+    const cursors: [number, number][] = [[0, 0], [10.4, 0.3], [4.8, 5.3], [7, 7.2], [2.9, 9.9], [15, 15], [5, -0.6]]
+    for (const k of [1, 2]) {
+      for (const [x, y] of cursors) {
+        const c = pt(x * k, y * k)
+        const plain = computeSnap(c, [plate, cross], base(c, { project: scaled(k) }))
+        const kept = computeSnap(c, [plate, cross], base(c, { project: scaled(k), viewKey: `zoom ${k}` }))
+        expect(kept).toEqual(plain)
+      }
+    }
+  })
+
+  it('una arista con un extremo que no se ve no da snaps', () => {
+    const hidden = (p: Pt): [number, number] | null => (p.x > 9 ? null : [p.x, p.y])
+    const r = computeSnap(pt(9.5, 0.2), [plate], base(pt(9.5, 0.2), { project: hidden, viewKey: 'h', osnap: { ...ALL_OFF, nearest: true, endpoint: true } }))
+    expect(r.type).toBeNull()
+  })
+})

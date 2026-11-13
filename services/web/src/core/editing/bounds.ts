@@ -3,10 +3,10 @@ import { regionPoints } from '../region/region'
 import { imageRing } from '../geom/image'
 import { shadeOutline } from '../projection/shade'
 import { loopPoints } from '../hatch/geometry'
-import type { Entity } from '../document/types'
+import type { Entity, MeshProps } from '../document/types'
 import { fromVec3, type Pt } from '../math'
 import { solidProfiles, solidWireframe } from './solid'
-import { meshWireframe } from './mesh'
+import { meshEdges, meshWireframe } from './mesh'
 import { ellipsePoints } from '../geom/ellipse'
 import { arcBounds, tessellateArc } from '../geom/arc'
 import { polylinePoints } from '../geom/polyline'
@@ -244,28 +244,71 @@ export function entitiesInScreenBox(
 ): string[] {
   const ids: string[] = []
   for (const e of entities) {
-    const polys = e.type === 'INSERT' && expandInsert ? expandInsert(e).flatMap(entityOutline) : entityOutline(e)
-    let anyPoint = false
-    let allInside = true
-    let touches = false
-    for (const poly of polys) {
-      const proj = poly.map(project).filter((p): p is [number, number] => p !== null)
-      for (const p of proj) {
-        anyPoint = true
-        if (!inRect(p, rect)) allInside = false
-      }
-      if (crossing) {
-        for (let i = 0; i < proj.length - 1; i++) {
-          if (segTouchesRect(proj[i], proj[i + 1], rect)) {
-            touches = true
-            break
-          }
-        }
-      }
-      if (touches) break
+    const parts = e.type === 'INSERT' && expandInsert ? expandInsert(e) : [e]
+    const hit: BoxHit = { anyPoint: false, allInside: true, touches: false }
+    for (const part of parts) {
+      if (part.type === 'MESH3D') meshInBox(part.props, rect, crossing, project, hit)
+      else outlineInBox(entityOutline(part), rect, crossing, project, hit)
+      // Ya decidido: toca la caja (cruce) o tiene un punto afuera (ventana).
+      if (hit.touches || (!crossing && !hit.allInside)) break
     }
-    if (!anyPoint) continue
-    if (crossing ? touches : allInside) ids.push(e.id)
+    if (!hit.anyPoint) continue
+    if (crossing ? hit.touches : hit.allInside) ids.push(e.id)
   }
   return ids
+}
+
+/** Lo que se sabe de un objeto frente a la caja: algún punto visible, todos adentro, algún tramo la toca. */
+interface BoxHit {
+  anyPoint: boolean
+  allInside: boolean
+  touches: boolean
+}
+
+function outlineInBox(polys: Pt[][], rect: RectPx, crossing: boolean, project: Projector, hit: BoxHit): void {
+  for (const poly of polys) {
+    const proj = poly.map(project).filter((p): p is [number, number] => p !== null)
+    for (const p of proj) {
+      hit.anyPoint = true
+      if (!inRect(p, rect)) hit.allInside = false
+    }
+    if (crossing) {
+      for (let i = 0; i < proj.length - 1; i++) {
+        if (segTouchesRect(proj[i], proj[i + 1], rect)) {
+          hit.touches = true
+          return
+        }
+      }
+    } else if (!hit.allInside) return
+  }
+}
+
+/**
+ * Las aristas de una malla (las de `meshWireframe`) frente a la caja, proyectando cada vértice una sola vez: un
+ * ensamble de cientos de mallas proyectaba cada vértice tantas veces como aristas lo tocan en cada ventana.
+ */
+function meshInBox(p: MeshProps, rect: RectPx, crossing: boolean, project: Projector, hit: BoxHit): void {
+  const pairs = meshEdges(p.faces)
+  const done = new Map<number, [number, number] | null>()
+  const at = (i: number): [number, number] | null => {
+    let r = done.get(i)
+    if (r === undefined) done.set(i, (r = project(fromVec3(p.vertices[i]))))
+    return r
+  }
+  for (let k = 0; k < pairs.length; k += 2) {
+    if (!p.vertices[pairs[k]] || !p.vertices[pairs[k + 1]]) continue
+    const a = at(pairs[k])
+    const b = at(pairs[k + 1])
+    for (const q of [a, b]) {
+      if (!q) continue
+      hit.anyPoint = true
+      if (!inRect(q, rect)) hit.allInside = false
+    }
+    if (crossing) {
+      if (a && b && segTouchesRect(a, b, rect)) {
+        hit.touches = true
+        return
+      }
+    } else if (!hit.allInside) return
+  }
 }

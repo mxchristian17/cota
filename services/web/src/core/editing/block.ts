@@ -174,8 +174,14 @@ function transformNode(p: SolidProps, P: (v: Vec3) => Vec3, sr: number, sz: numb
   }
 }
 
-/** Devuelve una copia de `e` con su geometría transformada al mundo según el INSERT `ins`. */
-export function transformEntity(e: Entity, ins: InsertProps): Entity {
+/** Lleva los vértices de una malla con la transform `P` de la inserción `ins` (ver `ExpandMemo`). */
+type MeshMap = (src: Vec3[], ins: InsertProps, P: (v: Vec3) => Vec3) => Vec3[]
+
+/**
+ * Devuelve una copia de `e` con su geometría transformada al mundo según el INSERT `ins`. `mesh`: cómo se llevan los
+ * vértices de una malla (por defecto, una lista nueva).
+ */
+export function transformEntity(e: Entity, ins: InsertProps, mesh?: MeshMap): Entity {
   const P = pointMap(ins)
   const D = dirMap(ins)
   const sr = planarScale(ins.scale)
@@ -293,7 +299,7 @@ export function transformEntity(e: Entity, ins: InsertProps): Entity {
       return { ...e, props: transformSolid(e.props, P, sr, sz, plan, flip) }
     case 'MESH3D':
       // Espejada (escala negativa): las caras se dan vuelta para seguir mirando hacia afuera.
-      return { ...e, props: { vertices: e.props.vertices.map(P), faces: flip ? reversedFaces(e.props.faces) : e.props.faces } }
+      return { ...e, props: { vertices: mesh ? mesh(e.props.vertices, ins, P) : e.props.vertices.map(P), faces: flip ? reversedFaces(e.props.faces) : e.props.faces } }
     case 'INSERT':
       // Inserción anidada: compone la transform (posición y escala) — la recursión se hace en expandInsert.
       return { ...e, props: { ...e.props, position: P(e.props.position), scale: [e.props.scale[0] * ins.scale[0], e.props.scale[1] * ins.scale[1], e.props.scale[2] * ins.scale[2]], rotation: e.props.rotation + ins.rotation } }
@@ -333,6 +339,55 @@ export interface ExpandOptions {
    * clásico, congelar la capa de una inserción la oculta entera, aunque su contenido esté en otras capas).
    */
   frozenInto?: Set<string>
+  /** Mallas de mundo de la expansión anterior, para reusarlas (ver `ExpandMemo`). */
+  memo?: ExpandMemo
+}
+
+/** Clave de la transform de una inserción: lo que usa `pointMap`. */
+const placementKey = (ins: InsertProps): string => `${ins.position.join(',')}|${ins.rotation}|${ins.scale.join(',')}|${ins.normal?.join(',') ?? ''}`
+
+/**
+ * Mallas de los bloques llevadas al mundo, recordadas de una expansión a la siguiente (el dibujo expande en cada
+ * cambio). Mientras no cambien la definición ni la inserción, la malla de mundo es la misma lista de vértices, así que lo
+ * que se calcula por lista (triángulos, normales, aristas, esferas de snap) no se rehace: en un ensamble de 600 mallas
+ * dentro de bloques cada redibujo tardaba más de un segundo en eso. Las ediciones reemplazan las listas de vértices (no
+ * las modifican en el lugar), así que la de la definición identifica su contenido. Lo que una expansión no usó se
+ * suelta al terminarla. Las listas intermedias de los bloques anidados no se guardan: sólo se recuerda de dónde salen.
+ */
+export class ExpandMemo {
+  private cur = new Map<Vec3[], Map<string, Vec3[]>>()
+  private prev = new Map<Vec3[], Map<string, Vec3[]>>()
+  private readonly via = new WeakMap<Vec3[], { root: Vec3[]; key: string }>()
+
+  private origin(src: Vec3[], ins: InsertProps): { root: Vec3[]; key: string } {
+    const from = this.via.get(src)
+    return { root: from?.root ?? src, key: (from ? `${from.key}/` : '') + placementKey(ins) }
+  }
+
+  /** Malla de un bloque anidado llevada al bloque que la contiene: lista nueva, con su origen anotado. */
+  readonly nested: MeshMap = (src, ins, P) => {
+    const out = src.map(P)
+    this.via.set(out, this.origin(src, ins))
+    return out
+  }
+
+  /** Malla llevada al mundo por una inserción del dibujo: la misma lista de la expansión anterior si nada cambió. */
+  readonly world: MeshMap = (src, ins, P) => {
+    const { root, key } = this.origin(src, ins)
+    let byKey = this.cur.get(root)
+    let out = byKey?.get(key)
+    if (out) return out
+    out = this.prev.get(root)?.get(key) ?? src.map(P)
+    if (!byKey) this.cur.set(root, (byKey = new Map()))
+    byKey.set(key, out)
+    return out
+  }
+
+  /** Terminó una expansión: se suelta lo que no usó. */
+  sweep(): void {
+    this.prev = this.cur
+    this.cur = new Map()
+  }
 }
 
 /** Id de la capa `0`: lo que un bloque tiene en ella toma la capa de la inserción (como el CAD clásico). */
@@ -382,6 +437,7 @@ function expandInsert(props: InsertProps, byName: Map<string, BlockDef>, ownerId
   const out: Entity[] = []
   const sr = planarScale(props.scale)
   const ins = { ...insCommon, layer }
+  const mesh = opts.memo && (depth === 0 ? opts.memo.world : opts.memo.nested)
   for (const child of def.entities) {
     // `frozenAs`: todo el contenido de una inserción en una capa congelada va a esa capa (ver `frozenInto`).
     const lay = frozenAs ?? (child.layer === LAYER0 && !opts.keepLayers ? layer : child.layer)
@@ -392,7 +448,7 @@ function expandInsert(props: InsertProps, byName: Map<string, BlockDef>, ownerId
       // Expande el bloque anidado y luego aplica la transform de ESTA inserción.
       const nested: InsertCommon = { lineType: common.lineType, ltScale: common.ltScale, color: 'color' in common ? common.color : child.color, lineWeight: 'lineWeight' in common ? common.lineWeight : child.lineWeight }
       for (const ge of expandInsert(child.props, byName, ownerId, depth + 1, opts, lay, nested, frozenAs)) {
-        out.push({ ...transformEntity(ge, props), id: ownerId })
+        out.push({ ...transformEntity(ge, props, mesh), id: ownerId })
       }
     } else if (child.type === 'ATTDEF' && !opts.attdefs) {
       const t = attributeText(child, props, opts.attdisp ?? 'normal')
@@ -400,7 +456,7 @@ function expandInsert(props: InsertProps, byName: Map<string, BlockDef>, ownerId
       const own = { ...(child.color !== undefined ? { color: child.color } : {}), ...(child.lineWeight !== undefined ? { lineWeight: child.lineWeight } : {}) }
       if (t) out.push({ ...transformEntity(t, props), id: ownerId, layer: lay, ...own, ...common })
     } else {
-      out.push({ ...transformEntity(child, props), id: ownerId, layer: lay, ...common })
+      out.push({ ...transformEntity(child, props, mesh), id: ownerId, layer: lay, ...common })
     }
   }
   return out
@@ -412,7 +468,10 @@ function expandInsert(props: InsertProps, byName: Map<string, BlockDef>, ownerId
 export function expandEntities(entities: Entity[], blocks: BlockDef[] | undefined, opts: ExpandOptions = {}): Entity[] {
   const skip = opts.skipLayers?.size ? opts.skipLayers : null
   const list = skip ? entities.filter((e) => !skip.has(e.layer)) : entities
-  if (!blocks || blocks.length === 0 || !list.some((e) => e.type === 'INSERT')) return list
+  if (!blocks || blocks.length === 0 || !list.some((e) => e.type === 'INSERT')) {
+    opts.memo?.sweep()
+    return list
+  }
   const byName = new Map(blocks.map((b) => [b.name, b]))
   const out: Entity[] = []
   for (const e of list) {
@@ -420,6 +479,7 @@ export function expandEntities(entities: Entity[], blocks: BlockDef[] | undefine
       out.push(...expandInsert(e.props, byName, e.id, 0, opts, e.layer, { lineType: e.lineType, ltScale: e.ltScale, color: e.color, lineWeight: e.lineWeight }, opts.frozenInto?.has(e.layer) ? e.layer : null))
     else out.push(e)
   }
+  opts.memo?.sweep()
   return out
 }
 

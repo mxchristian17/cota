@@ -10,8 +10,9 @@ import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeome
 import type { Pt, Vec3 } from '../core/math'
 import type { AttDisp, BlockDef, DimensionEntity, Entity, Layer, MeshEntity, SolidEntity } from '../core/document/types'
 import { PREVIEW_COLORS, type PreviewShape } from '../core/preview'
-import { expandEntities } from '../core/editing/block'
+import { ExpandMemo, expandEntities } from '../core/editing/block'
 import { entityOutline } from '../core/editing/bounds'
+import { meshEdgeBox } from '../core/editing/mesh'
 import { computeSnap, type Acquisition, type SnapResult, type SnapType } from '../core/snap/SnapService'
 import { computeTracking } from '../core/snap/tracking'
 import { singleOsnap, type OsnapConfig, type OsnapOverride } from '../core/snap/osnap'
@@ -27,6 +28,7 @@ import { CameraController } from './CameraController'
 import { displaySolidEdges, displaySolidGeometry, displaySolidTopology, previewSolidGeometry } from './csg'
 import { meshRender, type MeshRender } from './meshBuffers'
 import { pointMarkTexture } from './pointMarks'
+import { lineSpans, rangedRaycast } from './rangedRaycast'
 import { ellipsePoints } from '../core/geom/ellipse'
 import { arcBasis, tessellateArc } from '../core/geom/arc'
 import { polylinePoints } from '../core/geom/polyline'
@@ -153,6 +155,11 @@ export interface ViewportCallbacks {
   /** Clic derecho sin arrastrar (sin prompt activo): menú contextual en (clientX, clientY). */
   onContextMenu?: (clientX: number, clientY: number, world: Pt) => void
   isSelectMode?: () => boolean
+  /**
+   * ¿Un clic sólo elige objetos (sin comando ni pedido en curso)? Entonces su punto no se usa y no se busca el snap (en
+   * un ensamble grande, armar el índice de snaps demoraba el primer clic de selección).
+   */
+  isPickOnly?: () => boolean
   /** Ventana o cruce pedido con W/C: la ventana se abre aunque el clic caiga sobre un objeto y su tipo es fijo. */
   selectionArea?: () => 'window' | 'crossing' | null
   onCameraChange?: (az: number, el: number, mode: CameraMode) => void
@@ -272,6 +279,8 @@ function hatchTriangles(e: HatchEntity | RegionEntity): number[] {
  * plano (aristas, cotas y textos sobre una cara) gana sin pelear con la malla.
  */
 const FACE_OFFSET = { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }
+/** Programas de shader que se mantienen vivos sin uso (ver `releaseMaterial`). */
+const KEPT_PROGRAMS = 24
 const GRIP_COLOR = 0x1a6fff // grip en reposo (azul el CAD clásico)
 const GRIP_HOVER = 0x33ff66 // grip bajo el cursor
 
@@ -287,6 +296,8 @@ export class Viewport {
   private readonly selOverlay = new THREE.Group()
   /** Selección con la que se armaron los lotes la última vez. */
   private batchedSelKey = ''
+  /** Mallas de los bloques de la expansión anterior: un redibujo reusa sus triángulos y aristas (ver `meshBuffers`). */
+  private readonly expandMemo = new ExpandMemo()
   /** Centro de lo seleccionado: la órbita gira alrededor de él, como 3DORBIT con objetos elegidos. */
   private orbitPivot: THREE.Vector3 | null = null
   /**
@@ -329,8 +340,15 @@ export class Viewport {
     opacity: 0.9,
     transparent: true,
   })
+  /**
+   * Grips en reposo y bajo el cursor: los mismos en cada cuadro (se rehacen en cada uno mientras hay algo elegido; uno
+   * nuevo por cuadro recompilaba su programa al orbitar con una pieza seleccionada).
+   */
+  private readonly gripMaterials = new Map([GRIP_COLOR, GRIP_HOVER].map((c) => [c, new THREE.MeshBasicMaterial({ color: c, depthTest: false, transparent: true })]))
+  /** Un material por programa de shader, para que el programa no se destruya (ver `releaseMaterial`). */
+  private readonly keptMaterials = new Map<string, THREE.Material>()
   /** Materiales compartidos por los overlays: viven lo que el viewport (se liberan en `dispose`). */
-  private readonly overlayMaterials = new Set<THREE.Material>([this.previewMaterial, this.snapMaterial, this.trackMaterial])
+  private readonly overlayMaterials = new Set<THREE.Material>([this.previewMaterial, this.snapMaterial, this.trackMaterial, ...this.gripMaterials.values()])
   private readonly raycaster = new THREE.Raycaster()
   private previewProvider: ((cursor: Pt) => PreviewShape[]) | null = null
   private data: ViewportData | null = null
@@ -1341,11 +1359,14 @@ export class Viewport {
     if (e.button === 0) {
       const start = this.boxStartPx
       const cur0 = this.pxOf(e.clientX, e.clientY)
+      // Lo que hay bajo el cursor se busca una sola vez por clic (el rayo recorre todos los lotes).
+      let hit: string | null | undefined
+      const picked = (): string | null => (hit === undefined ? (hit = this.pickAt(e.clientX, e.clientY)) : hit)
       // Clic simple en vacío en modo selección: abre la ventana (la otra esquina va con el próximo clic).
       const forced = this.cb.selectionArea?.() ?? null
       // Un clic sostenido o con un temblor del mouse sigue siendo un clic: ni cierra una ventana ni pierde el objeto.
       if (!this.boxPending && this.boxActive && start && Math.hypot(cur0[0] - start[0], cur0[1] - start[1]) < CLICK_SLOP_PX) this.boxActive = false
-      if (!this.boxPending && !this.boxActive && start && this.cb.isSelectMode?.() && (forced || !this.pickAt(e.clientX, e.clientY))) {
+      if (!this.boxPending && !this.boxActive && start && this.cb.isSelectMode?.() && (forced || !picked())) {
         this.boxPending = true
         this.boxActive = true
         this.draggingBox = true
@@ -1369,12 +1390,14 @@ export class Viewport {
       } else {
         this.updateDucs(e.clientX, e.clientY)
         const raw = this.screenToWorld(e.clientX, e.clientY)
-        const snap = this.snapAt(raw)
+        // Un clic de selección no usa su punto (desde el papel sí busca el snap: el objeto del modelo tocado es el elegido).
+        const pickOnly = this.cb.isPickOnly?.() && !this.data?.snapExtras?.length
+        const snap: SnapResult = pickOnly ? { point: raw, type: null } : this.snapAt(raw)
         const snapped = snap.type !== null && snap.type !== 'grid'
         const deferred: Deferred | undefined = snap.deferred ? { ...snap.deferred, hint: [snap.point.x, snap.point.y, snap.point.z] } : undefined
         // Snap sobre geometría del modelo vista desde el papel: ese es el objeto tocado (trans-espacial).
         const extra = snapped && snap.owner && this.data?.snapExtras?.some((x) => x.id === snap.owner) ? snap.owner : null
-        this.cb.onClick?.(snap.point, extra ?? this.pickAt(e.clientX, e.clientY), snapped, e.shiftKey, raw, deferred, this.ducsFace?.ucs)
+        this.cb.onClick?.(snap.point, extra ?? picked(), snapped, e.shiftKey, raw, deferred, this.ducsFace?.ucs)
       }
       this.boxStartPx = null
       this.boxStartWorld = null
@@ -1789,7 +1812,7 @@ export class Viewport {
   private entities(): Entity[] {
     const d = this.data
     if (!d) return []
-    if (!this.expanded) this.expanded = expandEntities(d.entities, d.blocks, { attdisp: d.attdisp, skipLayers: frozenLayerIds(d.layers) })
+    if (!this.expanded) this.expanded = expandEntities(d.entities, d.blocks, { attdisp: d.attdisp, skipLayers: frozenLayerIds(d.layers), memo: this.expandMemo })
     return this.expanded
   }
 
@@ -1797,6 +1820,12 @@ export class Viewport {
   private snapSpheresFor(ents: Entity[]): { c: THREE.Vector3; r: number }[] {
     if (this.snapSpheres && this.snapSpheres.length === ents.length) return this.snapSpheres
     const out = ents.map((e) => {
+      if (e.type === 'MESH3D') {
+        // La caja de sus aristas, recordada por su lista de vértices (no se recorren sus miles de aristas de nuevo).
+        const b = meshEdgeBox(e.props)
+        if (!b) return { c: new THREE.Vector3(), r: Infinity }
+        return { c: new THREE.Vector3((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2), r: Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]) / 2 }
+      }
       let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
       for (const poly of entityOutline(e)) {
         for (const p of poly) {
@@ -1811,6 +1840,15 @@ export class Viewport {
     })
     this.snapSpheres = out
     return out
+  }
+
+  /** Punto a proyectar por el snap (miles por movimiento del cursor: sin un vector nuevo cada uno). */
+  private readonly snapScratch = new THREE.Vector3()
+
+  /** Todo lo que usa `controller.project` (matrices de la cámara y tamaño), exacto: si no cambia, proyecta igual. */
+  private projectionKey(): string {
+    const cam = this.controller.camera
+    return `${cam.matrixWorldInverse.elements.join(',')}|${cam.projectionMatrix.elements.join(',')}|${this.controller.pxWidth}x${this.controller.pxHeight}`
   }
 
   private snapAt(raw: Pt): SnapResult {
@@ -1868,10 +1906,11 @@ export class Viewport {
       base: d.snapBase,
       cursorPx: this.lastPx,
       pixelThreshold: this.touchAim ? 24 : 10,
-      project: (p) => this.controller.project(new THREE.Vector3(p.x, p.y, p.z)),
+      project: (p) => this.controller.project(this.snapScratch.set(p.x, p.y, p.z)),
       depth: (p) => this.controller.camera.position.distanceTo(new THREE.Vector3(p.x, p.y, p.z)),
       acquired: this.osnapAcq,
       ray: this.cursorRay(),
+      viewKey: this.projectionKey(),
     })
 
     // INT/APPINT sobre el tramo en curso: con ORTHO la dirección del rubber-band queda fija y se marcan sus cruces
@@ -2117,11 +2156,31 @@ export class Viewport {
       // Los materiales compartidos de los overlays (preview, snap, tracking) se reutilizan en el próximo
       // cuadro: liberarlos obligaría a recompilar su programa en cada movimiento del cursor.
       if (any.material && !this.overlayMaterials.has(any.material as THREE.Material)) {
-        if (Array.isArray(any.material)) any.material.forEach((m) => m.dispose())
-        else any.material.dispose()
+        if (Array.isArray(any.material)) any.material.forEach((m) => this.releaseMaterial(m))
+        else this.releaseMaterial(any.material)
       }
     })
     group.clear()
+  }
+
+  /**
+   * Libera un material, salvo el primero de cada programa de shader, que se guarda: liberar el último material de un
+   * programa lo destruye y el próximo igual lo vuelve a compilar (al elegir y soltar piezas, al rehacer los lotes tras
+   * cada comando). Los guardados más viejos se liberan pasado un tope.
+   */
+  private releaseMaterial(m: THREE.Material): void {
+    for (const k of this.keptMaterials.values()) if (k === m) return
+    const key = (this.renderer.properties.get(m) as { currentProgram?: { cacheKey?: string } }).currentProgram?.cacheKey
+    if (key === undefined || this.keptMaterials.has(key) || (m as { map?: unknown }).map) {
+      m.dispose()
+      return
+    }
+    this.keptMaterials.set(key, m)
+    if (this.keptMaterials.size > KEPT_PROGRAMS) {
+      const [oldest, old] = this.keptMaterials.entries().next().value!
+      this.keptMaterials.delete(oldest)
+      old.dispose()
+    }
   }
 
   private entityLinePoints(e: Entity): THREE.Vector3[] | null {
@@ -2462,7 +2521,8 @@ export class Viewport {
   }
 
   private buildMesh(e: MeshEntity, color: THREE.Color, selected: boolean): THREE.Object3D {
-    return this.styledSolidGroup(this.meshGeometry(e.props), color, selected, e.id, false)
+    // Las aristas, las ya calculadas para los lotes (las mismas: de la misma geometría): resaltar una pieza no las rehace.
+    return this.styledSolidGroup(this.meshGeometry(e.props), color, selected, e.id, false, this.meshBuffers(e.props).edges)
   }
 
   /** Tamaño en píxeles de una esfera vista desde la cámara (perspectiva: según su distancia). */
@@ -2894,14 +2954,18 @@ export class Viewport {
     let v = 0
     let w = 0
     let r = 0
+    /** Por parte (una por pieza): primer índice, cantidad de índices, primer vértice y cantidad de vértices. */
+    const spans: number[] = []
     for (const p of b.parts) {
       pos.set(p.pos, v * 3)
       nor.set(p.nor, v * 3)
       const count = p.pos.length / 3
       while (r + 1 < b.ranges.length && b.ranges[r + 1].s <= w) r++
       rk.fill(b.ranges[r] ? this.rankOf(b.ranges[r].id) : 0, v, v + count)
+      const w0 = w
       if (p.idx) for (let i = 0; i < p.idx.length; i++) idx[w++] = p.idx[i] + v
       else for (let i = 0; i < count; i++) idx[w++] = v + i
+      spans.push(w0, w - w0, v, count)
       v += count
     }
     const g = new THREE.BufferGeometry()
@@ -2922,6 +2986,9 @@ export class Viewport {
     mesh.userData.ranges = b.ranges
     mesh.userData.rangeKind = 'mesh'
     mesh.renderOrder = Number(ro)
+    // El pick recorre sólo las piezas que el rayo toca (ver `rangedRaycast`).
+    mesh.userData.spans = spans
+    mesh.raycast = rangedRaycast
     this.entityGroup.add(mesh)
   }
 
@@ -2940,6 +3007,12 @@ export class Viewport {
     seg.userData.ranges = b.ranges
     seg.userData.rangeKind = 'line'
     seg.renderOrder = Number(ro)
+    // El pick recorre sólo los tramos de las piezas cerca del rayo (ver `rangedRaycast`).
+    const spans = lineSpans(b.ranges, pos.length / 3)
+    if (spans) {
+      seg.userData.spans = spans
+      seg.raycast = rangedRaycast
+    }
     this.entityGroup.add(seg)
     if (lw && !pickOnly && (this.data?.lwUnitsPerMm || this.data?.lwPxPerMm)) {
       // Línea con grosor (en píxeles según el zoom): se ve en lugar de la fina, que queda para el pick.
@@ -3678,7 +3751,7 @@ export class Viewport {
     const c = p.clone().addScaledVector(right, s).addScaledVector(up, s)
     const dd = p.clone().addScaledVector(right, -s).addScaledVector(up, s)
     const geom = this.localGeometry([a, b, c, a, c, dd])
-    const mesh = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true }))
+    const mesh = new THREE.Mesh(geom, this.gripMaterials.get(color) ?? new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true }))
     mesh.renderOrder = 999
     this.gripGroup.add(mesh)
   }
@@ -3763,7 +3836,7 @@ export class Viewport {
       this.lastAnnoScale = data.annoScale
       this.lastSelectionKey = selKey
       // Una inserción en una capa congelada no se ve entera, aunque su contenido esté en otras capas (CAD clásico).
-      this.expanded = expandEntities(data.entities, data.blocks, { attdisp: data.attdisp, skipLayers: frozenLayerIds(data.layers) })
+      this.expanded = expandEntities(data.entities, data.blocks, { attdisp: data.attdisp, skipLayers: frozenLayerIds(data.layers), memo: this.expandMemo })
       this.snapList = null
       this.hasFieldTexts = this.expanded.some(
         (e) => (e.type === 'TEXT' && hasFields(e.props.text)) || (e.type === 'DIMENSION' && !!e.props.textOverride && hasFields(e.props.textOverride)),
@@ -3898,9 +3971,9 @@ export class Viewport {
     this.disposeGroup(this.gripGroup)
     this.clearDimLabels()
     this.clearTextLabels()
-    this.previewMaterial.dispose()
-    this.trackMaterial.dispose()
-    this.snapMaterial.dispose()
+    for (const m of this.overlayMaterials) m.dispose()
+    for (const m of this.keptMaterials.values()) m.dispose()
+    this.keptMaterials.clear()
     this.renderer.dispose()
     if (this.boxEl.parentElement === this.container) this.container.removeChild(this.boxEl)
     if (this.ucsIconEl?.parentElement === this.container) this.container.removeChild(this.ucsIconEl)

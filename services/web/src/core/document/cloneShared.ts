@@ -26,7 +26,47 @@ const imagesOf = (lists: Entity[][]): ImageProps[] => {
 export function cloneDocument(d: DocumentData): DocumentData {
   const lists = listsOf(d)
   const images = imagesOf(lists)
-  return withImagesShared(images, () => withMeshesShared(meshesOf(lists), () => structuredClone(d), (copy) => meshesOf(listsOf(copy))), (copy) => imagesOf(listsOf(copy)))
+  return withImagesShared(images, () => withMeshesShared(meshesOf(lists), () => plainClone(d), (copy) => meshesOf(listsOf(copy))), (copy) => imagesOf(listsOf(copy)))
+}
+
+/** Más hondo que esto (un sólido con cientos de operaciones anidadas o una referencia circular) copia structuredClone. */
+const MAX_DEPTH = 500
+
+class NotPlain extends Error {}
+
+/**
+ * Copia profunda de datos simples (objetos literales, listas y valores), igual a la de structuredClone y unas tres veces
+ * más rápida: cada comando que cambia el dibujo guarda una copia para deshacer, y en un dibujo con decenas de miles de
+ * textos eso demoraba cada comando. Con cualquier otra cosa (Map, Date, arreglos tipados, una referencia circular) copia
+ * structuredClone. Un objeto referido desde dos lugares queda copiado en cada uno, como al guardar y abrir el dibujo.
+ */
+export function plainClone<T>(v: T): T {
+  try {
+    return copyPlain(v, 0) as T
+  } catch (err) {
+    if (err instanceof NotPlain) return structuredClone(v)
+    throw err
+  }
+}
+
+function copyPlain(v: unknown, depth: number): unknown {
+  if (typeof v !== 'object' || v === null) {
+    if (typeof v === 'function' || typeof v === 'symbol') throw new NotPlain()
+    return v
+  }
+  if (depth > MAX_DEPTH) throw new NotPlain()
+  if (Array.isArray(v)) {
+    const n = v.length
+    const out = new Array<unknown>(n)
+    for (let i = 0; i < n; i++) out[i] = copyPlain(v[i], depth + 1)
+    return out
+  }
+  const proto = Object.getPrototypeOf(v)
+  if (proto !== Object.prototype && proto !== null) throw new NotPlain()
+  const src = v as Record<string, unknown>
+  const out: Record<string, unknown> = {}
+  for (const k of Object.keys(src)) out[k] = copyPlain(src[k], depth + 1)
+  return out
 }
 
 /** Copia profunda de una entidad que comparte sus vértices y caras si es una malla (o sus píxeles si es una imagen). */
