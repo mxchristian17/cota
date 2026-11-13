@@ -2499,7 +2499,7 @@ export class Viewport {
     return changed
   }
 
-  private rebuild(entities: Entity[], layers: Layer[], selection: Set<string>): void {
+  private rebuild(entities: Entity[], layers: Layer[], selection: Set<string>, own: Entity[] = entities): void {
     for (const [k, t] of this.imageTextures) {
       if (t.seen >= this.rebuildSeq) continue
       t.tex.dispose()
@@ -2572,7 +2572,10 @@ export class Viewport {
       return String(seeSeq * 1e-6)
     }
 
-    this.unpickable = new Set(entities.filter((e) => !layerEditable(layerMap.get(e.layer))).map((e) => e.id))
+    // Lo que se puede elegir lo decide la capa del objeto del dibujo: una inserción, por la suya (como el CAD clásico), no
+    // por las de sus piezas, que al desarmarla para dibujar llevan su id. Con una sola pieza en una capa apagada o
+    // bloqueada, la inserción entera quedaba sin poder elegirse aunque se vieran sus otras piezas.
+    this.unpickable = new Set(own.filter((e) => !layerEditable(layerMap.get(e.layer))).map((e) => e.id))
     for (const e of entities) {
       try {
         const layer = layerMap.get(e.layer)
@@ -3769,7 +3772,7 @@ export class Viewport {
       this.snapSpheres = null // el índice espacial de snap se reconstruye con los datos nuevos
       this.pickOrigin(this.expanded)
       this.disposeGroup(this.selOverlay)
-      this.rebuild(this.expanded, data.layers, new Set(data.selection))
+      this.rebuild(this.expanded, data.layers, new Set(data.selection), data.entities)
       this.batchedSelKey = selKey
       this.orbitPivot = this.selectionCenter(data.selection)
       this.invalidate()
@@ -3853,7 +3856,7 @@ export class Viewport {
           if (bucket !== this.lodBucket) {
             this.lodBucket = bucket
             if (this.classifyLod(this.expanded)) {
-              this.rebuild(this.expanded, data.layers, new Set(data.selection))
+              this.rebuild(this.expanded, data.layers, new Set(data.selection), data.entities)
               this.lodBucket = this.lodBucketKey()
             }
           }

@@ -316,25 +316,47 @@ test.describe('Uso real', () => {
     expect(await st(page, 'return s.docName')).toBe('plano-nuevo')
   })
 
+  test('una inserción se elige por su capa aunque alguna pieza esté en una capa apagada (CAD clásico)', async ({ page }) => {
+    await st(
+      page,
+      `const d = s.doc.toJSON()
+      const base = { lineWeight: 0.25, lineType: 'CONTINUOUS', locked: false, visible: true, printable: true }
+      d.layers.push({ ...base, id: 'LA', name: 'A', color: '#ff0000' }, { ...base, id: 'LB', name: 'B', color: '#00ff00' })
+      d.blocks = [{ name: 'BL', entities: [
+        { id: 'b1', type: 'LINE', layer: 'LA', props: { start: [0, 0, 0], end: [40, 0, 0] } },
+        { id: 'b2', type: 'LINE', layer: 'LB', props: { start: [0, 20, 0], end: [40, 20, 0] } },
+      ] }]
+      d.entities = [{ id: 'i1', type: 'INSERT', layer: '0', props: { name: 'BL', position: [10, 10, 0], scale: [1, 1, 1], rotation: 0 } }]
+      s.doc.load(d)`,
+    )
+    await cmd(page, 'ZOOM', 'E')
+    await st(page, 's.toggleLayerVisible("LB")')
+    await page.waitForTimeout(300)
+    // La pieza de la capa A se ve: un clic sobre ella elige la inserción entera.
+    await clickAt(page, [30, 10, 0])
+    expect(await st<string[]>(page, 'return s.selection')).toEqual(['i1'])
+  })
+
   test('los controles de capa siguen a la selección como en el CAD clásico', async ({ page }) => {
     await cmd(page, '-LAYER', 'N', 'A,B', '', 'LINE', '0,0', '10,0', '', 'LINE', '0,5', '10,5', '')
     const [a, b] = await st<string[]>(page, 'const ids = n => s.doc.layers.find(l => l.name === n).id; return [ids("A"), ids("B")]')
     const cur = await st<string>(page, 'return s.currentLayerId')
     await st(page, `const e = s.doc.entities; e[0].layer = ${JSON.stringify(a)}; e[1].layer = ${JSON.stringify(b)}; s.doc.touch()`)
     const combo = page.getByTestId('layer-select')
-    await expect(combo).toHaveValue(cur)
+    await expect(combo).toHaveAttribute('data-value', cur)
     const ids = await st<string[]>(page, 'return s.doc.entities.map(e => e.id)')
     await page.evaluate((v) => (window as any).__cotaStore.setState({ selection: v }), [ids[0]])
-    await expect(combo).toHaveValue(a)
+    await expect(combo).toHaveAttribute('data-value', a)
     await page.evaluate((v) => (window as any).__cotaStore.setState({ selection: v }), ids)
-    await expect(combo.locator('option:checked')).toHaveText('A (+1)')
+    await expect(combo).toContainText('A (+1)')
     // Elegir una capa con la selección abierta los mueve a ella; la capa actual no cambia.
-    await combo.selectOption(b)
+    await combo.click()
+    await page.getByTestId('layer-select-pick-B').click()
     expect(await st(page, 'return s.doc.entities.map(e => e.layer).join()')).toBe(`${b},${b}`)
-    await expect(combo).toHaveValue(b)
+    await expect(combo).toHaveAttribute('data-value', b)
     expect(await st(page, 'return s.currentLayerId')).toBe(cur)
     await page.evaluate(() => (window as any).__cotaStore.setState({ selection: [] }))
-    await expect(combo).toHaveValue(cur)
+    await expect(combo).toHaveAttribute('data-value', cur)
   })
 
   // Rectángulo + extrusión: los vértices del sólido se toman con el mouse, sin importar cómo se llegó a la vista.

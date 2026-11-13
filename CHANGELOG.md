@@ -4,6 +4,19 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.45.0] — 2026-11-13
+
+### Added
+- **Layer control with on/off, freeze and lock**: the layer list of the status bar and of the Layers toolbar now has,
+  on each row, buttons to turn the layer on or off, freeze or thaw it and lock or unlock it without closing the list,
+  as in the layer control of a classic CAD; choosing a name still makes it current (or moves the selected objects to
+  it). With many layers the list has a box to filter them by name.
+
+### Fixed
+- **Blocks with parts on other layers can be picked again**: a block reference whose own layer is on and unlocked
+  could not be picked when any object inside it was on a layer turned off or locked; a click on a visible part went
+  through to whatever was behind. Whether a block can be picked now depends on its own layer, as in a classic CAD.
+
 ## [2.44.0] — 2026-11-13
 
 ### Added

@@ -61,8 +61,8 @@ test.describe('Cota paletas: LAYER modal + Properties', () => {
     await page.getByTestId('add-layer').click()
     await page.getByTestId('layer-dialog').locator('.modal-actions .btn').click()
 
-    const select = page.getByTestId('layer-select')
-    await select.selectOption({ label: 'Cotas' })
+    await page.getByTestId('layer-select').click()
+    await page.getByTestId('layer-select-pick-Cotas').click()
     const current = await page.evaluate(() => {
       const w = window as unknown as {
         __cotaStore: { getState: () => { currentLayerId: string; doc: { layers: { id: string; name: string }[] } } }
@@ -71,6 +71,34 @@ test.describe('Cota paletas: LAYER modal + Properties', () => {
       return s.doc.layers.find((l) => l.id === s.currentLayerId)?.name
     })
     expect(current).toBe('Cotas')
+  })
+
+  test('el combo de capa prende y apaga, congela y bloquea capas sin cerrarse', async ({ page }) => {
+    await typeCmd(page, 'LAYER')
+    await page.getByTestId('new-layer-input').fill('Cotas')
+    await page.getByTestId('add-layer').click()
+    await page.getByTestId('layer-dialog').locator('.modal-actions .btn').click()
+
+    await page.getByTestId('layer-select').click()
+    const flags = () =>
+      page.evaluate(() => {
+        const w = window as unknown as { __cotaStore: { getState: () => { doc: { layers: { name: string; visible: boolean; frozen?: boolean; locked?: boolean }[] } } } }
+        const l = w.__cotaStore.getState().doc.layers.find((x) => x.name === 'Cotas')!
+        return [l.visible, !!l.frozen, !!l.locked]
+      })
+    await page.getByTestId('layer-select-visible-Cotas').click()
+    await page.getByTestId('layer-select-freeze-Cotas').click()
+    await page.getByTestId('layer-select-lock-Cotas').click()
+    expect(await flags()).toEqual([false, true, true])
+    // La lista sigue abierta; la capa actual no se puede congelar.
+    await expect(page.getByTestId('layer-select-list')).toBeVisible()
+    await expect(page.getByTestId('layer-select-freeze-0')).toBeDisabled()
+    await page.getByTestId('layer-select-visible-Cotas').click()
+    await page.getByTestId('layer-select-freeze-Cotas').click()
+    await page.getByTestId('layer-select-lock-Cotas').click()
+    expect(await flags()).toEqual([true, false, false])
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('layer-select-list')).toHaveCount(0)
   })
 
   test('la paleta de Propiedades se arrastra, se acopla a la derecha y se minimiza', async ({ page }) => {

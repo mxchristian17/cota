@@ -298,10 +298,10 @@ test.describe('Cota carpeta local del sistema', () => {
     expect(JSON.parse((await readMem(page, 'capas.cota')) as string).currentLayer).toBe(muros)
 
     await typeCmd(page, 'NEW')
-    await expect(page.getByTestId('layer-select')).toHaveValue('0')
+    await expect(page.getByTestId('layer-select')).toHaveAttribute('data-value', '0')
     await typeCmd(page, 'OPEN')
     await page.getByTestId('local-capas').click()
-    await expect(page.getByTestId('layer-select')).toHaveValue(muros)
+    await expect(page.getByTestId('layer-select')).toHaveAttribute('data-value', muros)
     const layers = await page.evaluate(() => {
       const w = window as unknown as { __cotaStore: { getState: () => { doc: { layers: Record<string, unknown>[] } } } }
       return w.__cotaStore.getState().doc.layers

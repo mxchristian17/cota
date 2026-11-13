@@ -6,6 +6,11 @@ Layers, colors, linetypes, lineweights, draw order and the Properties palette.
 lineweight and plot style; turn them on or off, freeze, lock and set whether they plot. The current layer is
 shown in the status bar (and remembered in the saved file). New objects go to the current layer.
 
+The **layer control** of the status bar (and of the Layers toolbar) shows the layer of the selected objects, or the
+current one. Open it to choose a layer (with objects selected they move to it; without, it becomes current) or to
+switch each layer right there without closing the list: 👁 on/off, ☀/❄ thaw/freeze (the current layer cannot be
+frozen) and 🔓/🔒 unlock/lock. With many layers, type in its box to filter them by name.
+
 Layer tools: `LAYMCUR` (make the layer of an object current), `LAYISO` / `LAYUNISO`, `LAYOFF` / `LAYON`,
 `LAYFRZ` / `LAYTHW`, `LAYLCK` / `LAYULK`. `-LAYER` does the same from the command line, for scripts.
 

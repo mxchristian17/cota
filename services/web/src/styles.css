@@ -2239,3 +2239,98 @@ div.lt-row {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
   cursor: pointer;
 }
+
+/* Combo de capas con las llaves de cada capa (prender/apagar, congelar, bloquear), como el control del CAD clásico. */
+.layer-combo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+.layer-combo-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.layer-combo-caret {
+  color: var(--muted);
+  font-size: 10px;
+}
+.layer-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 2px;
+}
+.layer-combo-pop {
+  position: fixed;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+}
+.layer-combo-filter {
+  margin: 4px;
+  padding: 3px 6px;
+}
+.layer-combo-rows {
+  overflow-y: auto;
+  padding: 2px 0;
+}
+.layer-combo-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+}
+.layer-combo-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.layer-combo-row.is-shown {
+  background: rgba(14, 99, 156, 0.35);
+}
+.layer-combo-row .icon-btn {
+  width: 24px;
+  padding: 2px 0;
+}
+.layer-combo-row .icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.layer-combo-row .layer-swatch {
+  margin: 0 4px;
+}
+.layer-combo-pick {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 4px 2px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: inherit;
+}
+.layer-combo-pick.is-off {
+  color: var(--muted);
+}
+.layer-combo-current {
+  color: var(--muted);
+  font-size: 11px;
+}
+.layer-combo-empty {
+  padding: 6px 8px;
+  color: var(--muted);
+}
