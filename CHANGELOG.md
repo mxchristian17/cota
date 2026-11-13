@@ -4,6 +4,29 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.45.2] — 2026-11-13
+
+### Changed
+- **Large 3D models respond much faster when picking, clearing the selection and editing**: Cota no longer redoes work
+  that did not change. Block references keep the world geometry of their parts between redraws, so triangles, edges and
+  snap data are reused; a plain selection click no longer builds the object snap index; picking only tests the parts
+  the ray reaches; grips and highlights reuse their shaders instead of compiling them again (orbiting with a part
+  selected compiled one on every frame); object snaps on meshes project each vertex once per view; undo and redo swap
+  the drawing with the saved copy instead of copying both, and the copy saved before each command is about three times
+  faster. Everything looks and behaves as before. Measured on a 3D assembly with 20 000 objects and 1 260 solids
+  (shaded style, development build, software rendering):
+
+  | Operation | Before | After |
+  |---|---|---|
+  | Pick a part with a click | 0.68 s | 0.10 s (next clicks: < 0.05 s) |
+  | Window selection | 2.1 s | 0.61 s |
+  | Orbit with a part selected (main thread, 30 steps) | 5.1 s | 0.5 s |
+  | Object snap while moving the cursor in MOVE | ~0.25 s per move | ~0.02 s per move |
+  | Finish MOVE | 4.3 s | 0.58 s |
+  | ERASE | 1.7 s | 0.26 s |
+  | Undo (after MOVE or ERASE) | 2.0–2.1 s | 0.22–0.24 s |
+  | Full redraw (an edit, a layer change, selecting text) | 1.38 s | 0.13 s |
+
 ## [2.45.1] — 2026-11-13
 
 ### Fixed
