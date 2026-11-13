@@ -4,6 +4,13 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.45.1] — 2026-11-13
+
+### Fixed
+- **Locked and unlocked layers at a glance**: the padlock of the layer control and of the Layer Properties dialog is
+  now amber and closed for a locked layer and a gray, open outline for an unlocked one (the two were hard to tell
+  apart).
+
 ## [2.45.0] — 2026-11-13
 
 ### Added

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../store/store'
 import { linetypeLabel } from '../core/linetype/linetypes'
 import { focusCommandLine } from './focus'
+import { LockIcon } from './LockIcon'
 
 /**
  * Administrador de capas (comando `LAYER`/`LA`), con el formato del *Layer Properties Manager* del
@@ -182,7 +183,7 @@ export function LayerDialog() {
                   </td>
                   <td>
                     <button className="icon-btn" title="Lock" onClick={() => toggleLock(l.id)}>
-                      {l.locked ? '🔒' : '🔓'}
+                      <LockIcon locked={!!l.locked} />
                     </button>
                   </td>
                   <td>

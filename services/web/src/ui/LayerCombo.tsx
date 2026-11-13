@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { shownLayer } from '../core/layers/selectionLayer'
 import { useStore } from '../store/store'
+import { LockIcon } from './LockIcon'
 
 /** Con más capas que esto, la lista trae un filtro por nombre. */
 const FILTER_FROM = 12
@@ -137,7 +138,7 @@ export function LayerCombo({ className, testId, onPicked }: { className: string;
                       {l.frozen ? '❄' : '☀'}
                     </button>
                     <button className="icon-btn" title={l.locked ? 'Locked: click to unlock' : 'Unlocked: click to lock'} aria-pressed={!!l.locked} data-testid={`${testId}-lock-${l.name}`} onClick={() => toggleLock(l.id)}>
-                      {l.locked ? '🔒' : '🔓'}
+                      <LockIcon locked={!!l.locked} />
                     </button>
                     <span className="layer-swatch" style={{ background: l.color }} />
                     <button className={'layer-combo-pick' + (l.visible && !l.frozen ? '' : ' is-off')} title={selection.length ? 'Move the selected objects to this layer' : 'Make this the current layer'} data-testid={`${testId}-pick-${l.name}`} onClick={() => pick(l.id)}>
