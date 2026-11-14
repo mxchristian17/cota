@@ -877,6 +877,8 @@ export type AttDisp = 'normal' | 'on' | 'off'
 export interface BlockDef {
   name: string
   entities: Entity[]
+  /** Referencia externa (de un DWG o DXF): su contenido es el modelo de otro archivo; ruta con que se guardó. */
+  xref?: { path: string; overlay?: boolean; file?: string }
 }
 
 export type PaperOrientation = 'landscape' | 'portrait'

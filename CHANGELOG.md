@@ -4,6 +4,17 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.46.0] — 2026-11-14
+
+### Added
+- **External references (XREF) when opening a DWG or DXF**: before the drawing finishes opening, a window lists each
+  referenced drawing that could not be found, with the path it was saved with, and lets you choose its file
+  (**Browse…**, `.dwg` or `.dxf`); then the drawing opens with them, or without the ones you leave out (they stay
+  empty). Opened from the working folder, the references next to the drawing (or at their saved relative path) load on
+  their own. A loaded reference becomes the content of its block, as in a classic CAD: its layers are named
+  `REFERENCE|layer` (layer 0 stays 0) and its blocks `REFERENCE|block`. Until now the references were left out and
+  their place stayed empty.
+
 ## [2.45.2] — 2026-11-13
 
 ### Changed

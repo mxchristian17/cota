@@ -445,6 +445,8 @@ export interface DxfImportResult {
 export interface DxfBlockSpec {
   name: string
   entities: DxfEntitySpec[]
+  /** Referencia externa: el contenido es el modelo de otro archivo (ruta como se guardó); llega vacía. */
+  xref?: { path: string; overlay?: boolean; file?: string }
 }
 
 /** VIEWPORT de una hoja: su rectángulo en el papel (mm) y la vista del modelo que muestra. */
@@ -490,6 +492,8 @@ interface BlockDefRec {
   items: BlockItem[]
   name: string
   flags: number
+  /** Referencia externa (70 & 4): ruta del archivo como se guardó (código 1). */
+  xrefPath?: string
 }
 
 /** Color, grosor y tipo de línea propios de una inserción para lo ByBlock de su bloque (ausente = ByLayer). */
@@ -1015,7 +1019,8 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
       const n0 = block?.items.length ?? 0
       if (rec.type === 'BLOCK') {
         const name = str(rec.codes, 2) ?? ''
-        block = { base: [num(rec.codes, 10), num(rec.codes, 20), num(rec.codes, 30)], items: [], name, flags: num(rec.codes, 70, 0) }
+        const bflags = num(rec.codes, 70, 0)
+        block = { base: [num(rec.codes, 10), num(rec.codes, 20), num(rec.codes, 30)], items: [], name, flags: bflags, ...(bflags & 4 ? { xrefPath: str(rec.codes, 1) ?? '' } : {}) }
         // Los anónimos de sombreados (*X) y el espacio modelo no se insertan a mano. Los de cotas (*D), sí: los usan las
         // cotas de arco y de radio grande, que se dibujan con su bloque.
         if (!name.startsWith('*') || /^\*[UTD]/i.test(name)) blocks.set(name.toUpperCase(), block)
@@ -1277,11 +1282,16 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
     return m
   }
   /**
-   * Bloques que pasan a ser bloques de Cota: con nombre, ni anónimos (70 & 1) ni de referencias externas (4…64, `|`) ni
-   * los de los espacios de un DXF R12 (`$MODEL_SPACE`, `$PAPER_SPACE`).
+   * Bloques que pasan a ser bloques de Cota: con nombre, ni anónimos (70 & 1) ni dependientes de una referencia externa
+   * (16, `|`) ni los de los espacios de un DXF R12 (`$MODEL_SPACE`, `$PAPER_SPACE`). Una referencia externa (70 & 4)
+   * pasa vacía, con su ruta: su contenido es el del otro archivo, que se pide al abrir (ver `xrefs`).
    */
   const keeps = (def: BlockDefRec | undefined): def is BlockDefRec =>
-    !!def && !def.name.startsWith('*') && !/^\$(MODEL|PAPER)_SPACE/i.test(def.name) && !(def.flags & 125) && !def.name.includes('|')
+    !!def &&
+    !def.name.startsWith('*') &&
+    !/^\$(MODEL|PAPER)_SPACE/i.test(def.name) &&
+    !def.name.includes('|') &&
+    (def.flags & 4 ? true : !(def.flags & 125))
 
   /**
    * Inserción de Cota para un INSERT (una celda), con los valores de sus atributos; null si Cota no la dibujaría igual
@@ -1386,7 +1396,7 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
         if (a) list.push(a)
       }
     }
-    blockSpecs.push({ name: def.name, entities: list })
+    blockSpecs.push(def.flags & 4 ? { name: def.name, entities: [], xref: { path: def.xrefPath ?? '', ...(def.flags & 8 ? { overlay: true } : {}) } } : { name: def.name, entities: list })
   }
   // El modelo en su orden de dibujo: el del archivo (las inserciones en su lugar) y, si hay, el de su SORTENTSTABLE.
   const tagOf = (e: DxfEntitySpec) => drawTag.get(e) ?? { fi: Infinity }

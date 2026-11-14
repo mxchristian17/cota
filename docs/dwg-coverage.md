@@ -19,7 +19,8 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 | LEADER | Polyline | Polyline | Without the arrow |
 | MLEADER (MULTILEADER) | Lines, arrows and text | The same pieces | Block content only from DWG |
 | INSERT (named blocks) | Cota blocks: the definition relative to its base point and one insert per reference, with nested blocks, scale (also non-uniform), rotation and extrusion. Objects on layer 0 take the layer of the insert and ByBlock ones its color, lineweight and linetype. An insert on a frozen layer is hidden whole | Expanded (on a frozen layer, its content goes to that layer) | MINSERT: one insert per cell. On a sheet (paper space), inserts are expanded. Importing into a drawing that already has a block of the same name renames the imported one |
-| INSERT of anonymous blocks, external references, ACAD_TABLE | Expanded | Expanded | Dimension, table and hatch blocks, dynamic blocks (`*U`) and external references (named with a vertical bar) |
+| External references (XREF) | Before the drawing finishes opening, Cota looks for each referenced file next to the drawing (when it was opened from the working folder) and asks for the ones it cannot find: choose each `.dwg` or `.dxf` and its model becomes the content of the reference block (its layers named `REFERENCE\|layer`, layer 0 stays 0, its blocks `REFERENCE\|block`). References left out stay empty | Expanded | References nested inside a reference stay empty |
+| INSERT of anonymous blocks, ACAD_TABLE | Expanded | Expanded | Dimension, table and hatch blocks, dynamic blocks (`*U`) and blocks that belong to an external reference (named with a vertical bar) |
 | XLINE, RAY | Native infinite lines | Native | |
 | MLINE | One polyline per element | Polylines | Without the style's end caps |
 | TOLERANCE | Frame, symbols and text | The same pieces | |

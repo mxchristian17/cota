@@ -2334,3 +2334,38 @@ div.lt-row {
   padding: 6px 8px;
   color: var(--muted);
 }
+
+/* Referencias externas que faltan al abrir un DWG/DXF. */
+.xref-modal {
+  width: min(720px, 94vw);
+}
+.xref-intro {
+  margin: 8px 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.xref-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.xref-table th,
+.xref-table td {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+}
+.xref-path {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.xref-status.is-loaded {
+  color: #4ec97a;
+}
+.xref-status.is-error,
+.xref-status.is-missing {
+  color: #f48771;
+}

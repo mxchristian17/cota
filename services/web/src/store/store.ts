@@ -71,6 +71,7 @@ import { newViewportProps } from '../core/layout/viewport'
 import { fieldContextFor, resolveFieldTexts } from '../core/fields/context'
 import { exportObj, importObj, type ObjMesh } from '../core/io/obj'
 import { exportDxf, importDxf, type DxfEntitySpec, type DxfImportResult } from '../core/io/dxf'
+import { attachXref, xrefCandidates, xrefsOf } from '../core/io/xref'
 import { dwgErrorMessage, dwgVersion, dxfTextToDwg, importCadInWorker } from '../core/io/dwg'
 import {
   ensurePermission,
@@ -139,6 +140,8 @@ export interface AppState {
   output: string[]
   cursor: Pt
   helpOpen: boolean
+  /** Referencias externas que faltan al abrir un DWG/DXF: el diálogo deja elegir sus archivos antes de terminar. */
+  xrefAsk: XrefAsk | null
   ortho: boolean
   /** Grilla visible en el modelo (GRID, F7). */
   gridOn: boolean
@@ -327,6 +330,10 @@ export interface AppState {
   setCursor: (p: Pt) => void
   openHelp: () => void
   closeHelp: () => void
+  /** Elige el archivo de una referencia externa del diálogo y lo lee. */
+  xrefBrowse: (name: string) => void
+  /** Termina de abrir el dibujo con las referencias que se eligieron (las demás quedan vacías). */
+  xrefFinish: () => void
   toggleOrtho: () => void
   toggleDynInput: () => void
   togglePolar: () => void
@@ -595,6 +602,18 @@ async function readModelFile(file: File, lower: string): Promise<Array<Pick<ObjM
 /** Registra un cambio de selección como paso de deshacer (lo arma el store; ver `SelUndo`). */
 let selectionStep: ((prev: string[], next: string[]) => void) | null = null
 
+/** Una referencia externa del diálogo: su bloque, la ruta guardada y el archivo elegido. */
+export interface XrefAskItem {
+  name: string
+  path: string
+  status: 'missing' | 'loading' | 'loaded' | 'error'
+  file?: string
+  message?: string
+}
+export interface XrefAsk {
+  items: XrefAskItem[]
+}
+
 export const useStore = create<AppState>((set, get) => {
   const doc = DocumentModel.createDefault()
   const layerSvc = new LayerService(doc)
@@ -618,6 +637,52 @@ export const useStore = create<AppState>((set, get) => {
    * DWG → DXF: primero en el navegador (acad-ts, sin servidor); si el archivo no se puede leer ahí y hay un servidor
    * con conversor, se le pide a él.
    */
+  /** DWG o DXF de un archivo, en el hilo aparte. */
+  const readCadFile = async (name: string, data: ArrayBuffer): Promise<DxfImportResult> =>
+    name.toLowerCase().endsWith('.dwg') ? readDwg(data) : importCadInWorker('dxf', data, { light: isPhone() })
+  /** Lo leído de cada referencia externa mientras el diálogo está abierto, y cómo seguir al cerrarlo. */
+  let xrefPending: { results: Map<string, { r: DxfImportResult; file: string }>; done: () => void } | null = null
+  /**
+   * Referencias externas (XREF) de un DWG/DXF antes de terminar de abrirlo: busca cada archivo junto al dibujo si se
+   * abrió de la carpeta de trabajo (`folder`), y para las que faltan muestra un diálogo para elegirlas. El contenido de
+   * cada una pasa al bloque que la representa (sus capas `NOMBRE|capa`); las que no se eligen quedan vacías.
+   */
+  const resolveXrefs = async (r: DxfImportResult, folder?: string): Promise<void> => {
+    const refs = xrefsOf(r)
+    if (!refs.length) return
+    const results = new Map<string, { r: DxfImportResult; file: string }>()
+    if (workspaceDir && folder !== undefined) {
+      for (const x of refs) {
+        for (const c of xrefCandidates(x.path, folder)) {
+          const h = await fileHandleAt(workspaceDir, c.folder, c.file).catch(() => null)
+          if (!h) continue
+          try {
+            const f = await h.getFile()
+            const data = f.arrayBuffer ? await f.arrayBuffer() : (new TextEncoder().encode(await f.text()).buffer as ArrayBuffer)
+            results.set(x.name, { r: await readCadFile(c.file, data), file: c.file })
+            break
+          } catch {
+            /* ilegible: se pide en el diálogo */
+          }
+        }
+      }
+    }
+    const missing = refs.filter((x) => !results.has(x.name))
+    if (missing.length) {
+      await new Promise<void>((resolve) => {
+        xrefPending = { results, done: resolve }
+        set({ xrefAsk: { items: missing.map((x) => ({ name: x.name, path: x.path, status: 'missing' })) } })
+      })
+      xrefPending = null
+    }
+    for (const [name, { r: x, file }] of results) {
+      attachXref(r, name, x)
+      const b = r.blocks?.find((q) => q.name === name)
+      if (b?.xref) b.xref = { ...b.xref, file }
+    }
+    const left = refs.length - results.size
+    print(`${results.size} external reference(s) loaded${left ? `; ${left} not found (shown empty)` : ''}.`)
+  }
   const readDwg = async (data: ArrayBuffer): Promise<DxfImportResult> => {
     const version = dwgVersion(data)
     if (!version) throw new Error('the file is not a DWG drawing.')
@@ -739,7 +804,7 @@ export const useStore = create<AppState>((set, get) => {
         if (child.type === 'DIMENSION' && doc.dimStyleDef(child.props.styleName ?? '')) doc.restyleDimension(child.props, child.props.styleName, child.props.overrides)
         return child
       })
-      doc.setBlock({ name: blockName.get(b.name)!, entities: list })
+      doc.setBlock({ name: blockName.get(b.name)!, entities: list, ...(b.xref ? { xref: b.xref } : {}) })
     }
     for (const e of entities) {
       const layerId = idByName.get(e.layerName.toLowerCase()) ?? doc.firstLayerId
@@ -1685,6 +1750,7 @@ export const useStore = create<AppState>((set, get) => {
     output: ['Cota — type HELP (or ?) for the list of commands.'],
     cursor: { x: 0, y: 0, z: 0 },
     helpOpen: false,
+    xrefAsk: null,
     ortho: false,
     gridOn: true,
     fullscreen: false,
@@ -2556,6 +2622,31 @@ export const useStore = create<AppState>((set, get) => {
     setCursor: (p) => set({ cursor: p }),
     openHelp: () => set({ helpOpen: true }),
     closeHelp: () => set({ helpOpen: false }),
+    xrefBrowse: (name) => {
+      const ask = get().xrefAsk
+      const pending = xrefPending
+      if (!ask || !pending) return
+      const update = (patch: Partial<XrefAskItem>) => {
+        const cur = get().xrefAsk
+        if (cur) set({ xrefAsk: { items: cur.items.map((it) => (it.name === name ? { ...it, ...patch } : it)) } })
+      }
+      void chooseFile(fileAccept('.dwg,.dxf')).then(async (file) => {
+        if (!file) return
+        update({ status: 'loading', file: file.name, message: undefined })
+        try {
+          pending.results.set(name, { r: await readCadFile(file.name, await file.arrayBuffer()), file: file.name })
+          update({ status: 'loaded' })
+        } catch (err) {
+          pending.results.delete(name)
+          update({ status: 'error', message: err instanceof Error ? err.message : String(err) })
+        }
+      })
+    },
+    xrefFinish: () => {
+      if (get().xrefAsk?.items.some((it) => it.status === 'loading')) return
+      set({ xrefAsk: null })
+      xrefPending?.done()
+    },
     toggleOrtho: () => {
       const next = !get().ortho
       // Como el CAD clásico: ORTHO y POLAR no van juntos.
@@ -3016,7 +3107,10 @@ export const useStore = create<AppState>((set, get) => {
           reader.onload = () => {
             print('Reading DWG…')
             readDwg(reader.result as ArrayBuffer)
-              .then((r) => runImport(() => applyDxf(r), (n) => `Imported ${n} entity(ies) from DWG.`))
+              .then(async (r) => {
+                await resolveXrefs(r)
+                runImport(() => applyDxf(r), (n) => `Imported ${n} entity(ies) from DWG.`)
+              })
               .catch((err) => print(`DWG import failed: ${err instanceof Error ? err.message : String(err)}`))
           }
           reader.readAsArrayBuffer(file)
@@ -3027,7 +3121,10 @@ export const useStore = create<AppState>((set, get) => {
           void file
             .arrayBuffer()
             .then((buf) => importCadInWorker('dxf', buf, { light: isPhone() }))
-            .then((r) => runImport(() => applyDxf(r), (n) => `Imported ${n} entity(ies) from DXF.`))
+            .then(async (r) => {
+              await resolveXrefs(r)
+              runImport(() => applyDxf(r), (n) => `Imported ${n} entity(ies) from DXF.`)
+            })
             .catch((err) => print(`DXF import failed: ${err instanceof Error ? err.message : String(err)}`))
           return
         }
@@ -3127,6 +3224,7 @@ export const useStore = create<AppState>((set, get) => {
             print('Reading DXF…')
             r = await importCadInWorker('dxf', await file.arrayBuffer(), { light: isPhone() })
           }
+          await resolveXrefs(r)
           pushSnapshot('open')
           doc.reset()
           const n = applyDxf(r, true)
@@ -3575,6 +3673,7 @@ export const useStore = create<AppState>((set, get) => {
           // En el hilo aparte, como al abrir del equipo (también el DXF binario).
           const f = await handle.getFile()
           const r = await importCadInWorker('dxf', f.arrayBuffer ? await f.arrayBuffer() : (new TextEncoder().encode(await f.text()).buffer as ArrayBuffer), { light: isPhone() })
+          await resolveXrefs(r, folder)
           pushSnapshot('open')
           doc.reset()
           const n = applyDxf(r, true)

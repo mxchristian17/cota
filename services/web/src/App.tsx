@@ -29,6 +29,7 @@ import { OptionsDialog } from './ui/OptionsDialog'
 import { OsnapDialog } from './ui/OsnapDialog'
 import { DimStyleDialog } from './ui/DimStyleDialog'
 import { DwgPropsDialog } from './ui/DwgPropsDialog'
+import { XrefDialog } from './ui/XrefDialog'
 import { AttEditDialog } from './ui/AttEditDialog'
 import { PageSetupDialog } from './ui/PageSetupDialog'
 import { TemplateDialog } from './ui/TemplateDialog'
@@ -482,6 +483,7 @@ export default function App() {
       <DimContextMenu />
       <ContextMenu />
       <DwgPropsDialog />
+      <XrefDialog />
       <AttEditDialog />
       <PageSetupDialog />
       <TemplateDialog />
