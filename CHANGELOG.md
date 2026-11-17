@@ -4,6 +4,55 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.47.0] — 2026-11-17
+
+### Added
+- **IMPORT brings STEP, IGES and STL models into the open drawing**: until now they could only be opened as a new
+  drawing, so adding a part to an assembly meant saving, opening the part, copying it, opening the assembly again and
+  pasting. IMPORT reads them with the same reader as OPEN (same units and orientation) and, for every 3D model (OBJ
+  too), asks `Import "file" as [Objects/Block] <Objects>:`. **Objects** adds each body as a mesh on the current layer,
+  at the coordinates it has in the file, as OBJ did; **Block** makes the model a block named after the file (or the
+  name you type; an existing one asks whether to redefine it), with its base point at the file's origin and one
+  reference at 0,0,0, ready to place again with INSERT. Each import is one undo step.
+- **Copy in one browser tab, paste in another**: COPYCLIP, CUTCLIP and COPYBASE now share the clipboard with every Cota
+  tab and window of the same browser (it stays in the browser, it is not uploaded), including tabs opened later;
+  PASTECLIP and PASTEORIG paste the newest copy made in any of them, and <kbd>Ctrl</kbd>+<kbd>V</kbd> pastes objects
+  copied in another open tab. Until now each tab had its own clipboard and pasting what was copied in another one said
+  "The clipboard is empty."
+
+### Fixed
+- **Tolerances on dimensions over a scaled drawing view**: a dimension placed on a 1:2 view printed its tolerance
+  multiplied by the scale (`200 ±0,2` for a `DIMTP`/`DIMTM` of 0,1). As in a classic CAD, the measurement factor of
+  the view (`DIMLFAC`) now scales only the measured value, never the deviations the user typed (`DIMTOL`, from
+  `DIMOVERRIDE` or the style); limits (`DIMLIM`) and rounding (`DIMRND`) were already right. Also, removing a
+  dimension's overrides (`DIMOVERRIDE` Clear, the context menu, `-DIMSTYLE` Apply) or matching it to another one
+  (`MATCHPROP`) no longer leaves it measuring the paper (`100` instead of `200` on a 1:2 view): it keeps the factor of
+  its own view.
+- **AUTODIM skips isometric views**: with All, it dimensioned an isometric base view (`VIEWBASE` with orientation SW,
+  SE, NE or NW) and the views projected from it, with meaningless values. It now dimensions only the orthographic
+  views (front, top, sides…, including a "Current" base view taken square to an axis) and reports how many isometric
+  or axonometric views it skipped.
+- **A typed point in "Select objects" picks the object at that point in 3D**: in a 3D model, typing a coordinate
+  could pick a solid far away from it (a top crossbar half a meter above the profile under the point), because solids
+  were matched by their outline in plan view. Solids and meshes are now picked by the 3D point itself: the one whose
+  surface passes through it (within a small tolerance that covers faceted curved faces) or that contains it; a point
+  in the air picks nothing. Clicking with the mouse works as before.
+- **Blocks pasted into another drawing arrive with their definitions**: copying block references and pasting them in
+  another drawing (after OPEN or NEW, or in another tab) left references that drew nothing, INSERT could not place the
+  block again and the saved drawing had no blocks. Now the copy takes along the definitions of the blocks it inserts,
+  nested ones included, and their layers, as a classic CAD does. If the drawing already has a block with the same name,
+  its own definition is kept (Cota says so when the two differ); anonymous blocks, such as drawing views, are added
+  under the next free name instead; layers are matched by name, and missing ones are created as they were. A reference
+  whose block is in neither drawing is not pasted, with a message.
+- **INSERT of a block that does not exist** prints `Block "NAME" not found.` and inserts nothing, also when the drawing
+  has no blocks at all (a script such as `INSERT NEMA17 100,0 1 0` now stops there instead of reading the point as a
+  command). Block names are matched without regard to case.
+- **Agent panel with the server**: when the panel opened before the sign-in at startup finished, it asked for an API
+  key the account already had and did not show the account's conversations; it now reloads them when you sign in or
+  out.
+- **Opening a drawing whose references point to blocks it does not define** (for example one saved after such a paste)
+  warns with their names, instead of showing nothing.
+
 ## [2.46.1] — 2026-11-16
 
 ### Fixed

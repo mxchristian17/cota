@@ -961,10 +961,12 @@ export class CommandEngine {
     }
     const opt = this.matchKeyword(trimmed, SELECT_KEYWORDS)
     const ents = () => selectableEntities(this.deps.doc)
-    // Un punto tecleado elige el objeto que pasa por él (o el sólido, texto o bloque que lo contiene).
+    // Un punto tecleado elige el objeto que pasa por él, el sólido o la malla que está en él (en 3D, no lo que lo
+    // tapa en la vista) o el texto, cota o sombreado que lo contiene.
     const at = opt ? null : parseCoordinate(trimmed, this.lastPoint, this.deps.currentUcs(), false)
     if (at) {
-      const id = selectAtPoint(ents(), [at.x, at.y, at.z])
+      const app = this.deps.app
+      const id = selectAtPoint(ents(), [at.x, at.y, at.z], app.solidMesh ? (e) => app.solidMesh?.(e) : undefined)
       if (!id) return this.reject('0 found: no object at that point.')
       return this.applySel(sel, [id], !!sel.remove)
     }

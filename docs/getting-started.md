@@ -126,8 +126,8 @@ Accept the defaults with <kbd>Enter</kbd>. Export the sheet to PDF with `PLOT`.
 | **A folder on your disk** | `OPENFOLDER` (Chromium browsers) and pick a folder. `SAVE` writes there, `OPEN` lists its drawings and **Autosave** keeps them up to date. |
 | **Your account** | Only when the optional server is running: `LOGIN`, then `SAVE` and `OPEN` use the server. See [self-hosting](self-hosting.md). |
 
-`OPEN` also reads `.dxf` files (and `.dwg` with the server). `IMPORT` adds OBJ or DXF geometry to the current
-drawing; `EXPORT` writes OBJ, DXF or DWG.
+`OPEN` also reads `.dxf` and `.dwg` files and 3D models (STEP, IGES, STL, OBJ). `IMPORT` adds DXF, DWG or 3D model
+geometry to the current drawing; `EXPORT` writes OBJ, DXF or DWG.
 
 ## Next steps
 

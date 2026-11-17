@@ -14,9 +14,9 @@ import { solidMesh } from '../render/csg'
 /**
  * Motor de comandos con un documento vacío y hooks de app inertes, para tests de comandos
  *. `run` tipea entradas en la línea de comandos; `click` simula un click en el viewport
- * sobre una entidad (con Shift opcional).
+ * sobre una entidad (con Shift opcional). `hooks` reemplaza algunos hooks de la app (p. ej. el selector de IMPORT).
  */
-export function makeEngine() {
+export function makeEngine(hooks: Partial<AppHooks> = {}) {
   resetMemory() // cada harness es una sesión nueva: sin valores recordados
   resetDimSession()
   resetMatchSettings()
@@ -50,6 +50,7 @@ export function makeEngine() {
   }
   const app = new Proxy({} as AppHooks, {
     get: (_t, k) => {
+      if (typeof k === 'string' && k in hooks) return hooks[k as keyof AppHooks]
       if (k === 'clearSelection') return () => (selection = [])
       if (k === 'preselection') return () => [...selection]
       if (k === 'visualStyle') return () => style

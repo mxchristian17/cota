@@ -77,16 +77,29 @@ export const insertCommand: Command = {
   async run(ctx) {
     // Los bloques anónimos (`*VIEWn` de las vistas de dibujo) no se insertan a mano, como en el CAD clásico.
     const blocks = ctx.doc.blocks.filter((b) => !b.name.startsWith('*'))
-    if (blocks.length === 0) {
-      ctx.print('No blocks defined. Use BLOCK first.')
+    // Sin bloques también se pide el nombre: así un lote `INSERT NOMBRE punto…` se corta con el aviso, en vez de tomar
+    // el nombre y el punto como comandos.
+    const typed = (
+      blocks.length
+        ? await ctx.getString(`Block name [${blocks.map((b) => b.name).join(', ')}] <${blocks[0].name}>: `, { default: blocks[0].name })
+        : await ctx.getString('Block name: ', { default: '' })
+    )?.trim()
+    if (!typed) {
+      if (typed === '') ctx.print('No blocks defined. Use BLOCK first.')
       return
     }
-    const name = (await ctx.getString(`Block name [${blocks.map((b) => b.name).join(', ')}] <${blocks[0].name}>: `, { default: blocks[0].name }))?.trim()
-    if (!name) return
-    if (!ctx.doc.getBlock(name)) {
-      ctx.print(`Block "${name}" not found.`)
+    // Los nombres de bloque no distinguen mayúsculas (como el CAD clásico): manda el exacto; si no, el que coincida.
+    const def = ctx.doc.getBlock(typed) ?? blocks.find((b) => b.name.toLowerCase() === typed.toLowerCase())
+    if (!def) {
+      // Nunca una inserción vacía: sin su definición no dibujaría nada.
+      ctx.print(
+        blocks.length
+          ? `Block "${typed}" not found.`
+          : `Block "${typed}" not found: the drawing has no blocks. Define one with BLOCK, or bring one with PASTECLIP or IMPORT.`,
+      )
       return
     }
+    const name = def.name
     const editing = ctx.doc.editingBlock
     if (editing && blockContains(ctx.doc, name, editing)) {
       ctx.print(`A block cannot contain itself: "${name}" is or contains "${editing}".`)

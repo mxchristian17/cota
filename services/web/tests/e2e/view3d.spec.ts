@@ -109,3 +109,47 @@ test.describe('Cota 3D: view cube + EXTRUDE', () => {
     await expect(page.getByTestId('proj-toggle')).toHaveText('Ortho')
   })
 })
+
+test.describe('Cota 3D: a typed point in "Select objects"', () => {
+  test('picks the solid AT that point, not the one in front of it in the view (2020-profile frame, SWISO)', async ({ page }) => {
+    test.setTimeout(60_000)
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    // Chasis de perfiles 20×20: base, parantes y marco superior (los largueros de arriba van entre las esquinas).
+    const boxes = [
+      ['0,0,0', '20,440,0', '20'],
+      ['400,0,0', '420,440,0', '20'],
+      ['20,0,0', '400,20,0', '20'],
+      ['20,420,0', '400,440,0', '20'],
+      ['0,0,20', '20,20,20', '420'],
+      ['400,0,20', '420,20,20', '420'],
+      ['0,420,20', '20,440,20', '420'],
+      ['400,420,20', '420,440,20', '420'],
+      ['0,20,440', '20,420,440', '20'],
+      ['400,20,440', '420,420,440', '20'],
+      ['0,0,440', '420,20,440', '20'],
+      ['0,420,440', '420,440,440', '20'],
+    ]
+    for (const b of boxes) await typeCmd(page, 'BOX', ...b)
+    const ids = (await page.evaluate(() => {
+      const w = window as unknown as { __cotaStore: { getState: () => { doc: { entities: Array<{ id: string; type: string; props: { origin: number[] } }> } } } }
+      return w.__cotaStore.getState().doc.entities.filter((e) => e.type === 'SOLID3D').map((e) => e.id)
+    })) as string[]
+    expect(ids).toHaveLength(12)
+    await typeCmd(page, 'VIEW', 'SWISO', 'UCS', 'W', 'ZOOM', 'E')
+    // (3,100,20): cara superior del perfil base izquierdo (X 0–20, Y 0–440, Z 0–20); el travesaño de arriba, a 420 mm.
+    await typeCmd(page, 'LIST', '3,100,20', '')
+    await expect(page.locator('.cmd-output')).toContainText(`Handle = ${ids[0]}`)
+    await expect(page.locator('.cmd-output')).not.toContainText(`Handle = ${ids[8]}`)
+    await typeCmd(page, 'COPY', '3,100,20', '', '0,0,0', '0,0,100', '')
+    const copy = await page.evaluate(() => {
+      const w = window as unknown as { __cotaStore: { getState: () => { doc: { entities: Array<{ type: string; props: { origin: number[]; depth: number } }> } } } }
+      const s = w.__cotaStore.getState().doc.entities.filter((e) => e.type === 'SOLID3D')
+      return s.length === 13 ? { origin: s[12].props.origin, depth: s[12].props.depth } : null
+    })
+    expect(copy).toEqual({ origin: [0, 0, 100], depth: 440 })
+    // En el aire, dentro del marco: nada.
+    await typeCmd(page, 'LIST', '200,200,200')
+    await expect(page.locator('.cmd-output')).toContainText('0 found: no object at that point.')
+  })
+})

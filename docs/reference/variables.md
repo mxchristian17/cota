@@ -145,7 +145,7 @@ of the current style, which Cota confirms: `DIMTAD = Above (override of "IRAM 45
 | `DIMDSEP` | A character, such as `,` or `.` | Decimal separator. |
 | `DIMRND` | Length | Rounds values to this increment (0.5 rounds to the nearest half). |
 | `DIMPOST` | Text with `<>` | Prefix and suffix around the value: `<> mm`, `Ø<>`. |
-| `DIMLFAC` | Number | Factor applied to measured lengths (for details drawn at another scale). |
+| `DIMLFAC` | Number | Factor applied to measured lengths (for details drawn at another scale; a dimension on a drawing view gets 1/scale of its view). It never scales tolerances (`DIMTP`, `DIMTM`) or `DIMRND`. |
 | `DIMZIN` | Sum of 4 (no leading zero) and 8 (no trailing zeros) | Zero suppression: 8 shows `2,5` instead of `2,50`. |
 | `DIMAUNIT` | 0 Decimal degrees, 1 Degrees minutes seconds, 2 Gradians, 3 Radians | Format of angles. |
 | `DIMADEC` | Number of decimals | Precision of angles. |

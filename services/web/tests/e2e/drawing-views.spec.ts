@@ -460,3 +460,45 @@ test.describe('Cota units and default template', () => {
     expect(await store(page, 'return [s.doc.units, s.doc.layers.map((l) => l.name).includes("Ejes")]')).toEqual(['mm', false])
   })
 })
+
+test.describe('Cota dimensions on scaled drawing views', () => {
+  test('a tolerance on a 1:2 view keeps the value the user typed (200 ±0,1, not ±0,2); Clear keeps measuring the part', async ({ page }) => {
+    test.setTimeout(60_000)
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    await typeCmd(page, 'BOX', '0,0,0', '200,200,0', '30')
+    await typeCmd(page, 'VIEWBASE', '', 'Layout1', 'O', 'Top', 'S', '1:2', '105,190', '')
+    await expect(page.locator('.cmd-output')).toContainText('Base view created', { timeout: 30_000 })
+    await typeCmd(page, 'DIMLINEAR', '55,240', '155,240', '105,270')
+    await typeCmd(page, 'DIMOVERRIDE', 'DIMTOL', '1', 'DIMTP', '0.1', 'DIMTM', '0.1', '', 'L', '')
+    await typeCmd(page, 'LIST', 'L', '')
+    await expect(page.locator('.cmd-output')).toContainText('Text = "200 ±0,1"')
+    await typeCmd(page, 'DIMOVERRIDE', 'DIMTM', '0.05', '', 'L', '', 'LIST', 'L', '')
+    await expect(page.locator('.cmd-output')).toContainText('Text = "200 +0,1/-0,05"')
+    // Quitar los overrides saca la tolerancia, pero la cota sigue midiendo la pieza (no los 100 del papel).
+    await typeCmd(page, 'DIMOVERRIDE', 'C', 'L', '', 'LIST', 'L', '')
+    await expect(page.locator('.cmd-output')).toContainText('Text = "200"')
+  })
+
+  test('AUTODIM dimensions only the orthographic views and reports the isometric ones it skipped', async ({ page }) => {
+    test.setTimeout(90_000)
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    await typeCmd(page, 'BOX', '0,0,0', '200,100,0', '50')
+    await typeCmd(page, 'CYLINDER', '150,50,50', '15', '30')
+    // Frente 1:2 con lateral, planta e isométrica proyectadas; aparte, una vista base isométrica (VIEWBASE T B O SW).
+    await typeCmd(page, 'VIEWBASE', '', 'Layout1', 'O', 'Front', 'S', '1:2', '80,170', '200,170', '80,80', '200,80', '')
+    await expect(page.locator('.cmd-output')).toContainText('Base view created with 3 projected view(s)', { timeout: 30_000 })
+    await typeCmd(page, 'VIEWBASE', 'T', 'B', 'O', 'SW', '300,200')
+    await expect(page.locator('.cmd-output')).toContainText('Base view created (', { timeout: 30_000 })
+    await typeCmd(page, 'AUTODIM', '', '', '')
+    await expect(page.locator('.cmd-output')).toContainText('in 3 view(s); 2 isometric view(s) skipped')
+    // Ninguna cota cae sobre las isométricas: la proyectada (abajo a la derecha) ni la base SW (arriba a la derecha).
+    const pts = (await store(page, "return s.doc.entities.filter((e) => e.type === 'DIMENSION').map((e) => e.props.points[0])")) as number[][]
+    expect(pts.length).toBeGreaterThan(0)
+    for (const [x, y] of pts) {
+      expect(x >= 160 && y < 120).toBe(false)
+      expect(x >= 250).toBe(false)
+    }
+  })
+})

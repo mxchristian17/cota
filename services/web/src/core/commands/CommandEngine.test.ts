@@ -55,7 +55,7 @@ const setup = () => {
       openDimStyle: () => {},
       setViewportLayout: () => {},
       exportPdf: () => {},
-      importFile: () => {},
+      importFile: async () => null,
       openFromDevice: () => {},
       attachImages: () => {},
       visualStyle: () => '2dwireframe',

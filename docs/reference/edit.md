@@ -35,14 +35,21 @@ Copies the selected objects to the clipboard and erases them (<kbd>Ctrl</kbd>+<k
 
 ## COPYCLIP
 
-Copies the selected objects to the clipboard (<kbd>Ctrl</kbd>+<kbd>C</kbd>), to paste them in this drawing or in
-another tab.
+Copies the selected objects to the clipboard (<kbd>Ctrl</kbd>+<kbd>C</kbd>), to paste them in this drawing, in another
+drawing (the clipboard stays after `OPEN` or `NEW`) or in another Cota tab or window of the same browser.
 
 **Aliases** none · **Menu** Edit › Clipboard
 
 **Steps**
 
 1. `Select objects:` Cota prints how many objects were copied.
+
+**Notes**
+
+- The copy takes along what the objects need in another drawing: the definitions of the blocks they insert (with the
+  blocks nested in them) and their layers. See [PASTECLIP](#pasteclip).
+- Every Cota tab of the browser shares the clipboard: the newest copy, made in any of them, is the one pasted. It is
+  kept in the browser (not uploaded), so it also reaches tabs opened later, but not another browser or device.
 
 ## COPYBASE
 
@@ -67,15 +74,27 @@ Pastes the clipboard at an insertion point (<kbd>Ctrl</kbd>+<kbd>V</kbd>).
 1. `Specify insertion point:` the base point of the copy lands there (with COPYCLIP and CUTCLIP, the lower left
    corner of the objects copied).
 
+Cota prints how many objects were pasted, and the block definitions and layers it added.
+
 **Notes**
 
-- If the clipboard holds text instead of objects (for example a script copied from these pages),
-  <kbd>Ctrl</kbd>+<kbd>V</kbd> in the command line runs it as a script.
+- It pastes the newest copy made in any Cota tab of the browser (see [COPYCLIP](#copyclip)).
+- **Blocks** travel with their references, as in a classic CAD: a block the drawing does not have is added with its
+  nested blocks, so `INSERT` can place it again and `SAVE` keeps it. If the drawing already has a block with that
+  name, its own definition is kept and the pasted references use it; when the two differ, Cota says so (rename the
+  block in one of the drawings to have both). Anonymous blocks (names starting with `*`, such as drawing views) are
+  added under the next free name instead. A reference whose block is in neither drawing is not pasted, with a message.
+- **Layers** are matched by name: the drawing's layer is used when it has one with that name (with its own color and
+  linetype); otherwise the layer is created as it was in the copy.
+- <kbd>Ctrl</kbd>+<kbd>V</kbd> pastes objects when there are objects copied in this tab, or in another tab while this
+  one was open or in the hour before it opened. Otherwise, if the clipboard holds text (for example a script copied from
+  these pages), <kbd>Ctrl</kbd>+<kbd>V</kbd> in the command line runs it as a script; `PASTECLIP` still pastes the
+  last objects copied.
 
 ## PASTEORIG
 
-Pastes the clipboard at the same coordinates the objects had: useful to move objects between drawings without
-moving them.
+Pastes the clipboard at the same coordinates the objects had: useful to move objects between drawings (or tabs)
+without moving them. Blocks and layers come along as with [PASTECLIP](#pasteclip).
 
 **Aliases** none · **Menu** Edit › Clipboard
 

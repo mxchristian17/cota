@@ -83,7 +83,8 @@ QDIM ALL "" 50,-15
 
 Dimensions a part automatically: overall sizes, the positions of steps, the positions of holes, diameters and
 radii, laid out so that they do not overlap. On a layout it dimensions the drawing views generated from the 3D
-model.
+model; only the orthographic ones (front, top, sides…): isometric and other axonometric views are skipped, because
+their lengths are not true size, and Cota reports how many it skipped.
 
 **Aliases** `ADIM` · **Menu** Dimension
 

@@ -11,7 +11,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | [`OPENFOLDER`](reference/file.md#openfolder) | `FOLDER`, `WORKSPACE` | Choose a system folder to open and save drawings as files |
 | [`SAVE`](reference/file.md#save) | `QSAVE`, `SAVEAS` | Save the current drawing: working folder, your account, or a downloaded .cota file |
 | [`CLOUD`](reference/file.md#cloud) | `CLOUDSTORAGE` | Store drawings in your account again (detach the local folder) |
-| [`IMPORT`](reference/file.md#import) | `IMP` | Import geometry from an OBJ or DXF file |
+| [`IMPORT`](reference/file.md#import) | `IMP` | Import geometry from a DXF, DWG, OBJ, STL, STEP or IGES file |
 | [`EXPORT`](reference/file.md#export) | `EXP` | Export the drawing to OBJ (3D mesh), DXF (2D) or DWG (2D) |
 | [`PAGESETUP`](reference/file.md#pagesetup) | — | Page setup of the current layout (paper, orientation, margins, plot style) |
 | [`PLOT`](reference/file.md#plot) | `PRINT` | Plot to a vector PDF from a dialog with preview: paper, orientation, area (Extents/Display/Window), scale, plot style; a layout plots 1:1 with its page setup |

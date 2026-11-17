@@ -28,7 +28,14 @@ INSERT SQUARE 50,50 2 45
 
 **Notes**
 
-- Define blocks with [BLOCK](draw.md#block). Blocks from DWG and DXF files come with them.
+- Define blocks with [BLOCK](draw.md#block). Blocks from DWG and DXF files come with them; blocks copied in another
+  drawing or tab come with [PASTECLIP](edit.md#pasteclip), and [IMPORT](file.md#import) turns a STEP, IGES, STL or
+  OBJ model into a block.
+- Block names are not case-sensitive: `INSERT nema17` places `NEMA17`.
+- A name the drawing does not define prints `Block "NAME" not found.` and nothing is inserted (a reference without
+  its definition would draw nothing). The name is asked even when the drawing has no blocks, so a script such as
+  `INSERT NEMA17 100,0 1 0` stops there instead of reading the point as a command.
+- Opening a drawing whose references point to blocks it does not define prints a warning with their names.
 
 ## BEDIT
 

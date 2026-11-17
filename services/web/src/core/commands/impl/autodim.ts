@@ -4,6 +4,7 @@ import type { Vec3 } from '../../math'
 import { autodim, dimensionedPositions, type DimRequest, type Geo2D, type P2 } from '../../dimension/autodim'
 import { expandEntities } from '../../editing/block'
 import { isDrawingView } from '../../drawing/views'
+import type { ProjBasis } from '../../projection/orthographic'
 import { bulgeArc, bulgeAt, polylineSpans } from '../../geom/polyline'
 import { askKeyword } from '../ask'
 
@@ -66,8 +67,17 @@ function dimensionOf(ctx: CommandContext, r: DimRequest, lfac: number, z: number
 }
 
 /**
+ * ¿La vista mira a lo largo de un eje del modelo (frente, planta, laterales…)? Sólo ahí las longitudes están en
+ * verdadera magnitud: las isométricas y axonométricas (base, proyectadas en diagonal o desde una isométrica) no
+ * se acotan. Se decide por la dirección de la vista, no por cómo se creó.
+ */
+function isOrthographicView(b: ProjBasis): boolean {
+  return Math.max(Math.abs(b.out[0]), Math.abs(b.out[1]), Math.abs(b.out[2])) > 1 - 1e-6
+}
+
+/**
  * AUTODIM: acota la pieza entera de una vez. En un layout, sus vistas de dibujo (VIEWBASE): cada
- * vista con lo que no comparte con su madre (las isométricas no se acotan), en unidades del modelo
+ * vista ortogonal con lo que no comparte con su madre (las isométricas se saltean y se informan), en unidades del modelo
  * (DIMLFAC = 1/escala). En el modelo, la geometría 2D elegida. Ver `core/dimension/autodim.ts`.
  */
 export const autodimCommand: Command = {
@@ -86,6 +96,7 @@ export const autodimCommand: Command = {
       shared?: 'x' | 'y'
     }
     const targets: Target[] = []
+    let skipped = 0
     const views = ctx.doc.inPaperSpace ? ctx.doc.entities.filter(isDrawingView) : []
     if (views.length) {
       const sel = await ctx.getSelectionOrKeyword('Select drawing views to dimension or [All] <All>: ', ['All'])
@@ -95,7 +106,10 @@ export const autodimCommand: Command = {
       for (const v of views) {
         if (ids && !ids.has(v.id)) continue
         const view = v.props.view
-        if (view.align === 'free' || (view.orientation === 'projected' && !view.parent)) continue // isométricas: no se acotan
+        if (!isOrthographicView(view.basis)) {
+          skipped++ // isométricas/axonométricas: no se acotan (sus medidas no son las de la pieza)
+          continue
+        }
         const kids = expandEntities([v], ctx.doc.blocks).filter((e) => !visible || e.layer === visible)
         const shared = view.align === 'h' ? 'y' : view.align === 'v' ? 'x' : undefined
         targets.push({ geo: geometry(kids), axes: { x: true, y: true }, lfac: 1 / (v.props.scale[0] || 1), z: 0, id: v.id, parent: view.parent, shared })
@@ -106,8 +120,9 @@ export const autodimCommand: Command = {
       const es = ids.map((id) => ctx.doc.getEntity(id)).filter((e): e is Entity => !!e)
       targets.push({ geo: geometry(es), axes: { x: true, y: true }, lfac: 1, z: 0 })
     }
+    const skippedNote = skipped ? `${skipped} isometric view(s) skipped (only orthographic views are dimensioned)` : ''
     if (!targets.some((t) => t.geo.length)) {
-      ctx.print('Nothing to dimension (lines, circles and arcs in plan view).')
+      ctx.print(skippedNote ? `Nothing to dimension: ${skippedNote}.` : 'Nothing to dimension (lines, circles and arcs in plan view).')
       return
     }
     const type = await askKeyword(ctx, 'Type [Baseline/Chain] <Baseline>: ', ['Baseline', 'Chain'], 'Baseline')
@@ -136,6 +151,6 @@ export const autodimCommand: Command = {
         n++
       }
     }
-    ctx.print(`${n} dimension(s) created${views.length ? ` in ${targets.length} view(s)` : ''}.`)
+    ctx.print(`${n} dimension(s) created${views.length ? ` in ${targets.length} view(s)` : ''}${skippedNote ? `; ${skippedNote}` : ''}.`)
   },
 }

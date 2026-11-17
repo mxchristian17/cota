@@ -99,6 +99,15 @@ export interface Measure {
   angFromXY: number
 }
 
+/** Modelo 3D leído por IMPORT (cada cuerpo, una malla), en las unidades y la orientación del archivo, como al abrirlo. */
+export interface ImportedModel {
+  /** Nombre del archivo, tal cual. */
+  file: string
+  /** Formato, para los mensajes: OBJ, STL, STEP o IGES. */
+  format: string
+  meshes: import('../document/types').MeshProps[]
+}
+
 /** Hooks de nivel de aplicación (auth, persistencia, undo) que exponen diálogos/acciones. */
 export interface AppHooks {
   newDocument(): void
@@ -187,8 +196,12 @@ export interface AppHooks {
   plotDialog?(window?: import('../io/pdf').PlotArea | null): Promise<'plot' | 'window' | 'cancel'>
   /** PUBLISH: un PDF multipágina con los layouts indicados. */
   publish(layoutIds: string[]): void
-  /** Abre un selector de archivo para importar OBJ/DXF al dibujo. */
-  importFile(): void
+  /**
+   * IMPORT: selector de archivo. Un DXF o DWG se agrega al dibujo (y un `.cota` se abre) por su cuenta; un modelo 3D
+   * (OBJ, STL, STEP, IGES) vuelve leído, con el mismo lector que OPEN, para que IMPORT pregunte cómo traerlo. null si no
+   * hay modelo que traer (cancelado, otro formato o un error, ya avisado).
+   */
+  importFile(): Promise<ImportedModel | null>
   /** OPEN ▸ Device: selector de archivos del sistema (.cota/.dxf/.dwg). */
   openFromDevice(): void
   /** IMAGE ▸ Reload: selector de los archivos de las imágenes del dibujo. */

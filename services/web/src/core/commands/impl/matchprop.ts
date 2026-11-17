@@ -74,7 +74,10 @@ export function matchProperties(doc: DocumentModel, src: Entity, dst: Entity, se
     }
   }
   if (on.has('Dimension') && src.type === 'DIMENSION' && dst.type === 'DIMENSION') {
-    doc.restyleDimension(dst.props, src.props.styleName ?? 'Standard', src.props.overrides ? { ...src.props.overrides } : undefined)
+    const ov = src.props.overrides ? { ...src.props.overrides } : undefined
+    // El factor de medida de una cota sobre una vista de dibujo es de su vista (1/escala): no se copia a otra cota.
+    if (ov && (doc.onDrawingView(src.props) || doc.onDrawingView(dst.props))) delete ov.DIMLFAC
+    doc.restyleDimension(dst.props, src.props.styleName ?? 'Standard', ov)
     changed = true
   }
   return changed

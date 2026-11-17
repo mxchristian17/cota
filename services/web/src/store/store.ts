@@ -16,7 +16,7 @@ import { LayerService } from '../core/layers/LayerService'
 import { CommandEngine } from '../core/commands/CommandEngine'
 import { registerDefaultCommands } from '../core/commands/registry'
 import { applySysvars, persistedSysvars, sysvars, type PersistedSysvars } from '../core/commands/sysvars'
-import type { AppHooks, Command, Measure } from '../core/commands/types'
+import type { AppHooks, Command, ImportedModel, Measure } from '../core/commands/types'
 import type { DimensionProps, DocumentData, DrawingVars, Entity, HatchIsland, InsertProps, SolidProps, EntityProps, EntityType, ImageEntity, ImageProps, LineType, NoteColor, PageSetup } from '../core/document/types'
 import { IMAGE_EXTS, imageFileName, isImageFile } from '../core/geom/image'
 import { drawingImages } from '../core/commands/impl/image'
@@ -44,6 +44,7 @@ import { applyGrip, type Grip } from '../core/editing/grips'
 import { mergeSelection } from '../core/editing/selection'
 import { applyField } from '../core/editing/props'
 import { expandEntities, blockAttdefs } from '../core/editing/block'
+import { missingBlocks } from '../core/editing/clipData'
 import { activateTab, defaultMsViewport, neighborTab, nextMsViewport, setupDefaultSheet, type SheetInit } from '../core/layout/layouts'
 import {
   BUILTIN_TEMPLATES,
@@ -478,7 +479,7 @@ export interface AppState {
   resolvePlot: (r: 'plot' | 'window' | 'cancel', s?: PlotSettings) => void
   /** PUBLISH: un PDF con una página por layout (en el orden de las pestañas). */
   publishLayouts: (ids: string[]) => void
-  importFile: () => void
+  importFile: () => Promise<ImportedModel | null>
   /** OPEN ▸ Device: selector de archivos del sistema (.cota/.dxf/.dwg), fuera de la carpeta de trabajo. */
   openFromDevice: () => void
   /** Abre como dibujo un archivo elegido del dispositivo (sin ruta: SAVE lo guarda como nuevo). */
@@ -585,7 +586,7 @@ setCrosshairVars(DEFAULT_THEME)
 /** Clave del handle de la carpeta de trabajo en IndexedDB. */
 const WORKSPACE_KEY = 'workspaceDir'
 
-/** Modelos 3D que OPEN abre como un dibujo nuevo (cada cuerpo, una malla). */
+/** Modelos 3D: OPEN los abre como un dibujo nuevo e IMPORT los agrega al actual (cada cuerpo, una malla). */
 const MODEL_EXTS = ['.stl', '.obj', '.step', '.stp', '.iges', '.igs']
 
 async function readModelFile(file: File, lower: string): Promise<Array<Pick<ObjMesh, 'vertices' | 'faces'>>> {
@@ -842,13 +843,18 @@ export const useStore = create<AppState>((set, get) => {
     }
     if (files.length) await get().attachImageFiles(files)
   }
-  const importObjText = (text: string): number => {
-    const layer = get().currentLayerId
-    const meshes = importObj(text)
-    for (const m of meshes) {
-      doc.addEntity({ type: 'MESH3D', layer, props: { vertices: m.vertices, faces: m.faces } })
-    }
-    return meshes.length
+  /**
+   * Un dibujo con inserciones de bloques que no define (p. ej. pegadas en otro dibujo sin su definición, antes de que
+   * el portapapeles llevara los bloques) no las dibuja: al abrirlo se avisa cuáles faltan.
+   */
+  const warnMissingBlocks = () => {
+    const miss = missingBlocks(doc)
+    if (!miss.size) return
+    const refs = [...miss.values()].reduce((a, b) => a + b, 0)
+    const names = [...miss.keys()]
+    print(
+      `Warning: ${refs} block reference(s) use blocks this drawing does not define (${names.slice(0, 6).join(', ')}${names.length > 6 ? '…' : ''}): they draw nothing. Paste or IMPORT those blocks again, or erase the references.`,
+    )
   }
   /** Envuelve un importador con snapshot de undo + reencuadre + mensajes. */
   const runImport = (importer: () => number, label: (n: number) => string) => {
@@ -3088,49 +3094,54 @@ export const useStore = create<AppState>((set, get) => {
       if (r === 'plot') get().exportPdf()
       res?.(r)
     },
-    importFile: () => {
-      chooseFiles(fileAccept(`.obj,.dxf,.dwg,${DRAWING_EXTS.join(',')}`), ([file]) => {
-        const name = file.name.toLowerCase()
-        // Un .cota no se "importa" sobre el dibujo actual: se abre como dibujo.
-        if (isDrawingFile(name)) {
-          void get().openDeviceFile(file)
-          return
+    importFile: async () => {
+      const file = await chooseFile(fileAccept(`.dxf,.dwg,${MODEL_EXTS.join(',')},${DRAWING_EXTS.join(',')}`))
+      if (!file) return null
+      const name = file.name.toLowerCase()
+      // Un .cota no se "importa" sobre el dibujo actual: se abre como dibujo.
+      if (isDrawingFile(name)) {
+        void get().openDeviceFile(file)
+        return null
+      }
+      // Modelos 3D (OBJ, STL, STEP, IGES): con el mismo lector que OPEN; IMPORT pregunta cómo traerlo.
+      if (MODEL_EXTS.some((x) => name.endsWith(x))) {
+        const format = name.endsWith('.stp') ? 'STEP' : name.endsWith('.igs') ? 'IGES' : name.slice(name.lastIndexOf('.') + 1).toUpperCase()
+        if (format === 'STEP' || format === 'IGES') print(`Reading ${format}…`)
+        try {
+          return { file: file.name, format, meshes: await readModelFile(file, name) }
+        } catch (err) {
+          print(`"${file.name}" could not be read (${err instanceof Error && err.message ? err.message : 'invalid file?'}).`)
+          return null
         }
-        // Sin filtro en el selector (pantallas táctiles), cualquier archivo puede llegar.
-        if (!['.obj', '.dxf', '.dwg'].some((x) => name.endsWith(x))) {
-          print(`"${file.name}" cannot be imported: use a .obj, .dxf or .dwg file.`)
-          return
-        }
-        const reader = new FileReader()
-        if (name.endsWith('.dwg')) {
-          // DWG: se convierte a DXF (en el navegador; si no puede, en el servidor) y se importa como DXF.
-          reader.onload = () => {
-            print('Reading DWG…')
-            readDwg(reader.result as ArrayBuffer)
-              .then(async (r) => {
-                await resolveXrefs(r)
-                runImport(() => applyDxf(r), (n) => `Imported ${n} entity(ies) from DWG.`)
-              })
-              .catch((err) => print(`DWG import failed: ${err instanceof Error ? err.message : String(err)}`))
-          }
-          reader.readAsArrayBuffer(file)
-          return
-        }
-        if (name.endsWith('.dxf')) {
-          // En el hilo aparte, como al abrir (también el DXF binario).
-          void file
-            .arrayBuffer()
-            .then((buf) => importCadInWorker('dxf', buf, { light: isPhone() }))
-            .then(async (r) => {
-              await resolveXrefs(r)
-              runImport(() => applyDxf(r), (n) => `Imported ${n} entity(ies) from DXF.`)
-            })
-            .catch((err) => print(`DXF import failed: ${err instanceof Error ? err.message : String(err)}`))
-          return
-        }
-        reader.onload = () => runImport(() => importObjText(String(reader.result ?? '')), (n) => `Imported ${n} mesh(es) from OBJ.`)
-        reader.readAsText(file)
-      })
+      }
+      // Sin filtro en el selector (pantallas táctiles), cualquier archivo puede llegar.
+      if (!name.endsWith('.dxf') && !name.endsWith('.dwg')) {
+        print(`"${file.name}" cannot be imported: use a .dxf, .dwg, .obj, .stl, .step or .iges file.`)
+        return null
+      }
+      if (name.endsWith('.dwg')) {
+        // DWG: se convierte a DXF (en el navegador; si no puede, en el servidor) y se importa como DXF.
+        print('Reading DWG…')
+        void file
+          .arrayBuffer()
+          .then((buf) => readDwg(buf))
+          .then(async (r) => {
+            await resolveXrefs(r)
+            runImport(() => applyDxf(r), (n) => `Imported ${n} entity(ies) from DWG.`)
+          })
+          .catch((err) => print(`DWG import failed: ${err instanceof Error ? err.message : String(err)}`))
+        return null
+      }
+      // DXF: en el hilo aparte, como al abrir (también el DXF binario).
+      void file
+        .arrayBuffer()
+        .then((buf) => importCadInWorker('dxf', buf, { light: isPhone() }))
+        .then(async (r) => {
+          await resolveXrefs(r)
+          runImport(() => applyDxf(r), (n) => `Imported ${n} entity(ies) from DXF.`)
+        })
+        .catch((err) => print(`DXF import failed: ${err instanceof Error ? err.message : String(err)}`))
+      return null
     },
     openFromDevice: () => {
       // Se puede elegir el plano junto con sus imágenes: se cargan al abrirlo.
@@ -3200,6 +3211,7 @@ export const useStore = create<AppState>((set, get) => {
           restoreModelUcs()
           applyViews()
           print(`Opened "${file.name}" from the device.`)
+          warnMissingBlocks()
         } else if (MODEL_EXTS.some((x) => lower.endsWith(x))) {
           // Modelos 3D (STL, OBJ, STEP, IGES): un dibujo nuevo con cada cuerpo como malla.
           const meshes = await readModelFile(file, lower)
@@ -3703,6 +3715,7 @@ export const useStore = create<AppState>((set, get) => {
             viewportLayout: doc.viewportLayout,
           })
           print(backupCopy ? `Opened the copy "${path}": SAVE writes it as "${drawingFileName(name, DRAWING_EXT)}".` : `Opened "${path}".`)
+          warnMissingBlocks()
           if (!backupCopy) markSaved()
         }
         bump()
@@ -3728,6 +3741,7 @@ export const useStore = create<AppState>((set, get) => {
         bump()
         markSaved()
         print(`Opened "${payload.name}".`)
+        warnMissingBlocks()
       } catch (err) {
         print(err instanceof ApiError ? err.message : 'Could not open document')
       }

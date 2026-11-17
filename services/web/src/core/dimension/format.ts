@@ -123,9 +123,13 @@ export function formatAngle(deg: number, s: DimVars): string {
   }
 }
 
-/** Tolerancia con signo (`+0,1` / `-0,05` / `0`), con su precisión y supresión de ceros. */
+/**
+ * Tolerancia con signo (`+0,1` / `-0,05` / `0`), con su precisión y supresión de ceros. Va tal cual la escribió
+ * el usuario: como en el CAD clásico, `DIMLFAC` (p. ej. el de una cota sobre una vista 1:2) escala la medida,
+ * nunca `DIMTP`/`DIMTM` (ni `DIMRND`).
+ */
 function tol(v: number, s: DimVars, sign: '+' | '-'): string {
-  const t = zeros((Math.abs(v) * s.DIMLFAC).toFixed(s.DIMTDEC), s.DIMTZIN).replace('.', s.DIMDSEP || '.')
+  const t = zeros(Math.abs(v).toFixed(s.DIMTDEC), s.DIMTZIN).replace('.', s.DIMDSEP || '.')
   if (Math.abs(v) < 1e-12) return '0'
   return `${sign}${t}`
 }

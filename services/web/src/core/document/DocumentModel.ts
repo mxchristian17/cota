@@ -396,17 +396,27 @@ export class DocumentModel {
   /** Cambia el estilo o los overrides de una cota y la vuelve a resolver. */
   restyleDimension(d: DimensionProps, styleName: string | undefined, overrides: Partial<DimVars> | undefined): void {
     if (styleName) d.styleName = styleName
+    // Una cota sobre una vista de dibujo conserva su factor de medida (1/escala de la vista): quitar o reemplazar
+    // los overrides (DIMOVERRIDE Clear, -DIMSTYLE Apply, MATCHPROP) no la deja midiendo el papel.
+    const lfac = d.overrides?.DIMLFAC
+    if (lfac !== undefined && overrides?.DIMLFAC === undefined && this.onDrawingView(d)) overrides = { ...(overrides ?? {}), DIMLFAC: lfac }
     if (overrides && Object.keys(overrides).length > 0) d.overrides = overrides
     else delete d.overrides
     d.style = resolveDimVars(this.dimStyleDef(d.styleName ?? 'Standard')?.vars, d.overrides)
     this._rev++
   }
 
+  /** ¿La cota está en la hoja activa sobre una vista de dibujo (mide la pieza con su factor)? */
+  onDrawingView(d: DimensionProps): boolean {
+    return !!this.activeLayout && this.entities.some((e) => e.type === 'DIMENSION' && e.props === d) && viewDimFactor(this.entities, this.blocks, d) !== null
+  }
+
   /** Override de una variable en una cota; si coincide con su estilo, vuelve a "ByStyle". */
   setDimensionVar(d: DimensionProps, name: DimVarName, value: unknown): void {
     const base = this.dimStyleDef(d.styleName ?? 'Standard')?.vars as unknown as Record<string, unknown> | undefined
     const next: Record<string, unknown> = { ...(d.overrides ?? {}) }
-    if (base && base[name] === value) delete next[name]
+    // DIMLFAC pedido a mano sobre una vista queda explícito (aunque iguale al estilo): manda sobre el de la vista.
+    if (base && base[name] === value && !(name === 'DIMLFAC' && this.onDrawingView(d))) delete next[name]
     else next[name] = value
     this.restyleDimension(d, undefined, next as Partial<DimVars>)
   }

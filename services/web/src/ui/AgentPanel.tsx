@@ -34,10 +34,13 @@ function AgentBody() {
   const conv = s.conversations.find((c) => c.id === s.currentId)
   const used = conv?.context ?? 0
   const pct = Math.min(100, Math.round((used / CONTEXT_LIMIT) * 100))
+  // Con servidor, las conversaciones y la key son de la cuenta: se vuelven a cargar al entrar o salir (el panel puede
+  // abrirse antes de que termine el inicio de sesión del arranque).
+  const email = useStore((st) => st.email)
 
   useEffect(() => {
     void useAgentStore.getState().load()
-  }, [])
+  }, [email])
   useEffect(() => {
     // Bloque sin valor de retorno: en Chrome reciente scrollIntoView devuelve una promesa, y un efecto sólo puede
     // devolver su función de limpieza.

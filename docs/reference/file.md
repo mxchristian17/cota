@@ -81,13 +81,36 @@ Signs in to the optional server to save and load drawings in your account.
 
 ## IMPORT
 
-Adds the geometry of an OBJ, DXF or DWG file to the current drawing (OPEN would open it as a new drawing).
+Adds the geometry of a DXF, DWG or 3D model file (STEP, IGES, STL or OBJ) to the current drawing (OPEN would open it
+as a new drawing).
 
 **Aliases** `IMP` · **Menu** File › Import / export
+
+**Steps**
+
+1. Choose the file. A DXF or DWG is added right away.
+2. For a 3D model: `Import "NAME.step" as [Objects/Block] <Objects>:`
+   - **Objects** (<kbd>Enter</kbd>): each body becomes a mesh on the current layer, at the coordinates it has in the
+     file, as OPEN reads it (same units and orientation).
+   - **Block**: `Block name <NAME>:` (the file name). The model becomes a block whose base point is the origin of the
+     file, with one reference at 0,0,0; place more with [INSERT](insert.md#insert). If a block with that name exists,
+     `Redefine it? [Yes/No] <No>:` (Yes updates all its references; No asks another name).
+
+**Example**
+
+```text
+IMPORT
+B
+NEMA17
+INSERT NEMA17 100,0,0 1 0
+INSERT NEMA17 200,0,0 1 0
+```
 
 **Notes**
 
 - Choosing a `.cota` file opens it as a drawing instead.
+- STEP and IGES are read with OpenCascade, which loads the first time you open or import one of these files.
+- An import is one step of `UNDO`.
 
 ## EXPORT
 

@@ -9,6 +9,9 @@ When a command asks you to *select objects*:
 - **Drag from right to left** (green crossing): selects objects inside or touching.
 - Type an option: `ALL`, `Last`, `Previous`, `Window`, `Crossing`, `WPolygon`, `CPolygon`, `Fence`,
   `Remove` (then click to deselect), `Add`, `Undo`.
+- Type a point (`3,100,20`): selects the object at that point — the line or curve that passes through it, the solid
+  or mesh that is there in 3D (whatever covers it in the current view does not count), or the text, dimension or
+  hatch that contains it.
 - <kbd>Enter</kbd> ends the selection.
 
 You can also select **before** the command: click or drag with no command running, then type the command.
