@@ -1,5 +1,6 @@
 import type { Vec3 } from '../math'
 import { buildTopology } from '../editing/topology'
+import { brepFaceIds, openBoundaryEdges } from './importedMesh'
 import type { SolidProps } from '../document/types'
 
 /**
@@ -19,6 +20,11 @@ export interface Mesh {
   surf?: ArrayLike<number> | null
   /** Topología ya calculada de esta malla (la del sólido, cacheada): evita rearmarla en cada vista. */
   topo?: ReturnType<typeof buildTopology> | null
+  /**
+   * Malla importada (MESH3D: STEP, IGES, STL…), no un sólido de Cota: puede traer caras invertidas o sin coser y se
+   * proyecta con los cuidados de `importedMesh` (ver `viewEdges` y `touch` en `projectHiddenGroups`).
+   */
+  imported?: boolean
   vertices: Vec3[]
   faces: number[][]
 }
@@ -59,6 +65,8 @@ interface Tri {
   n: Vec3
   /** Grupo (entidad) al que pertenece el triángulo. */
   g: number
+  /** Malla (índice corrido entre todos los grupos) de la que sale. */
+  m: number
 }
 
 /** Une los grupos de mallas en una lista global de vértices (deduplicados) + triángulos por índice. */
@@ -76,8 +84,10 @@ function buildTriangles(groups: Mesh[][]): { verts: Vec3[]; tris: Tri[]; size: n
     return id
   }
   const tris: Tri[] = []
+  let mi = 0
   groups.forEach((meshes, g) => {
     for (const m of meshes) {
+      const id = mi++
       for (const f of m.faces) {
         // Triangula el polígono (fan) y agrega cada triángulo.
         for (let k = 1; k + 1 < f.length; k++) {
@@ -86,7 +96,7 @@ function buildTriangles(groups: Mesh[][]): { verts: Vec3[]; tris: Tri[]; size: n
           const c = add(m.vertices[f[k + 1]])
           if (a === b || b === c || a === c) continue
           const n = normalize(cross(sub(verts[b], verts[a]), sub(verts[c], verts[a])))
-          tris.push({ i: [a, b, c], n, g })
+          tris.push({ i: [a, b, c], n, g, m: id })
         }
       }
     }
@@ -125,8 +135,14 @@ function viewEdges(meshes: Mesh[], out: Vec3, tangential = false): Array<[Vec3, 
     })
   }
   if (!pos.length) return []
-  const topo = meshes[0].topo ?? buildTopology(pos, hasSurf ? surf : null)
+  // Malla importada (MESH3D, sin superficies de origen): sus caras pueden venir invertidas y sin coser (IGES); se orientan,
+  // se separan en las caras del B-rep (si vienen así) y se conservan las medias aristas sueltas para dibujar los bordes
+  // que la topología no empareja.
+  const imported = !!meshes[0].imported && !meshes[0].topo && !hasSurf
+  const brep = imported ? brepFaceIds(meshes[0]) : null
+  const topo = meshes[0].topo ?? buildTopology(pos, hasSurf ? surf : brep, undefined, false, imported ? { orient: true, open: true } : {})
   const smooth = (a: Vec3, b: Vec3) => dot(a, b) > SMOOTH_DOT
+  const curved = (f: number) => topo.shapes?.[f]?.kind !== 'plane'
   const res: Array<[Vec3, Vec3]> = []
   for (const e of topo.edges) {
     const n = e.pts.length
@@ -136,6 +152,9 @@ function viewEdges(meshes: Mesh[], out: Vec3, tangential = false): Array<[Vec3, 
       if (Math.abs(dot(e.n1[i], out)) < 0.05 && Math.abs(dot(e.n2[i], out)) < 0.05) continue
       // Arista tangente (cara plana ↔ empalme): sólo si se piden (la silueta, si cae ahí, sale abajo).
       if (!tangential && smooth(e.n1[i], e.n2[i])) continue
+      // Entre dos caras curvas del B-rep que siguen suaves: la costura de una superficie partida (un cilindro en dos
+      // mitades), no una tangente.
+      if (brep && smooth(e.n1[i], e.n2[i]) && curved(e.faces[0]) && curved(e.faces[1])) continue
       res.push([e.pts[i], e.pts[(i + 1) % n]])
     }
   }
@@ -148,8 +167,10 @@ function viewEdges(meshes: Mesh[], out: Vec3, tangential = false): Array<[Vec3, 
     const [da, db] = [dot(topo.normals[ta], out), dot(topo.normals[tb], out)]
     if (da > 1e-6 !== db > 1e-6) res.push([topo.verts[a], topo.verts[b]])
   }
-  // Sin el origen de cada cara, las tangentes se estiman por la forma de las facetas.
-  if (tangential && !hasSurf) res.push(...tangentEdges(topo))
+  // Sin el origen de cada cara, las tangentes se estiman por la forma de las facetas (en una malla teselada por caras del
+  // B-rep la estimación inventaba tangentes en los cilindros de teselación irregular: ya salen arriba, entre caras).
+  if (tangential && !hasSurf && !brep) res.push(...tangentEdges(topo))
+  if (imported) res.push(...openBoundaryEdges(topo, out, tangential, SMOOTH_DOT))
   return res
 }
 
@@ -267,7 +288,14 @@ export function projectHiddenGroups(groups: Mesh[][], basis: ProjBasis, opts: { 
     const [a1, b1] = cellOf(Math.max(U[ia], U[ib], U[ic]), Math.max(V[ia], V[ib], V[ic]))
     for (let x = a0; x <= a1; x++) for (let y = b0; y <= b1; y++) grid[y * G + x].push(k)
   })
-  const occluded = (pu: number, pv: number, pd: number): boolean => {
+  // Mallas importadas (MESH3D de un STEP/IGES): cada cara viene teselada por separado y el borde de una no cae sobre la
+  // teselación de la vecina: la separa hasta la flecha de la teselación (~0,1 % del tamaño de la pieza). Con la vecina de
+  // frente eso es una diferencia de profundidad mayor que el sesgo, y vista de costado mucho más: tapaba pedazos de su
+  // propia arista (bordes cortados en trazos). En esas mallas no tapa a una arista un triángulo propio que pasa a menos de
+  // esa distancia (en 3D) del punto.
+  const meshes = groups.flat()
+  const touch = meshes.map((m) => (m.imported && !m.topo && !m.surf ? 1e-3 * meshDiag(m) : 0))
+  const occluded = (pu: number, pv: number, pd: number, p?: Vec3, mi = -1): boolean => {
     const [gx, gy] = cellOf(pu, pv)
     for (const k of grid[gy * G + gx]) {
       if (maxD[k] <= pd + bias) continue // ningún punto del triángulo está delante
@@ -276,14 +304,22 @@ export function projectHiddenGroups(groups: Mesh[][], basis: ProjBasis, opts: { 
       const bc = bary(pu, pv, U[ia], V[ia], U[ib], V[ib], U[ic], V[ic])
       if (!bc) continue
       const td = bc[0] * D[ia] + bc[1] * D[ib] + bc[2] * D[ic]
-      if (td > pd + bias) return true // triángulo más cerca del observador → tapa
+      if (td <= pd + bias) continue
+      if (p && t.m === mi && touch[mi] > 0 && triDist(p, verts[ia], verts[ib], verts[ic]) <= touch[mi]) continue
+      return true // triángulo más cerca del observador → tapa
     }
     return false
   }
 
+  let mi = 0
   for (let g = 0; g < groups.length; g++) {
     const segs = out[g]
-    for (const [P, Q] of viewEdges(groups[g], basis.out, opts.tangential)) {
+    // Aristas de cada malla del grupo, con el índice de la malla (ver `touch`).
+    const edges = groups[g].flatMap((m) => {
+      const id = mi++
+      return viewEdges([m], basis.out, opts.tangential).map(([P, Q]) => [P, Q, id] as const)
+    })
+    for (const [P, Q, id] of edges) {
       const [ua, va, da] = [dot(P, basis.right), dot(P, basis.up), dot(P, basis.out)]
       const [ub, vb, db] = [dot(Q, basis.right), dot(Q, basis.up), dot(Q, basis.out)]
       const len = Math.hypot(ub - ua, vb - va)
@@ -297,7 +333,7 @@ export function projectHiddenGroups(groups: Mesh[][], basis: ProjBasis, opts: { 
       const pAt = (t: number): Vec3 => [P[0] + (Q[0] - P[0]) * t, P[1] + (Q[1] - P[1]) * t, P[2] + (Q[2] - P[2]) * t]
       for (let s = 0; s < n; s++) {
         const tm = (s + 0.5) / n // punto medio del subintervalo
-        const hidden = occluded(uAt(tm), vAt(tm), dAt(tm))
+        const hidden = occluded(uAt(tm), vAt(tm), dAt(tm), touch[id] > 0 ? pAt(tm) : undefined, id)
         if (s === 0) {
           runStart = 0
           runHidden = hidden
@@ -314,6 +350,48 @@ export function projectHiddenGroups(groups: Mesh[][], basis: ProjBasis, opts: { 
     }
   }
   return out
+}
+
+/** Diagonal de la caja envolvente de una malla. */
+function meshDiag(m: Mesh): number {
+  const lo = [Infinity, Infinity, Infinity]
+  const hi = [-Infinity, -Infinity, -Infinity]
+  for (const v of m.vertices)
+    for (let k = 0; k < 3; k++) {
+      lo[k] = Math.min(lo[k], v[k])
+      hi[k] = Math.max(hi[k], v[k])
+    }
+  return isFinite(lo[0]) ? Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) : 0
+}
+
+/** Distancia de `p` al triángulo abc (punto más cercano, como en Ericson, «Real-Time Collision Detection»). */
+function triDist(p: Vec3, a: Vec3, b: Vec3, c: Vec3): number {
+  const ab = sub(b, a)
+  const ac = sub(c, a)
+  const ap = sub(p, a)
+  const d1 = dot(ab, ap)
+  const d2 = dot(ac, ap)
+  const len = (q: Vec3) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2])
+  const along = (o: Vec3, d: Vec3, t: number): Vec3 => [o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t]
+  if (d1 <= 0 && d2 <= 0) return len(a)
+  const bp = sub(p, b)
+  const d3 = dot(ab, bp)
+  const d4 = dot(ac, bp)
+  if (d3 >= 0 && d4 <= d3) return len(b)
+  const vc = d1 * d4 - d3 * d2
+  if (vc <= 0 && d1 >= 0 && d3 <= 0) return len(along(a, ab, d1 / (d1 - d3)))
+  const cp = sub(p, c)
+  const d5 = dot(ab, cp)
+  const d6 = dot(ac, cp)
+  if (d6 >= 0 && d5 <= d6) return len(c)
+  const vb = d5 * d2 - d1 * d6
+  if (vb <= 0 && d2 >= 0 && d6 <= 0) return len(along(a, ac, d2 / (d2 - d6)))
+  const va = d3 * d6 - d5 * d4
+  if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) return len(along(b, sub(c, b), (d4 - d3) / (d4 - d3 + (d5 - d6))))
+  const den = 1 / (va + vb + vc)
+  const v = vb * den
+  const w = vc * den
+  return len([a[0] + ab[0] * v + ac[0] * w, a[1] + ab[1] * v + ac[1] * w, a[2] + ab[2] * v + ac[2] * w])
 }
 
 function translateSegs(segs: ProjSegment[], du: number, dv: number): ProjSegment[] {

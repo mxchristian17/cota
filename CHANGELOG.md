@@ -4,6 +4,15 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.46.1] — 2026-11-16
+
+### Fixed
+- **Drawing views of imported STEP/IGES models**: VIEWBASE, VIEWUPDATE, FLATSHOT and the hidden-line plot now draw
+  the meshes opened from STEP or IGES files with their whole outline. In an IGES whose faces were not sewn, or that
+  came with some faces turned inside out, the edges between those faces were missing, cut into dashes or left as
+  loose fragments; and on cylinders tessellated unevenly (a motor shaft) stray lines appeared along the surface.
+  Solids modeled in Cota are drawn exactly as before.
+
 ## [2.46.0] — 2026-11-14
 
 ### Added

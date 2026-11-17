@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import '../../render/csg'
 import type { SolidProps } from '../document/types'
-import { edgeChain, edgeLoop, edgeMidpoint, endTangent, nearestEdge, rayEdge, solidTopology } from './topology'
+import { buildTopology, edgeChain, edgeLoop, edgeMidpoint, endTangent, nearestEdge, rayEdge, solidTopology } from './topology'
 
 const box: SolidProps = { op: 'BOX', origin: [0, 0, 0], width: 10, depth: 10, height: 10 }
 const cyl: SolidProps = { op: 'CYLINDER', base: [0, 0, 0], radius: 5, height: 10, segments: 48 }
@@ -118,5 +118,43 @@ describe('tangente en el extremo de una arista facetada', () => {
     const [a, b] = [line.pts[line.pts.length - 2], line.pts[line.pts.length - 1]]
     const d = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])
     expect(endTangent(line, 1)).toEqual([(b[0] - a[0]) / d, (b[1] - a[1]) / d, (b[2] - a[2]) / d])
+  })
+})
+
+describe('malla importada: caras invertidas (opción orient) y medias aristas sueltas (opción open)', () => {
+  /** Sopa de triángulos de una caja 10×10×10 (2 por cara, antihorarios desde afuera); `flipTop` invierte la de arriba. */
+  function boxSoup(flipTop: boolean): number[] {
+    const p = (x: number, y: number, z: number) => [x * 10, y * 10, z * 10]
+    const quad = (a: number[], b: number[], c: number[], d: number[]) => [...a, ...b, ...c, ...a, ...c, ...d]
+    const top = flipTop ? quad(p(0, 0, 1), p(0, 1, 1), p(1, 1, 1), p(1, 0, 1)) : quad(p(0, 0, 1), p(1, 0, 1), p(1, 1, 1), p(0, 1, 1))
+    return [
+      ...quad(p(0, 0, 0), p(0, 1, 0), p(1, 1, 0), p(1, 0, 0)),
+      ...top,
+      ...quad(p(0, 0, 0), p(1, 0, 0), p(1, 0, 1), p(0, 0, 1)),
+      ...quad(p(0, 1, 0), p(0, 1, 1), p(1, 1, 1), p(1, 1, 0)),
+      ...quad(p(0, 0, 0), p(0, 0, 1), p(0, 1, 1), p(0, 1, 0)),
+      ...quad(p(1, 0, 0), p(1, 1, 0), p(1, 1, 1), p(1, 0, 1)),
+    ]
+  }
+
+  it('sin orientar, la cara invertida no se empareja con sus vecinas y pierde sus 4 aristas', () => {
+    const t = buildTopology(boxSoup(true), null, undefined, false, { open: true })
+    expect(t.edges).toHaveLength(8)
+    expect(t.open).toHaveLength(8) // los 4 lados de la tapa, vistos desde cada cara
+  })
+
+  it('orientada: 6 caras, 12 aristas convexas y ninguna media arista suelta; conserva el sentido de la mayoría', () => {
+    const t = buildTopology(boxSoup(true), null, undefined, false, { orient: true, open: true })
+    expect(t.faceCount).toBe(6)
+    expect(t.edges).toHaveLength(12)
+    expect(t.edges.every((e) => e.convex)).toBe(true)
+    expect(t.open).toEqual([])
+    // La tapa quedó con la normal hacia afuera (+Z), como las otras cinco.
+    const top = t.tris.findIndex((tri) => tri.every((v) => t.verts[v][2] === 10))
+    expect(t.normals[top][2]).toBeCloseTo(1, 9)
+  })
+
+  it('sin las opciones no cambia nada (sólidos de Cota): no devuelve medias aristas sueltas', () => {
+    expect(buildTopology(boxSoup(false)).open).toBeUndefined()
   })
 })

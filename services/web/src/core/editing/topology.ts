@@ -55,6 +55,11 @@ export interface Topology {
   diag: number
   /** Triángulos vecinos (también los emparejados por T-junction): [t1, t2, vértice a, vértice b]. */
   links: [number, number, number, number][]
+  /**
+   * Medias aristas que quedaron sin vecino, [triángulo, vértice a, vértice b] (a→b en el sentido del triángulo). Sólo con
+   * `opts.open`: en una malla importada son los bordes de cada cara del B-rep que la otra cara parte en otros puntos.
+   */
+  open?: [number, number, number][]
 }
 
 /** Tramo de arista entre dos triángulos de caras distintas (a→b en el sentido del triángulo de `fa`). */
@@ -451,6 +456,11 @@ export function buildTopology(
   surfShapes?: ReadonlyMap<number, SurfShape>,
   /** `surf` viene de caras exactas (núcleo B-rep): las caras de la topología son exactamente esas. */
   strictSurf = false,
+  /**
+   * Malla importada (MESH3D de un STEP/IGES): `orient` da vuelta los triángulos que recorren una arista en el mismo
+   * sentido que su vecino (caras invertidas: sin esto no se emparejaban) y `open` devuelve las medias aristas sueltas.
+   */
+  opts: { orient?: boolean; open?: boolean } = {},
 ): Topology {
   let lo: Vec3 = [Infinity, Infinity, Infinity]
   let hi: Vec3 = [-Infinity, -Infinity, -Infinity]
@@ -479,6 +489,13 @@ export function buildTopology(
     triN.push(vscale(cr, 1 / l))
     area.push(l / 2)
   }
+  if (opts.orient) {
+    orientTris(tris, verts.length, area).forEach((f, t) => {
+      if (!f) return
+      tris[t] = [tris[t][0], tris[t][2], tris[t][1]]
+      triN[t] = vscale(triN[t], -1)
+    })
+  }
 
   const halves: Half[] = tris.flatMap(([a, b, c], t) => [
     { a, b, t },
@@ -487,7 +504,10 @@ export function buildTopology(
   ])
   const first = matchHalves(halves, verts.length)
   const second = matchHalves(splitTJunctions(first.open, verts, tol * 10), verts.length)
-  const pairs = [...first.pairs, ...second.pairs, ...matchNear(second.open, verts, tol * 10)]
+  const near = matchNear(second.open, verts, tol * 10)
+  const pairs = [...first.pairs, ...second.pairs, ...near]
+  const nearUsed = opts.open ? new Set<Half>(near.flat()) : null
+  const open = nearUsed ? second.open.filter((h) => !nearUsed.has(h)).map((h): [number, number, number] => [h.t, h.a, h.b]) : undefined
 
   const adj: number[][] = tris.map(() => [])
   for (const [h, g] of pairs) {
@@ -568,7 +588,60 @@ export function buildTopology(
   tris.forEach((t, i) => t.forEach((v) => vertTris[v].push(i)))
   const links = pairs.map(([h, g]): [number, number, number, number] => [h.t, g.t, h.a, h.b])
   const shapes = faceShapes(verts, tris, normals, triFace, faceOfRoot.size, triSurf, surfShapes, tol * 10)
-  return { verts, tris, normals, triFace, faceCount: faceOfRoot.size, edges, vertTris, diag, links, shapes }
+  return { verts, tris, normals, triFace, faceCount: faceOfRoot.size, edges, vertTris, diag, links, shapes, ...(open ? { open } : {}) }
+}
+
+/**
+ * Qué triángulos dar vuelta para que todos los vecinos recorran su arista común en sentidos opuestos (como en un sólido
+ * cerrado). Recorre cada zona conectada desde su triángulo más grande y, si al final quedó invertida la mayor parte de su
+ * área, la invierte toda: se conserva el sentido que traía la mayoría de las caras. Las aristas de 3+ triángulos no cuentan.
+ */
+function orientTris(tris: [number, number, number][], nV: number, area: number[]): boolean[] {
+  const byEdge = new Map<number, number[]>()
+  tris.forEach((tri, t) => {
+    for (let k = 0; k < 3; k++) {
+      const [a, b] = [tri[k], tri[(k + 1) % 3]]
+      const key = a < b ? a * nV + b : b * nV + a
+      const list = byEdge.get(key)
+      // Triángulo y sentido en que recorre la arista (1: del índice menor al mayor).
+      const e = t * 2 + (a < b ? 1 : 0)
+      if (list) list.push(e)
+      else byEdge.set(key, [e])
+    }
+  })
+  const flip = new Array<boolean>(tris.length).fill(false)
+  const seen = new Uint8Array(tris.length)
+  const order = tris.map((_, i) => i).sort((x, y) => area[y] - area[x])
+  for (const seed of order) {
+    if (seen[seed]) continue
+    seen[seed] = 1
+    const zone = [seed]
+    for (let z = 0; z < zone.length; z++) {
+      const t = zone[z]
+      const tri = tris[t]
+      for (let k = 0; k < 3; k++) {
+        const [a, b] = [tri[k], tri[(k + 1) % 3]]
+        const list = byEdge.get(a < b ? a * nV + b : b * nV + a) as number[]
+        if (list.length !== 2) continue
+        const o = list[0] >> 1 === t ? list[1] : list[0]
+        const u = o >> 1
+        if (seen[u]) continue
+        // Sentido efectivo de `t` en la arista; `u` tiene que recorrerla al revés.
+        const dirT = a < b !== flip[t]
+        flip[u] = ((o & 1) === 1) === dirT
+        seen[u] = 1
+        zone.push(u)
+      }
+    }
+    let flipped = 0
+    let total = 0
+    for (const t of zone) {
+      total += area[t]
+      if (flip[t]) flipped += area[t]
+    }
+    if (flipped * 2 > total) for (const t of zone) flip[t] = !flip[t]
+  }
+  return flip
 }
 
 /**

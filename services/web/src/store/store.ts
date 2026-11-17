@@ -974,7 +974,7 @@ export const useStore = create<AppState>((set, get) => {
         hints.push(...solidCircleHints(e.props))
         if (solidThreads(e.props).length) threaded.push(e.props)
       } else if (e.type === 'MESH3D') {
-        meshes.push({ vertices: e.props.vertices, faces: e.props.faces })
+        meshes.push({ vertices: e.props.vertices, faces: e.props.faces, imported: true })
         colors.push(colorOf.get(e.layer) ?? '#c0c0c0')
       }
     }
@@ -1249,7 +1249,7 @@ export const useStore = create<AppState>((set, get) => {
       model: expand(doc.modelEntities),
       layers: doc.layers,
       units: doc.units,
-      meshOf: (e: Entity) => (e.type === 'SOLID3D' ? solidMesh(e.props) : e.type === 'MESH3D' ? e.props : null),
+      meshOf: (e: Entity) => (e.type === 'SOLID3D' ? solidMesh(e.props) : e.type === 'MESH3D' ? { ...e.props, imported: true } : null),
       linetypes: doc.linetypeContext('paper'),
       rasters,
     }
@@ -1507,7 +1507,7 @@ export const useStore = create<AppState>((set, get) => {
           if (m.vertices.length) meshes.push(m)
           solidHints.push(e.props)
         } else if (e.type === 'MESH3D') {
-          meshes.push({ vertices: e.props.vertices, faces: e.props.faces })
+          meshes.push({ vertices: e.props.vertices, faces: e.props.faces, imported: true })
         } else if (e.type === 'INSERT') {
           for (const c of expandEntities([e], doc.blocks)) collect(c)
         }

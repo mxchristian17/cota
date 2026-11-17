@@ -198,6 +198,44 @@ test.describe('Cota OPEN 3D models', () => {
   })
 })
 
+test.describe('Cota drawing views of imported meshes', () => {
+  test('VIEWBASE draws the whole outline of a STEP/IGES-like mesh with unsewn, flipped faces (B28)', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    // Caja de 20 mm como la entrega OpenCascade de un IGES: cada cara con sus propios vértices y la de arriba invertida.
+    await store(
+      page,
+      `const p = (x, y, z) => [x * 20, y * 20, z * 20]
+      const faces = [
+        [p(0, 0, 0), p(0, 1, 0), p(1, 1, 0), p(1, 0, 0)],
+        [p(0, 0, 1), p(0, 1, 1), p(1, 1, 1), p(1, 0, 1)],
+        [p(0, 0, 0), p(1, 0, 0), p(1, 0, 1), p(0, 0, 1)],
+        [p(0, 1, 0), p(0, 1, 1), p(1, 1, 1), p(1, 1, 0)],
+        [p(0, 0, 0), p(0, 0, 1), p(0, 1, 1), p(0, 1, 0)],
+        [p(1, 0, 0), p(1, 1, 0), p(1, 1, 1), p(1, 0, 1)],
+      ]
+      const vertices = []
+      const idx = []
+      for (const f of faces) {
+        const b = vertices.length
+        vertices.push(...f)
+        idx.push([b, b + 1, b + 2], [b, b + 2, b + 3])
+      }
+      s.doc.addEntity({ type: 'MESH3D', layer: '0', props: { vertices, faces: idx } })`,
+    )
+    await typeCmd(page, 'VIEWBASE', '', '', '#100,150', '')
+    await expect(page.locator('.cmd-output')).toContainText('Base view created')
+    // La frontal es un cuadrado de 20 × 20 entero: antes faltaba el lado de arriba (la cara invertida no se emparejaba).
+    const len = await store(
+      page,
+      `const vis = s.doc.layers.find((l) => l.name === 'MD_Visible').id
+      const block = s.doc.blocks.find((b) => b.name === '*VIEW1')
+      return block.entities.filter((e) => e.type === 'LINE' && e.layer === vis).reduce((t, e) => t + Math.hypot(e.props.end[0] - e.props.start[0], e.props.end[1] - e.props.start[1]), 0)`,
+    )
+    expect(len).toBeCloseTo(80, 3)
+  })
+})
+
 test.describe('Cota picking solids', () => {
   test('a clean click inside a solid selects it, in wireframe too; a frozen layer is hidden and not selectable', async ({ page }) => {
     await page.goto('/')
