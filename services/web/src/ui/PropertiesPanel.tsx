@@ -9,6 +9,7 @@ import { DIM_TABS, DIM_VAR_INFO, type DimTab } from '../core/dimension/style'
 import { formatDim } from '../core/dimension/dimGeometry'
 import { DimVarInput } from './DimVarInput'
 import { BYBLOCK, BYLAYER, linetypeLabel } from '../core/linetype/linetypes'
+import { UiIcon } from './uiIcons'
 
 /**
  * *General* de la paleta: tipo de línea y su escala, con una o varias entidades (`*VARIES*` si
@@ -276,7 +277,7 @@ function DimensionPanel({ dims }: { dims: DimensionEntity[] }) {
       {DIM_TABS.map((tab) => (
         <div key={tab}>
           <div className="dim-category" onClick={() => setOpen(open === tab ? null : tab)} data-testid={`prop-dimcat-${tab}`}>
-            {open === tab ? '▾' : '▸'} {tab === 'Lines' || tab === 'Symbols and Arrows' ? (tab === 'Lines' ? 'Lines' : 'Arrows & symbols') : tab}
+            <UiIcon name={open === tab ? 'caret-down' : 'chevron-right'} size={12} /> {tab === 'Lines' || tab === 'Symbols and Arrows' ? (tab === 'Lines' ? 'Lines' : 'Arrows & symbols') : tab}
           </div>
           {open === tab &&
             DIM_VAR_INFO.filter((v) => v.tab === tab).map((info) => {
@@ -308,7 +309,13 @@ export function PropertiesPanel() {
 
   return (
     <div className="panel">
-      {selection.length === 0 && <p className="muted">No selection.</p>}
+      {selection.length === 0 && (
+        <div className="empty-state">
+          <UiIcon name="cursor" />
+          <p className="empty-title">No selection.</p>
+          <p>Select objects in the drawing to see and edit their properties here.</p>
+        </div>
+      )}
       {selection.length > 1 && <p className="muted">{selection.length} objects selected.</p>}
       {selection.length > 1 &&
         (() => {

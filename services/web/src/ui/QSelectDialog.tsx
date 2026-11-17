@@ -3,6 +3,7 @@ import { useStore } from '../store/store'
 import { qselectMatch, qselectProps, type QOperator } from '../core/editing/qselect'
 import { selectableEntities } from '../core/commands/selectionSets'
 import { focusCommandLine } from './focus'
+import { UiIcon } from './uiIcons'
 
 const OPERATORS: Array<[QOperator, string]> = [
   ['=', '= Equals'],
@@ -70,7 +71,7 @@ function QSelectBody() {
         <div className="modal-header">
           <h2>Quick Select</h2>
           <button className="icon-btn" onClick={() => done(false)} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         <div className="form">

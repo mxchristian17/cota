@@ -6,6 +6,7 @@ import { flipArrowNear } from '../core/dimension/dimGeometry'
 import { focusCommandLine } from './focus'
 import { openGeneralMenu } from './ContextMenu'
 import type { Pt } from '../core/math'
+import { UiIcon } from './uiIcons'
 
 const CHAINABLE = new Set(['LINEAR', 'ALIGNED', 'ANGULAR', 'ORDINATE'])
 const PRECISIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
@@ -19,7 +20,9 @@ export function Sub({ label, testId, children }: { label: string; testId: string
       <button data-testid={testId} onClick={() => setOpen(!open)}>
         <span className="check" />
         {label}
-        <span className="sub-arrow">▸</span>
+        <span className="sub-arrow">
+          <UiIcon name="chevron-right" size={12} />
+        </span>
       </button>
       {open && <div className="context-menu context-submenu">{children}</div>}
     </div>
@@ -133,7 +136,7 @@ function DimMenuBody({ x, y, world }: { x: number; y: number; world: [number, nu
             data-testid={`dim-menu-prec-${d}`}
             onClick={edit((p) => doc.setDimensionVar(p, isAngular(p) ? 'DIMADEC' : 'DIMDEC', d))}
           >
-            <span className="check">{prec === d ? '✓' : ''}</span>
+            <span className="check">{prec === d ? <UiIcon name="check" size={13} /> : ''}</span>
             {d === 0 ? '0' : '0.' + '0'.repeat(d)}
           </button>
         ))}
@@ -147,7 +150,7 @@ function DimMenuBody({ x, y, world }: { x: number; y: number; world: [number, nu
             data-testid={`dim-menu-style-${st.name}`}
             onClick={act(() => s.setDimensionsStyle(ids, st.name))}
           >
-            <span className="check">{styleName === st.name ? '✓' : ''}</span>
+            <span className="check">{styleName === st.name ? <UiIcon name="check" size={13} /> : ''}</span>
             {st.name}
           </button>
         ))}

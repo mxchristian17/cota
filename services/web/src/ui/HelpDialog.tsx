@@ -1,5 +1,6 @@
 import { useStore } from '../store/store'
 import { ABOUT } from '../core/about'
+import { UiIcon } from './uiIcons'
 
 export function HelpDialog() {
   const open = useStore((s) => s.helpOpen)
@@ -15,7 +16,7 @@ export function HelpDialog() {
         <div className="modal-header">
           <h2>Available commands</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         <p className="help-about" data-testid="help-about">

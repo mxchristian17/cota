@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { shownLayer } from '../core/layers/selectionLayer'
 import { useStore } from '../store/store'
 import { LockIcon } from './LockIcon'
+import { UiIcon } from './uiIcons'
 
 /** Con más capas que esto, la lista trae un filtro por nombre. */
 const FILTER_FROM = 12
@@ -83,7 +84,7 @@ export function LayerCombo({ className, testId, onPicked }: { className: string;
       <button
         ref={btn}
         type="button"
-        className={className + ' layer-combo'}
+        className={className + ' layer-combo' + (shown.id === currentLayerId && shown.others === 0 ? ' is-current' : '')}
         title="Layer of the selected objects (choosing one moves them to it); with nothing selected, the current layer. The list also turns layers on and off, freezes and locks them."
         data-testid={testId}
         data-value={shown.others > 0 ? '' : shown.id}
@@ -93,7 +94,9 @@ export function LayerCombo({ className, testId, onPicked }: { className: string;
       >
         <span className="layer-swatch" style={{ background: layer?.color ?? 'transparent' }} />
         <span className="layer-combo-name">{label}</span>
-        <span className="layer-combo-caret">▾</span>
+        <span className="layer-combo-caret">
+          <UiIcon name="caret-down" size={12} />
+        </span>
       </button>
       {open &&
         place &&
@@ -125,7 +128,7 @@ export function LayerCombo({ className, testId, onPicked }: { className: string;
                 return (
                   <div key={l.id} className={'layer-combo-row' + (l.id === shown.id ? ' is-shown' : '')} role="option" aria-selected={l.id === shown.id} data-testid={`${testId}-row-${l.name}`}>
                     <button className="icon-btn" title={l.visible ? 'On: click to turn off (hide)' : 'Off: click to turn on'} aria-pressed={!l.visible} data-testid={`${testId}-visible-${l.name}`} onClick={() => toggleVisible(l.id)}>
-                      {l.visible ? '👁' : '—'}
+                      <UiIcon name={l.visible ? 'eye' : 'eye-off'} size={14} />
                     </button>
                     <button
                       className={'icon-btn' + (l.frozen ? ' layer-frozen' : '')}
@@ -135,7 +138,7 @@ export function LayerCombo({ className, testId, onPicked }: { className: string;
                       data-testid={`${testId}-freeze-${l.name}`}
                       onClick={() => toggleFrozen(l.id)}
                     >
-                      {l.frozen ? '❄' : '☀'}
+                      <UiIcon name={l.frozen ? 'snow' : 'sun'} size={14} />
                     </button>
                     <button className="icon-btn" title={l.locked ? 'Locked: click to unlock' : 'Unlocked: click to lock'} aria-pressed={!!l.locked} data-testid={`${testId}-lock-${l.name}`} onClick={() => toggleLock(l.id)}>
                       <LockIcon locked={!!l.locked} />

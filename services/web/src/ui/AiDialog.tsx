@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/store'
+import { UiIcon } from './uiIcons'
 
 export function AiDialog() {
   const open = useStore((s) => s.aiOpen)
@@ -47,7 +48,9 @@ export function AiDialog() {
       <button className="ai-min-chip" onClick={() => setMinimized(false)} data-testid="ai-min-chip">
         {processing && <span className="ai-spinner" />}
         <span>AI · {status}</span>
-        <span className="ai-min-restore">▢</span>
+        <span className="ai-min-restore">
+          <UiIcon name="restore" size={13} />
+        </span>
       </button>
     )
   }
@@ -72,10 +75,10 @@ export function AiDialog() {
           <h2>AI — generate / edit model</h2>
           <div style={{ display: 'flex', gap: 4 }}>
             <button className="icon-btn" onClick={() => setMinimized(true)} title="Minimize (keep working / preview)" data-testid="ai-minimize">
-              ─
+              <UiIcon name="minus" />
             </button>
             <button className="icon-btn" onClick={close} aria-label="Close">
-              ✕
+              <UiIcon name="close" />
             </button>
           </div>
         </div>

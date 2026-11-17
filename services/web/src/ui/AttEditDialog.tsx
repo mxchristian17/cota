@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../store/store'
+import { UiIcon } from './uiIcons'
 
 /** Editor de atributos (Edit Attributes / Enhanced Attribute Editor): un valor por tag. */
 export function AttEditDialog() {
@@ -17,7 +18,7 @@ export function AttEditDialog() {
         <div className="modal-header">
           <h2>{dialog.title}</h2>
           <button className="icon-btn" onClick={() => close(null)} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         <div className="form">

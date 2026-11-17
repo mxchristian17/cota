@@ -5,6 +5,7 @@ import { VARIABLE_COMMANDS } from '../core/commands/registry'
 import { CATEGORIES } from '../core/ui/menus'
 import { TOOLBARS } from '../core/ui/toolbars'
 import { focusCommandLine } from './focus'
+import { UiIcon } from './uiIcons'
 
 type MenuEntry = { kind: 'cmd'; cmd: Command } | { kind: 'section'; title: string } | { kind: 'special'; id: string }
 
@@ -174,7 +175,7 @@ export function CommandBar() {
                         data-testid={`menu-toolbar-${t.id}`}
                       >
                         <span className="command-item-name mono">
-                          <span className="command-check">{toolbars[t.id]?.visible ? '✓' : ''}</span>
+                          <span className="command-check">{toolbars[t.id]?.visible ? <UiIcon name="check" size={13} /> : ''}</span>
                           {t.name}
                         </span>
                         <span className="command-item-alias mono" />

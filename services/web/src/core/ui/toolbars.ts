@@ -395,12 +395,28 @@ export const TOOLBARS: ToolbarDef[] = [
 export const TOOLBAR_BY_ID: ReadonlyMap<string, ToolbarDef> = new Map(TOOLBARS.map((t) => [t.id, t]))
 
 /**
- * Estado inicial de cada barra: Dimension visible a la izquierda; las demás ocultas, acopladas en su borde
- * (cuando se muestran aparecen ahí, después de las que ya estén).
+ * Barras al arrancar (decisión de Christian, 2026-11-17): Draw contra el borde izquierdo y Modify a la derecha.
+ * Dimension arranca oculta pero con lugar reservado al lado de Draw: al mostrarla aparece ahí. Las demás quedan
+ * ocultas, acopladas en su borde (cuando se muestran aparecen ahí, después de las que ya estén).
  */
+const START: Record<string, Pick<ToolbarState, 'side' | 'order'> & { visible?: boolean }> = {
+  draw: { side: 'left', order: 0 },
+  dimension: { side: 'left', order: 1, visible: false },
+  modify: { side: 'right', order: 0 },
+}
+
 export const DEFAULT_TOOLBARS: ToolbarStates = Object.fromEntries(
-  TOOLBARS.map((t, i): [string, ToolbarState] => [t.id, t.id === 'dimension' ? { ...DEFAULT_TOOLBAR } : { ...DEFAULT_TOOLBAR, visible: false, side: t.side, order: i }]),
+  TOOLBARS.map((t, i): [string, ToolbarState] => [
+    t.id,
+    START[t.id] ? { ...DEFAULT_TOOLBAR, ...START[t.id] } : { ...DEFAULT_TOOLBAR, visible: false, side: t.side, order: i + 10 },
+  ]),
 )
+
+/**
+ * Barras al arrancar en un teléfono (vista completa): ninguna, sólo la línea de comandos. Conservan el borde y el
+ * orden de las de escritorio, así lo que se muestre a mano aparece donde en la computadora.
+ */
+export const PHONE_TOOLBARS: ToolbarStates = Object.fromEntries(Object.entries(DEFAULT_TOOLBARS).map(([id, t]) => [id, { ...t, visible: false }]))
 
 /** Barra por su nombre tecleado (`Draw`, `layers ii`, `Object Snap`…) o su id; null si no existe. */
 export function findToolbar(name: string): ToolbarDef | null {

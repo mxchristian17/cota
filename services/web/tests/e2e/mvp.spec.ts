@@ -52,7 +52,7 @@ test.describe('Cota MVP', () => {
     const layer = page.getByTestId('layer-Walls')
     await expect(layer).toBeVisible()
     await layer.click()
-    await expect(layer).toContainText('●')
+    await expect(layer).toHaveAttribute('aria-pressed', 'true') // capa actual (el punto de la columna Cur)
   })
 
   test('creates and deletes a layer', async ({ page }) => {

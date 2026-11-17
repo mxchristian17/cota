@@ -4,6 +4,7 @@ import { DIM_TABS, DIM_VAR_INFO, formatDimVar, resolveDimVars, type DimTab, type
 import { DimPreview } from './DimPreview'
 import { DimVarInput } from './DimVarInput'
 import { focusCommandLine } from './focus'
+import { UiIcon } from './uiIcons'
 
 type Edit = { kind: 'new' | 'modify' | 'override'; name: string; vars: DimVars }
 
@@ -79,12 +80,12 @@ function DimStyleBody() {
             </div>
             <DimPreview vars={edit.vars} testId="dimstyle-preview" />
           </div>
-          <div className="theme-presets">
-            <button className="btn active" onClick={ok} data-testid="dimstyle-ok">
-              OK
-            </button>
+          <div className="modal-actions">
             <button className="btn" onClick={() => setEdit(null)}>
               Cancel
+            </button>
+            <button className="btn active" onClick={ok} data-testid="dimstyle-ok">
+              OK
             </button>
           </div>
         </div>
@@ -103,7 +104,7 @@ function DimStyleBody() {
         <div className="modal-header">
           <h2>Dimension Style Manager</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         <p className="muted">
@@ -130,9 +131,9 @@ function DimStyleBody() {
                   />
                 ) : (
                   <button className={'doc-open' + (st.name === sel?.name ? ' active' : '')} onClick={() => setSelected(st.name)} data-testid={`dimstyle-item-${st.name}`}>
-                    {st.name === doc.currentDimStyle ? '● ' : ''}
+                    {st.name === doc.currentDimStyle ? <span className="cur-mark is-current inline-mark" /> : ''}
                     {st.name}
-                    {st.vars.ANNOTATIVE ? ' ⚖' : ''}
+                    {st.vars.ANNOTATIVE ? <UiIcon name="scale" size={13} className="inline-icon" /> : ''}
                   </button>
                 )}
                 {st.name === doc.currentDimStyle && hasOverrides && <div className="muted dimstyle-ov">&lt;style overrides&gt;</div>}
@@ -246,6 +247,11 @@ function DimStyleBody() {
           </div>
         )}
         {error && <p className="muted">{error}</p>}
+        <div className="modal-actions">
+          <button className="btn active" onClick={onClose} data-testid="dimstyle-close">
+            Close
+          </button>
+        </div>
       </div>
     </div>
   )

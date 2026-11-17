@@ -42,6 +42,8 @@ import { canAutosave } from './core/io/autosave'
 import { sysvars } from './core/commands/sysvars'
 import { docsUrl } from './core/about'
 import { backButtonPos } from './core/ui/phone'
+import { UiIcon } from './ui/uiIcons'
+import { Tooltip } from './ui/Tooltip'
 
 /**
  * ¿Se está editando texto ahora mismo? El foco de Cota vive en la línea de comandos, así que si se
@@ -356,6 +358,8 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [toggleOrtho, toggleSnap, toggleEsnap, toggleOtrack, toggleDynInput, togglePolar])
+  /** Tamaño de los botones de las barras (Options ▸ Display): fija `--tb-btn` y `--tb-icon` en el CSS. */
+  const toolIconSize = useStore((s) => s.toolIconSize)
 
   // Vista para el celular en obra (PRD076): reemplaza el editor completo.
   if (mobile) return <MobileApp />
@@ -366,7 +370,7 @@ export default function App() {
     {/* En un celular con la vista completa abierta: un toque vuelve a la vista para el celular (encima de todo). */}
     {phone && createPortal(<BackToMobile />, document.body)}
     {/* En un celular la vista completa se ajusta al ancho de la pantalla (barras en dos filas, paneles encima). */}
-    <div className={phone ? 'app app-phone' : 'app'}>
+    <div className={phone ? 'app app-phone' : 'app'} data-tb-size={toolIconSize}>
       <header className="topbar">
         <button
           className="icon-btn"
@@ -374,9 +378,12 @@ export default function App() {
           onClick={toggleProperties}
           data-testid="toggle-sidebar"
         >
-          ☰
+          <UiIcon name="panel-left" />
         </button>
-        <span className="brand" title="Cota — free CAD in your browser" aria-label="Cota" dangerouslySetInnerHTML={{ __html: BRAND_HTML }} />
+        <span className="brand" title="Cota — free CAD in your browser" aria-label="Cota">
+          <img className="brand-mark" src={`${import.meta.env.BASE_URL}icon.svg`} alt="" width="18" height="18" />
+          <span dangerouslySetInnerHTML={{ __html: BRAND_HTML }} />
+        </span>
         <input
           className="doc-name-input"
           value={docFolder ? `${docFolder}/${docName}` : docName}
@@ -386,21 +393,9 @@ export default function App() {
           spellCheck={false}
           autoComplete="off"
           data-testid="doc-name"
-          style={{
-            background: 'transparent',
-            border: '1px solid transparent',
-            color: 'inherit',
-            font: 'inherit',
-            padding: '2px 6px',
-            borderRadius: 4,
-            minWidth: 120,
-            maxWidth: 320,
-          }}
-          onFocus={(e) => (e.currentTarget.style.borderColor = '#555')}
-          onBlur={(e) => (e.currentTarget.style.borderColor = 'transparent')}
         />
         {/* El dibujo está "guardado" si tiene documento en la nube o archivo en la carpeta local. */}
-        <span className="muted" title={docId || fsFilePath ? 'Saved' : 'Unsaved'}>{docId || fsFilePath ? '' : '*'}</span>
+        <span className="muted doc-dirty" title={docId || fsFilePath ? 'Saved' : 'Unsaved'}>{docId || fsFilePath ? '' : '*'}</span>
         {/* Carpeta de trabajo del sistema: SAVE/OPEN usan archivos reales de esa carpeta. */}
         <button
           className={'btn workspace-btn' + (fsFolderName && !fsPending ? ' on' : '')}
@@ -416,18 +411,20 @@ export default function App() {
           }
           onClick={() => void (fsPending ? reconnectWorkspace() : pickWorkspaceFolder())}
         >
-          {fsPending ? `📁 ${fsFolderName} · Reconnect` : fsFolderName ? `📁 ${fsFolderName}` : CLOUD_ENABLED ? '☁ Cloud' : '📁 Choose folder'}
+          <UiIcon name={fsFolderName || !CLOUD_ENABLED ? 'folder' : 'cloud'} size={14} />
+          <span className="workspace-label">{fsPending ? `${fsFolderName} · Reconnect` : fsFolderName ? fsFolderName : CLOUD_ENABLED ? 'Cloud' : 'Choose folder'}</span>
         </button>
+        <span className="topbar-sep" aria-hidden="true" />
         {/* Barra única: los menús van en la misma línea que la barra superior. */}
         <CommandBar />
         <div className="spacer" />
         {installable && !isStandalone() && (
-          <button className="btn" onClick={() => void promptInstall()} title="Install Cota as an app: its own window, without the address bar, with a desktop shortcut; works offline" data-testid="install-app">
+          <button className="btn ghost" onClick={() => void promptInstall()} title="Install Cota as an app: its own window, without the address bar, with a desktop shortcut; works offline" data-testid="install-app">
             Install app
           </button>
         )}
         <button
-          className={'btn' + (autosave ? ' on' : '')}
+          className={'btn ghost autosave-btn' + (autosave ? ' on' : '')}
           onClick={toggleAutosave}
           title="Toggle autosave (every 2 min)"
           data-testid="autosave-toggle"
@@ -435,20 +432,20 @@ export default function App() {
         >
           Autosave {autosave ? 'on' : 'off'}
         </button>
-        <button className="btn" onClick={openHelp} data-testid="help-button">
+        <button className="btn ghost" onClick={openHelp} data-testid="help-button">
           Help
         </button>
         {token ? (
           <>
-            <span className="muted" data-testid="user-email">
+            <span className="user-email" data-testid="user-email">
               {email}
             </span>
-            <button className="btn" onClick={logout} data-testid="logout-button">
+            <button className="btn ghost" onClick={logout} data-testid="logout-button">
               Logout
             </button>
           </>
         ) : (
-          CLOUD_ENABLED && <button className="btn" onClick={openLoginDialog} data-testid="login-button">
+          CLOUD_ENABLED && <button className="btn primary" onClick={openLoginDialog} data-testid="login-button">
             Login
           </button>
         )}
@@ -497,13 +494,14 @@ export default function App() {
       <QSelectDialog />
       <ScriptDialog />
       <ViewGenDialog />
+      <Tooltip />
     </div>
     </>
   )
 }
 
 /**
- * Botón para volver a la vista del celular desde la vista completa: abajo a la derecha del dibujo. Si el navegador quedó
+ * Botón para volver a la vista del celular desde la vista completa: abajo al centro del dibujo. Si el navegador quedó
  * con zoom o corrido (el «visual viewport»), lo sigue para estar siempre a la vista y del mismo tamaño.
  */
 function BackToMobile() {
@@ -549,7 +547,8 @@ function BackToMobile() {
       style={{ left: pos.left, top: pos.top, transform: `scale(${pos.scale})` }}
       onClick={() => useStore.getState().setScreen({ mobileView: true })}
     >
-      📱 Mobile view
+      <UiIcon name="phone" />
+      Mobile view
     </button>
   )
 }

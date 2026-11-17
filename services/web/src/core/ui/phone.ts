@@ -10,6 +10,16 @@
 export const agentVisible = (s: { agentOpen: boolean; agentShown: boolean }, phone: boolean): boolean =>
   s.agentOpen && (s.agentShown || !phone)
 
+/**
+ * Ancho de ventana desde el que el panel del agente arranca abierto en la primera visita (propuesta de interfaz
+ * 2026-11-17): con 340 px de panel, el dibujo conserva unos 1280 px. En pantallas más angostas arranca cerrado, con el
+ * riel «Agents» a la vista; abrirlo a mano queda guardado en las preferencias como siempre.
+ */
+export const AGENT_AUTO_OPEN_MIN_WIDTH = 1680
+
+/** ¿El panel del agente arranca abierto en la primera visita (sin preferencia guardada) con esta ventana? */
+export const agentOpensByDefault = (windowWidth: number): boolean => windowWidth >= AGENT_AUTO_OPEN_MIN_WIDTH
+
 /** Rectángulo en px de la página (coordenadas de `getBoundingClientRect`). */
 export interface Box {
   left: number
@@ -30,9 +40,10 @@ export interface Visual {
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(v, max))
 
 /**
- * Posición del botón «Mobile view»: abajo a la derecha del dibujo (no tapa los menús ni las barras) y, si el navegador
- * quedó con zoom o corrido, siempre dentro de lo visible y del mismo tamaño en la pantalla (`scale` compensa el zoom).
- * `size` es el tamaño del botón sin escalar; sin dibujo (`draw` null) va arriba a la izquierda de lo visible.
+ * Posición del botón «Mobile view»: abajo al centro del dibujo (no tapa los menús ni las barras; decisión de
+ * Christian, 2026-11-17) y, si el navegador quedó con zoom o corrido, siempre dentro de lo visible y del mismo tamaño
+ * en la pantalla (`scale` compensa el zoom). Sin zoom cae en píxeles enteros (el ícono queda nítido). `size` es el
+ * tamaño del botón sin escalar; sin dibujo (`draw` null) va arriba a la izquierda de lo visible.
  */
 export function backButtonPos(draw: Box | null, vv: Visual, size: { w: number; h: number }, margin = 10): { left: number; top: number; scale: number } {
   const k = 1 / (vv.scale || 1)
@@ -43,7 +54,8 @@ export function backButtonPos(draw: Box | null, vv: Visual, size: { w: number; h
   const minT = vv.offsetTop + m
   const maxL = vv.offsetLeft + vv.width - w - m
   const maxT = vv.offsetTop + vv.height - h - m
-  const left = draw ? draw.right - margin - w : minL
+  const left = draw ? (draw.left + draw.right - w) / 2 : minL
   const top = draw ? draw.bottom - margin - h : minT
-  return { left: clamp(left, minL, maxL), top: clamp(top, minT, maxT), scale: k }
+  const px = (v: number) => (k === 1 ? Math.round(v) : v)
+  return { left: px(clamp(left, minL, maxL)), top: px(clamp(top, minT, maxT)), scale: k }
 }

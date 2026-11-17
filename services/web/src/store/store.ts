@@ -32,9 +32,10 @@ import { touchConfig } from '../render/touchGesture'
 import type { SavedViews } from '../core/document/types'
 import { DEFAULT_PALETTE, normalizePalette, type PaletteState } from '../core/ui/palette'
 import { dockToolbar, normalizeToolbar, normalizeToolbars, type ToolbarSide, type ToolbarState, type ToolbarStates } from '../core/ui/toolbar'
-import { DEFAULT_TOOLBARS, findToolbar } from '../core/ui/toolbars'
+import { DEFAULT_TOOLBARS, findToolbar, PHONE_TOOLBARS } from '../core/ui/toolbars'
 import { pickPrefs, readLocalPrefs, writeLocalPrefs, type Prefs } from '../core/ui/prefs'
 import { enterFullscreen, exitFullscreen, fileAccept, isPhone, mobileParam, type ViewMode } from '../ui/appWindow'
+import { isIconSize, type IconSize } from '../ui/iconGrid'
 import { DEFAULT_VISUAL_STYLE, VISUAL_STYLES, type CameraMode, type ViewName, type VisualStyle } from '../core/view'
 import type { CameraState, Viewport } from '../render/Viewport'
 import { entitiesInScreenBox, entityOutline, type RectPx } from '../core/editing/bounds'
@@ -107,6 +108,7 @@ import { parseStl } from '../core/io/stl'
 import { requestViewGen } from '../ui/ViewGenDialog'
 import { DRAWING_TEMPLATE_EXT, drawingFromTemplate, makeTemplate, parseTemplate as parseDrawingTemplate, readDefaultTemplate, writeDefaultTemplate, type DrawingTemplate } from '../core/io/drawingTemplate'
 import { ApiError, api, type DocumentSummary } from '../core/io/apiClient'
+import { agentOpensByDefault } from '../core/ui/phone'
 
 /** Plantilla de layout disponible (incluida, en la carpeta de trabajo o en la biblioteca del navegador). */
 /** Ajustes del panel de sombreado. */
@@ -211,6 +213,9 @@ export interface AppState {
   setMeasure: (m: Measure | null) => void
   /** Disposición del cubo desplegado: ISO-E (primer diedro, predeterminada) o ISO-A. */
   viewNetStd: ProjStd
+  /** Tamaño de los íconos de las barras de herramientas (Options ▸ Display): chico (16 px), mediano o grande. */
+  toolIconSize: IconSize
+  setToolIconSize: (size: IconSize) => void
   // IA / LLM
   aiOpen: boolean
   aiProcessing: boolean
@@ -1626,6 +1631,16 @@ export const useStore = create<AppState>((set, get) => {
   })
   registerDefaultCommands(engine)
 
+  /**
+   * Barras de herramientas por equipo: en un teléfono se guardan aparte (`phoneToolbars`) y arrancan todas ocultas
+   * (sólo la línea de comandos); en la computadora, en `toolbars`. Así el teléfono no arranca con las de escritorio y
+   * al sincronizar la cuenta no las pisa. La copia del otro equipo se conserva tal cual (`otherToolbars`).
+   */
+  const tbKey = () => (isPhone() ? 'phoneToolbars' : 'toolbars')
+  const tbOtherKey = () => (isPhone() ? 'toolbars' : 'phoneToolbars')
+  const tbDefaults = () => (isPhone() ? PHONE_TOOLBARS : DEFAULT_TOOLBARS)
+  let otherToolbars: unknown
+
   /** Preferencias de interfaz y visualización del usuario. */
   const collectPrefs = (): Prefs => {
     const s = get()
@@ -1643,13 +1658,15 @@ export const useStore = create<AppState>((set, get) => {
       osnap: s.osnap,
       visualStyle: s.visualStyle,
       propsPalette: s.propsPalette,
-      toolbars: s.toolbars,
+      [tbKey()]: s.toolbars,
+      [tbOtherKey()]: otherToolbars,
       autosave: s.autosave,
       cleanScreen: s.cleanScreen,
       commandLineCompact: s.commandLineCompact,
       cmdHeight: s.cmdHeight,
       viewCubeOn: s.viewCubeOn,
       viewNetStd: s.viewNetStd,
+      toolIconSize: s.toolIconSize,
       agentOpen: s.agentOpen,
       agentTab: s.agentTab,
       viewMode: s.viewMode,
@@ -1698,11 +1715,13 @@ export const useStore = create<AppState>((set, get) => {
     if (d.propsPalette && typeof d.propsPalette === 'object') patch.propsPalette = normalizePalette(d.propsPalette)
     // Compatibilidad con la config anterior (panel lateral único).
     else if (typeof d.sidebarOpen === 'boolean') patch.propsPalette = { ...DEFAULT_PALETTE, open: d.sidebarOpen }
-    if (d.toolbars && typeof d.toolbars === 'object') patch.toolbars = normalizeToolbars(d.toolbars, DEFAULT_TOOLBARS)
+    const tb = d[tbKey()]
+    if (tb && typeof tb === 'object') patch.toolbars = normalizeToolbars(tb, tbDefaults())
     // Compatibilidad con la config anterior (sólo la barra Dimension).
-    else if (d.dimToolbar && typeof d.dimToolbar === 'object') {
+    else if (!isPhone() && d.dimToolbar && typeof d.dimToolbar === 'object') {
       patch.toolbars = { ...structuredClone(DEFAULT_TOOLBARS), dimension: normalizeToolbar(d.dimToolbar, DEFAULT_TOOLBARS.dimension) }
     }
+    if (tbOtherKey() in d) otherToolbars = d[tbOtherKey()]
     if (typeof d.autosave === 'boolean') patch.autosave = d.autosave
     if (typeof d.cleanScreen === 'boolean') patch.cleanScreen = d.cleanScreen
     if (typeof d.commandLineCompact === 'boolean') patch.commandLineCompact = d.commandLineCompact
@@ -1712,6 +1731,7 @@ export const useStore = create<AppState>((set, get) => {
     if (typeof d.agentTab === 'boolean') patch.agentTab = d.agentTab
     if (d.viewMode === 'auto' || d.viewMode === 'mobile' || d.viewMode === 'full') patch.viewMode = d.viewMode
     if (d.viewNetStd === 'E' || d.viewNetStd === 'A') patch.viewNetStd = d.viewNetStd
+    if (isIconSize(d.toolIconSize)) patch.toolIconSize = d.toolIconSize
     if (d.sysvars && typeof d.sysvars === 'object') {
       applySysvars(d.sysvars as Record<string, unknown>)
       patch.sysvarRev = get().sysvarRev + 1
@@ -1733,6 +1753,13 @@ export const useStore = create<AppState>((set, get) => {
         get().viewports.forEach((vp) => vp.setVisualStyle(get().visualStyle))
         writeLocalPrefs({ ...remote, savedAt: typeof remote.savedAt === 'number' ? remote.savedAt : Date.now() })
       } else if (which === 'local' && local) {
+        // Gana la copia del navegador, pero las barras del otro equipo siguen las de la cuenta si acá no las hay.
+        const other = tbOtherKey()
+        if (!(other in local) && remote && other in remote) {
+          local[other] = remote[other]
+          otherToolbars = remote[other]
+          writeLocalPrefs(local)
+        }
         void api.putConfig(local).catch(() => {})
       }
     } catch {
@@ -1777,7 +1804,7 @@ export const useStore = create<AppState>((set, get) => {
     osnapOpen: false,
     visualStyle: DEFAULT_VISUAL_STYLE,
     propsPalette: { ...DEFAULT_PALETTE },
-    toolbars: structuredClone(DEFAULT_TOOLBARS),
+    toolbars: structuredClone(tbDefaults()),
     toolbarDialogOpen: false,
     cmdHeight: 96,
     layersOpen: false,
@@ -1862,7 +1889,8 @@ export const useStore = create<AppState>((set, get) => {
     cleanScreen: false,
     commandLineCompact: false,
     viewCubeOn: true,
-    agentOpen: true,
+    // Primera visita: abierto sólo si la ventana deja lugar al dibujo (la preferencia guardada manda después).
+    agentOpen: typeof window === 'undefined' ? true : agentOpensByDefault(window.innerWidth),
     agentTab: true,
     agentShown: false,
     viewMode: 'auto',
@@ -1881,6 +1909,11 @@ export const useStore = create<AppState>((set, get) => {
       saveConfig()
     },
     viewNetStd: 'E',
+    toolIconSize: 'sm',
+    setToolIconSize: (size) => {
+      set({ toolIconSize: size })
+      saveConfig()
+    },
     aiOpen: false,
     aiProcessing: false,
     aiMessage: '',
@@ -2413,7 +2446,7 @@ export const useStore = create<AppState>((set, get) => {
       saveConfig()
     },
     resetToolbars: () => {
-      set({ toolbars: structuredClone(DEFAULT_TOOLBARS) })
+      set({ toolbars: structuredClone(tbDefaults()) })
       saveConfig()
     },
     openToolbarDialog: () => set({ toolbarDialogOpen: true }),

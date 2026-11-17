@@ -19,7 +19,7 @@ import {
 import { focusCommandLine } from './focus'
 
 /** Lado de una celda, grosor de la franja de una arista y tamaño de una esquina (px). */
-const C = 26
+const C = 32
 const EDGE = 7
 const CORNER = 9
 

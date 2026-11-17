@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../store/store'
 import type { DocumentData } from '../core/document/types'
+import { UiIcon } from './uiIcons'
 
 type Meta = DocumentData['meta']
 const FIELDS: { key: 'title' | 'subject' | 'author' | 'keywords'; label: string }[] = [
@@ -38,7 +39,7 @@ export function DwgPropsDialog() {
         <div className="modal-header">
           <h2>Drawing Properties</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         <div className="form">
@@ -71,7 +72,7 @@ export function DwgPropsDialog() {
                 data-testid={`dwgprops-custom-value-${i}`}
               />
               <button className="icon-btn" title="Remove" onClick={() => setCustom(custom.filter((_, j) => j !== i))}>
-                🗑
+                <UiIcon name="trash" />
               </button>
             </div>
           ))}

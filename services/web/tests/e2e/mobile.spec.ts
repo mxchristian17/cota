@@ -84,6 +84,50 @@ test.describe('Mobile view for the job site', () => {
     await expect(page.getByTestId('mobile-app')).toBeVisible()
   })
 
+  test('full view on a phone: only the command line, a toolbar shown by hand is kept, Mobile view (bottom center) goes back', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('mobile-app')).toBeVisible()
+    // Íconos de la vista de obra: los del set de las barras, dibujados en su tamaño real (24 px, viewBox igual).
+    await expect(page.locator('.m-bar .tb-icon')).toHaveCount(5)
+    for (const svg of await page.locator('.mobile-app svg.tb-icon, .mobile-app svg.ui-icon').all()) {
+      const box = (await svg.boundingBox())!
+      await expect(svg).toHaveAttribute('viewBox', `0 0 ${box.width} ${box.height}`)
+    }
+    await tapId(page, 'm-menu')
+    await tapId(page, 'm-full-editor')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    // Al arrancar en el teléfono: ninguna barra de herramientas, sólo la línea de comandos.
+    await expect(page.locator('.toolbar')).toHaveCount(0)
+    // «Mobile view»: abajo al centro del dibujo, objetivo táctil de 44 px.
+    const back = page.getByTestId('back-to-mobile')
+    await expect(back).toBeVisible()
+    const b = (await back.boundingBox())!
+    const d = (await page.locator('.app .center > .viewport').boundingBox())!
+    expect(Math.abs(b.x + b.width / 2 - (d.x + d.width / 2))).toBeLessThanOrEqual(1)
+    expect(d.y + d.height - (b.y + b.height)).toBeGreaterThanOrEqual(0)
+    expect(d.y + d.height - (b.y + b.height)).toBeLessThanOrEqual(16)
+    expect(b.height).toBeGreaterThanOrEqual(44)
+    // Una barra mostrada a mano en el teléfono queda al recargar, guardada aparte de las de la computadora.
+    const input = page.getByTestId('command-input')
+    for (const step of ['-TOOLBAR', 'Draw', 'S']) {
+      await input.fill(step)
+      await input.press('Enter')
+    }
+    await expect(page.getByTestId('toolbar-draw')).toBeVisible()
+    await page.reload()
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    await expect(page.getByTestId('toolbar-draw')).toBeVisible()
+    await expect(page.locator('.toolbar')).toHaveCount(1)
+    const prefs = await page.evaluate(() => JSON.parse(localStorage.getItem('cota.prefs') ?? '{}'))
+    expect(prefs.phoneToolbars.draw.visible).toBe(true)
+    expect(prefs.toolbars).toBeUndefined()
+    // Volver a la vista de obra; la elección queda al recargar.
+    await tapId(page, 'back-to-mobile')
+    await expect(page.getByTestId('mobile-app')).toBeVisible()
+    await page.reload()
+    await expect(page.getByTestId('mobile-app')).toBeVisible()
+  })
+
   test('a tap selects a part, one finger then orbits around it, a tap on empty space lets it go', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByTestId('mobile-app')).toBeVisible()

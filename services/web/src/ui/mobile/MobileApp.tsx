@@ -13,6 +13,8 @@ import { ABOUT } from '../../core/about'
 import type { ViewName, VisualStyle } from '../../core/view'
 import type { Entity } from '../../core/document/types'
 import { drawingImages } from '../../core/commands/impl/image'
+import { UiIcon } from '../uiIcons'
+import { ICON_PX, iconMarkup, MOBILE_ICON_SIZE, MOBILE_ICONS, type MobileIconName } from '../icons'
 
 /**
  * Vista mobile para obra (PRD076): abrir dibujos, orbitar con los dedos, medir con DIST, estilos visuales, vistas,
@@ -43,23 +45,24 @@ const VIEWS: [ViewName, string][] = [
 
 const st = useStore.getState
 
-/** Íconos de la barra (trazo, del color del texto): se ven igual en cualquier teléfono, a diferencia de los emoji. */
-const ICONS: Record<string, string> = {
-  fit: 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5',
-  views: 'M12 3 20 7.5v9L12 21l-8-4.5v-9L12 3ZM4 7.5l8 4.5 8-4.5M12 12v9',
-  style: 'M12 3a9 9 0 1 0 0 18Zm0 0a9 9 0 0 1 0 18',
-  layers: 'M12 4 21 9l-9 5-9-5 9-5ZM3 14l9 5 9-5',
-  measure: 'M3 16 16 3l5 5L8 21l-5-5ZM7 12l2 2M10 9l2 2M13 6l2 2',
-  orbit: 'M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4',
-  pan: 'M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3',
-}
-
-function Icon({ name }: { name: keyof typeof ICONS }) {
+/**
+ * Íconos de la vista de obra: los del set de las barras (`icons.ts`), con su motor de grilla de píxeles y sus dos
+ * tonos (lo que el botón cambia, en acento). Cada uno se dibuja en su tamaño real (24 px, `viewBox` igual): nítido a
+ * 1x y en píxeles enteros a 2x y 3x.
+ */
+function Icon({ name }: { name: MobileIconName }) {
+  const px = ICON_PX[MOBILE_ICON_SIZE]
   return (
-    <svg className="m-ico" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d={ICONS[name]} />
-      {name === 'style' && <path d="M12 3a9 9 0 0 0 0 18Z" fill="currentColor" stroke="none" />}
-    </svg>
+    <svg
+      className="tb-icon m-ico"
+      width={px}
+      height={px}
+      viewBox={`0 0 ${px} ${px}`}
+      data-icon={MOBILE_ICONS[name]}
+      aria-hidden="true"
+      focusable="false"
+      dangerouslySetInnerHTML={{ __html: iconMarkup(MOBILE_ICONS[name], MOBILE_ICON_SIZE) }}
+    />
   )
 }
 
@@ -213,7 +216,10 @@ export function MobileApp() {
   return (
     <div className="mobile-app" data-testid="mobile-app">
       <header className="m-top">
-        <span className="brand" aria-label="Cota" dangerouslySetInnerHTML={{ __html: BRAND_HTML }} />
+        <span className="brand" aria-label="Cota">
+          <img className="brand-mark" src={`${import.meta.env.BASE_URL}icon.svg`} alt="" width="18" height="18" />
+          <span dangerouslySetInnerHTML={{ __html: BRAND_HTML }} />
+        </span>
         <span className="m-name" data-testid="m-name">
           {docName}
         </span>
@@ -226,7 +232,7 @@ export function MobileApp() {
           ))}
         </select>
         <button className="m-icon" onClick={() => setSheet(sheet === 'menu' ? null : 'menu')} aria-label="Menu" data-testid="m-menu">
-          ⋮
+          <UiIcon name="more" size={ICON_PX[MOBILE_ICON_SIZE]} />
         </button>
       </header>
 
@@ -258,7 +264,7 @@ export function MobileApp() {
                 Again
               </button>
               <button className="m-icon m-close" onClick={() => st().setMeasure(null)} aria-label="Close" data-testid="m-measure-close">
-                ✕
+                <UiIcon name="close" />
               </button>
             </div>
             <div className="m-deltas">

@@ -24,11 +24,24 @@ test.describe('Cota barras de herramientas', () => {
     await expect(page.getByTestId('command-input')).toBeVisible()
   })
 
-  test('por defecto sólo Dimension; Tools ▸ Toolbars muestra Draw y su botón dibuja', async ({ page }) => {
-    expect(await visibleToolbars(page)).toEqual(['dimension'])
-    await expect(page.locator('.toolbar')).toHaveCount(1)
+  test('al arrancar: Draw a la izquierda y Modify a la derecha (Dimension oculta); el botón de Draw dibuja', async ({ page }) => {
+    expect(await visibleToolbars(page)).toEqual(['draw', 'modify'])
+    await expect(page.locator('.toolbar')).toHaveCount(2)
+    await expect(page.getByTestId('toolbar-dimension')).toHaveCount(0)
+    const leftDock = () => page.locator('.tb-dock-left > .toolbar').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.id))
+    expect(await leftDock()).toEqual(['draw'])
+    await expect(page.getByTestId('toolbar-modify')).toHaveAttribute('data-dock', 'right')
+    // Dimension, al mostrarla, se acopla a la izquierda al lado de Draw.
+    await page.getByTestId('command-cat-Tools').click()
+    await page.getByTestId('menu-toolbar-dimension').click()
+    await expect(page.getByTestId('toolbar-dimension')).toHaveAttribute('data-dock', 'left')
+    expect(await leftDock()).toEqual(['draw', 'dimension'])
+    // Tools ▸ Toolbars: Draw tildada; ocultarla y volver a mostrarla.
     await page.getByTestId('command-cat-Tools').click()
     await expect(page.getByTestId('menu-toolbar-draw')).toContainText('Draw')
+    await page.getByTestId('menu-toolbar-draw').click()
+    await expect(page.getByTestId('toolbar-draw')).toHaveCount(0)
+    await page.getByTestId('command-cat-Tools').click()
     await page.getByTestId('menu-toolbar-draw').click()
     const draw = page.getByTestId('toolbar-draw')
     await expect(draw).toHaveAttribute('data-dock', 'left')
@@ -39,23 +52,28 @@ test.describe('Cota barras de herramientas', () => {
     await expect(page.locator('.cmd-prompt')).toContainText('center point')
     await page.keyboard.press('Escape')
     // Tooltip con el comando.
-    await expect(page.getByTestId('tb-draw-rectangle')).toHaveAttribute('title', 'Rectangle (RECTANGLE)')
+    await expect(page.getByTestId('tb-draw-rectangle')).toHaveAttribute('data-tip-cmd', 'RECTANGLE')
+    await page.getByTestId('tb-draw-rectangle').hover()
+    await expect(page.getByTestId('ui-tooltip')).toContainText('Rectangle')
+    await expect(page.getByTestId('ui-tooltip')).toContainText('RECTANGLE')
   })
 
   test('clic derecho: lista de barras con tildes, flotar y cerrar', async ({ page }) => {
-    await page.getByTestId('toolbar-dimension').click({ button: 'right', position: { x: 5, y: 5 } })
+    await page.getByTestId('toolbar-draw').click({ button: 'right', position: { x: 5, y: 5 } })
     const menu = page.getByTestId('toolbar-menu')
     await expect(menu).toBeVisible()
-    await expect(page.getByTestId('toolbar-menu-dimension')).toContainText('✓')
-    await page.getByTestId('toolbar-menu-modify').click()
-    await expect(page.getByTestId('toolbar-modify')).toHaveAttribute('data-dock', 'right')
-    // Flotar Modify desde su propio menú y cerrarla con su ✕.
-    await page.getByTestId('toolbar-modify').click({ button: 'right', position: { x: 5, y: 5 } })
+    await expect(page.getByTestId('toolbar-menu-draw')).toHaveAttribute('aria-pressed', 'true') // tilde: visible
+    await expect(page.getByTestId('toolbar-menu-dimension')).toHaveAttribute('aria-pressed', 'false')
+    await expect(page.getByTestId('toolbar-menu-modify2')).toHaveAttribute('aria-pressed', 'false')
+    await page.getByTestId('toolbar-menu-modify2').click()
+    await expect(page.getByTestId('toolbar-modify2')).toHaveAttribute('data-dock', 'right')
+    // Flotar Modify II desde su propio menú y cerrarla con su ✕.
+    await page.getByTestId('toolbar-modify2').click({ button: 'right', position: { x: 5, y: 5 } })
     await page.getByTestId('toolbar-menu-float').click()
-    await expect(page.getByTestId('toolbar-modify')).toHaveAttribute('data-dock', 'float')
-    await expect(page.getByTestId('toolbar-modify-title')).toContainText('Modify')
-    await page.getByTestId('toolbar-modify-close').click()
-    await expect(page.getByTestId('toolbar-modify')).toHaveCount(0)
+    await expect(page.getByTestId('toolbar-modify2')).toHaveAttribute('data-dock', 'float')
+    await expect(page.getByTestId('toolbar-modify2-title')).toContainText('Modify II')
+    await page.getByTestId('toolbar-modify2-close').click()
+    await expect(page.getByTestId('toolbar-modify2')).toHaveCount(0)
   })
 
   test('TOOLBAR: diálogo con la lista, Show all, Hide all y Reset', async ({ page }) => {
@@ -69,7 +87,7 @@ test.describe('Cota barras de herramientas', () => {
     await page.getByTestId('toolbar-dialog-hideall').click()
     await expect(page.locator('.toolbar')).toHaveCount(0)
     await page.getByTestId('toolbar-dialog-reset').click()
-    expect(await visibleToolbars(page)).toEqual(['dimension'])
+    expect(await visibleToolbars(page)).toEqual(['draw', 'modify'])
     await page.getByTestId('toolbar-dialog-close').click()
     await expect(dlg).toHaveCount(0)
   })
@@ -149,6 +167,28 @@ test.describe('Cota preferencias persistentes', () => {
     await expect(page.locator('.cmd-prompt')).toContainText('80')
   })
 
+  test('tamaño de los íconos: chico por defecto; Options ▸ Display lo cambia y queda al recargar', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    const icon = page.getByTestId('tb-draw-line').locator('svg')
+    // Chico: 16 px dibujado en su grilla (viewBox del mismo tamaño), botón de 26 px.
+    await expect(icon).toHaveAttribute('viewBox', '0 0 16 16')
+    expect((await page.getByTestId('tb-draw-line').boundingBox())!.width).toBe(26)
+    await typeCmd(page, 'OPTIONS')
+    await page.getByTestId('options-tab-display').click()
+    await expect(page.getByTestId('options-tb-size-sm')).toHaveAttribute('aria-checked', 'true')
+    await page.getByTestId('options-tb-size-lg').click()
+    await expect(icon).toHaveAttribute('viewBox', '0 0 24 24')
+    expect((await page.getByTestId('tb-draw-line').boundingBox())!.width).toBe(34)
+    await page.keyboard.press('Escape')
+    await page.reload()
+    await expect(page.getByTestId('command-input')).toBeVisible()
+    await expect(page.getByTestId('tb-draw-line').locator('svg')).toHaveAttribute('viewBox', '0 0 24 24')
+    // Los íconos quedan en píxeles enteros (sin borroneo por posiciones fraccionarias).
+    const frac = await page.evaluate(() => [...document.querySelectorAll('.tb-icon')].map((e) => e.getBoundingClientRect()).filter((r) => r.x % 1 || r.y % 1).length)
+    expect(frac).toBe(0)
+  })
+
   test('con cuenta: gana la copia más reciente y los cambios se suben', async ({ page }) => {
     const puts: Array<Record<string, unknown>> = []
     await page.route('**/auth/login', (r) => r.fulfill({ json: { user: { id: 1, email: 'a@x.com' } } }))
@@ -160,7 +200,7 @@ test.describe('Cota preferencias persistentes', () => {
         return r.fulfill({ json: { data: {} } })
       }
       // La cuenta tiene preferencias más nuevas que el navegador: la barra Zoom visible y la grilla apagada.
-      return r.fulfill({ json: { data: { toolbars: { zoom: { visible: true, docked: true, side: 'right' } }, gridOn: false, savedAt: Date.now() + 60_000 } } })
+      return r.fulfill({ json: { data: { toolbars: { zoom: { visible: true, docked: true, side: 'right' }, draw: { visible: false } }, gridOn: false, savedAt: Date.now() + 60_000 } } })
     })
     await page.goto('/')
     await expect(page.getByTestId('command-input')).toBeVisible()

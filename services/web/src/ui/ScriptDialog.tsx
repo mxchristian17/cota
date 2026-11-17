@@ -3,6 +3,7 @@ import { useStore } from '../store/store'
 import { parseScript, scriptLink } from '../core/commands/script'
 import { focusCommandLine } from './focus'
 import { fileAccept } from './appWindow'
+import { UiIcon } from './uiIcons'
 
 /**
  * SCRIPT: multicomandos. Se escriben o pegan las entradas (separadas por espacios o renglones; `""` es Enter y el
@@ -50,7 +51,7 @@ function ScriptBody({ initial, shared }: { initial: string; shared: boolean }) {
         <div className="modal-header">
           <h2>Script</h2>
           <button className="icon-btn" onClick={done} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         {shared && (

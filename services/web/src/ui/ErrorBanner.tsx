@@ -1,5 +1,6 @@
 import { Component, Fragment, useEffect, useState, type ReactNode } from 'react'
 import { dismissError, reportError, subscribeErrors, type AppError } from '../core/errors'
+import { UiIcon } from './uiIcons'
 
 /** Avisos cerrables de los errores inesperados (arriba, centrados). */
 export function ErrorBanner() {
@@ -12,7 +13,7 @@ export function ErrorBanner() {
         <div key={e.id} className="error-banner">
           <span>{e.message}</span>
           <button title="Close" aria-label="Close" data-testid="error-banner-close" onClick={() => dismissError(e.id)}>
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
       ))}

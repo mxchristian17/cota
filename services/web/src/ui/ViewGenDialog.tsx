@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { GenView, ViewGenChoice } from '../core/drawing/viewgen'
 import { focusCommandLine } from './focus'
+import { UiIcon } from './uiIcons'
 
 /** Pedido abierto por VIEWGEN (fuera del store: la respuesta es una promesa). */
 let request: { initial: ViewGenChoice; resolve: (c: ViewGenChoice | null) => void } | null = null
@@ -58,7 +59,7 @@ export function ViewGenDialog() {
         <div className="modal-header">
           <h2>Generate views</h2>
           <button className="icon-btn" onClick={() => done(null)} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         <p className="viewgen-hint">Choose the views to generate around the front view.</p>

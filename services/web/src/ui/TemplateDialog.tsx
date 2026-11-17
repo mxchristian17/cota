@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore, type TemplateEntry } from '../store/store'
 import { LEGACY_TEMPLATE_EXT, TEMPLATE_EXT } from '../core/layout/template'
+import { UiIcon } from './uiIcons'
 
 const SOURCE: Record<TemplateEntry['source'], string> = {
   builtin: 'Included',
@@ -56,7 +57,7 @@ function TemplateDialogBody({ dialog }: { dialog: Dialog }) {
         <div className="modal-header">
           <h2>{dialog.mode === 'save' ? 'Save Layout as Template' : 'New Layout from Template'}</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         <div className="form">

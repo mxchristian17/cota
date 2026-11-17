@@ -33,7 +33,7 @@ test.describe('Cota paletas: LAYER modal + Properties', () => {
 
     // Fijar como capa actual
     await page.getByTestId('layer-Tabiques').click()
-    await expect(page.getByTestId('layer-Tabiques')).toContainText('●')
+    await expect(page.getByTestId('layer-Tabiques')).toHaveAttribute('aria-pressed', 'true') // capa actual
 
     // Plot (printable) se puede apagar desde la tabla
     const plot = page.getByTestId('layer-plot-Tabiques')
@@ -102,8 +102,9 @@ test.describe('Cota paletas: LAYER modal + Properties', () => {
   })
 
   test('la paleta de Propiedades se arrastra, se acopla a la derecha y se minimiza', async ({ page }) => {
-    // Con el panel del agente cerrado el borde derecho es el del dibujo (la prueba suelta la paleta en x = 1200).
-    await page.getByTestId('agent-close').click()
+    // Con el panel del agente cerrado el borde derecho es el del dibujo (la prueba suelta la paleta en x = 1200). En una
+    // ventana de 1280 px el panel arranca cerrado (sólo abre solo en pantallas anchas).
+    await expect(page.getByTestId('agent-panel')).toHaveCount(0)
     const palette = page.getByTestId('properties-palette')
     await expect(palette).toHaveAttribute('data-dock', 'left')
 
@@ -229,7 +230,7 @@ test.describe('Cota paletas: LAYER modal + Properties', () => {
     await expect(page.getByTestId('layer-freeze-Hielo')).toBeDisabled()
     await page.getByTestId('layer-0').click()
     await page.getByTestId('layer-freeze-Hielo').click()
-    await expect(page.getByTestId('layer-freeze-Hielo')).toHaveText('❄')
+    await expect(page.getByTestId('layer-freeze-Hielo')).toHaveAttribute('aria-pressed', 'true') // congelada
     await expect(page.getByTestId('layer-freeze-0')).toBeDisabled()
     await page.locator('.modal-backdrop').click({ position: { x: 5, y: 5 } })
     const box = await page.locator('canvas').boundingBox()
@@ -252,7 +253,10 @@ test.describe('Cota barra única y barra Dimension', () => {
     await expect(page.getByTestId('command-input')).toBeVisible()
     await expect(page.locator('header.topbar [data-testid=command-bar]')).toHaveCount(1)
     const tb = page.getByTestId('toolbar-dimension')
-    // Por defecto acoplada a la izquierda, vertical.
+    // Arranca oculta; al mostrarla desde Tools queda acoplada a la izquierda, vertical.
+    await expect(tb).toHaveCount(0)
+    await page.getByTestId('command-cat-Tools').click()
+    await page.getByTestId('menu-toolbar-dimension').click()
     await expect(tb).toHaveAttribute('data-dock', 'left')
     // Desanclar arrastrando el agarre.
     const grip = (await page.getByTestId('toolbar-dimension-grip').boundingBox())!

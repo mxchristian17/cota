@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../store/store'
 import { BYBLOCK, BYLAYER, linetypeLabel, linetypeLibrary, patternLength } from '../core/linetype/linetypes'
 import { applyPattern } from '../core/linetype/dash'
+import { UiIcon } from './uiIcons'
 
 /** Muestra del patrón (como la columna *Appearance* del CAD clásico): una repetición ≈ 28 px. */
 export function LinetypeSwatch({ pattern, width = 120 }: { pattern: number[]; width?: number }) {
@@ -75,7 +76,7 @@ export function LinetypeDialog() {
         <div className="modal-header">
           <h2>{loading ? 'Load or Reload Linetypes' : layer ? `Select Linetype — ${layer.name}` : 'Linetype Manager'}</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         {loading ? (
@@ -126,7 +127,7 @@ export function LinetypeDialog() {
                 >
                   <span className="lt-name mono">
                     {linetypeLabel(d.name)}
-                    {!layer && current === d.name ? ' ✓' : ''}
+                    {!layer && current === d.name ? <UiIcon name="check" size={13} className="inline-icon" /> : ''}
                   </span>
                   <LinetypeSwatch pattern={d.pattern} />
                   <span className="lt-desc muted">{d.description}</span>

@@ -6,6 +6,7 @@ import { PAPER_LABELS, type PlotAreaKind, type PlotSettings } from '../core/io/p
 import { STANDARD_SCALES } from '../core/layout/scale'
 import type { PlotStyle } from '../core/document/types'
 import { focusCommandLine } from './focus'
+import { UiIcon } from './uiIcons'
 
 const AREAS: Array<[PlotAreaKind, string]> = [
   ['extents', 'Extents'],
@@ -73,7 +74,7 @@ export function PlotDialog() {
         <div className="modal-header">
           <h2>Plot — {isLayout ? r.layout : 'Model'}</h2>
           <button className="icon-btn" onClick={() => done('cancel')} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         <div className="plot-body">

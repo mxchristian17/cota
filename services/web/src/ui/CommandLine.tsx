@@ -3,6 +3,8 @@ import { isScript } from '../core/commands/script'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store/store'
 import { suggestCommands, type CommandSuggestion } from '../core/commands/complete'
+import { formatCmdLine, formatPrompt } from './cmdLineFormat'
+import { UiIcon } from './uiIcons'
 
 export function CommandLine() {
   const output = useStore((s) => s.output)
@@ -143,7 +145,7 @@ export function CommandLine() {
       <div className="cmd-output" style={{ height: compact ? 0 : (dragH ?? outputHeight) }} hidden={compact}>
         {output.map((line, i) => (
           <div key={i} className="cmd-line">
-            {line}
+            {formatCmdLine(line)}
           </div>
         ))}
         <div ref={endRef} />
@@ -170,7 +172,10 @@ export function CommandLine() {
             ))}
           </ul>
         )}
-        <span className="cmd-prompt">{prompt || 'Command:'}</span>
+        <span className="cmd-prompt-mark" aria-hidden="true">
+          <UiIcon name="chevron-right" size={13} />
+        </span>
+        <span className="cmd-prompt">{formatPrompt(prompt || 'Command:')}</span>
         <input
           autoFocus
           className="cmd-input"

@@ -1,5 +1,6 @@
 import { useStore } from '../store/store'
 import { OSNAP_KINDS, OSNAP_LABELS } from '../core/snap/osnap'
+import { UiIcon } from './uiIcons'
 
 export function OsnapDialog() {
   const open = useStore((s) => s.osnapOpen)
@@ -18,7 +19,7 @@ export function OsnapDialog() {
         <div className="modal-header">
           <h2>Object Snap</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         <div className="form">

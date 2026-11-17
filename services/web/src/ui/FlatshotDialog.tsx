@@ -3,6 +3,7 @@ import { useStore } from '../store/store'
 import { BYBLOCK, BYLAYER, CONTINUOUS, linetypeLibrary } from '../core/linetype/linetypes'
 import type { FlatshotDestination, FlatshotOptions } from '../core/projection/flatshot'
 import { focusCommandLine } from './focus'
+import { UiIcon } from './uiIcons'
 
 const DESTINATIONS: Array<[FlatshotDestination, string]> = [
   ['insert', 'Insert as new block'],
@@ -50,7 +51,7 @@ export function FlatshotDialog() {
         <div className="modal-header">
           <h2>Flatshot</h2>
           <button className="icon-btn" onClick={() => done(null)} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         <fieldset className="flatshot-group">

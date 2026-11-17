@@ -3,6 +3,7 @@ import { useStore } from '../store/store'
 import { PropertiesPanel } from './PropertiesPanel'
 import { clampToViewport, clampWidth, dockFromDrop, MAX_WIDTH, MIN_WIDTH } from '../core/ui/palette'
 import { focusCommandLine } from './focus'
+import { UiIcon } from './uiIcons'
 
 /**
  * Paleta de Propiedades: se arrastra desde su barra de título, se **acopla** al soltarla
@@ -107,7 +108,7 @@ export function PropertiesPalette() {
               focusCommandLine()
             }}
           >
-            ▣
+            <UiIcon name="panel-open" size={14} />
           </button>
           <button
             className="icon-btn"
@@ -118,9 +119,9 @@ export function PropertiesPalette() {
               focusCommandLine()
             }}
           >
-            ✕
+            <UiIcon name="close" />
           </button>
-          <div className="palette-strip" onPointerDown={startDrag} data-testid="palette-title" title="Properties — drag to float or dock; ▣ to expand">
+          <div className="palette-strip" onPointerDown={startDrag} data-testid="palette-title" title="Properties — drag to float or dock; click the window icon to expand">
             Properties
           </div>
         </aside>
@@ -153,7 +154,7 @@ export function PropertiesPalette() {
               focusCommandLine()
             }}
           >
-            {palette.minimized ? '▣' : '—'}
+            <UiIcon name={palette.minimized ? 'panel-open' : 'minus'} size={14} />
           </button>
           <button
             className="icon-btn"
@@ -164,7 +165,7 @@ export function PropertiesPalette() {
               focusCommandLine()
             }}
           >
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         {!palette.minimized && (

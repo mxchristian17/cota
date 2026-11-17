@@ -3,6 +3,16 @@ import { useStore, type TemplateEntry } from '../store/store'
 import { NO_TEMPLATE_ID } from '../core/layout/template'
 import { DARK_THEME, LIGHT_THEME, type Theme } from '../core/theme'
 import { sysvars, type PersistedSysvars } from '../core/commands/sysvars'
+import { UiIcon } from './uiIcons'
+import { ICON_PX, ICON_SIZES, type IconSize } from './iconGrid'
+import { ToolIcon } from './Toolbar'
+
+/** Tamaños de los íconos de las barras, con su medida en píxeles. */
+const TB_SIZE_LABEL: Record<IconSize, string> = {
+  sm: `Small (${ICON_PX.sm} px)`,
+  md: `Medium (${ICON_PX.md} px)`,
+  lg: `Large (${ICON_PX.lg} px)`,
+}
 
 type Key = keyof PersistedSysvars
 
@@ -156,6 +166,8 @@ export function OptionsDialog() {
   const toggleAutosave = useStore((s) => s.toggleAutosave)
   const openOsnap = useStore((s) => s.openOsnap)
   const submitCommand = useStore((s) => s.submitCommand)
+  const toolIconSize = useStore((s) => s.toolIconSize)
+  const setToolIconSize = useStore((s) => s.setToolIconSize)
   const [templates, setTemplates] = useState<TemplateEntry[]>([])
   const [tab, setTab] = useState<TabId>(readTab)
   useEffect(() => {
@@ -186,7 +198,7 @@ export function OptionsDialog() {
         <div className="modal-header">
           <h2>Options</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         <div className="options-tabs" role="tablist">
@@ -242,6 +254,25 @@ export function OptionsDialog() {
               {DISPLAY_FIELDS.map((f) => (
                 <SysvarField key={f.key} f={f} />
               ))}
+              <h3>Toolbars</h3>
+              <div className="options-seg-row">
+                <span id="options-tb-size-label">Toolbar icons</span>
+                <div className="options-seg" role="radiogroup" aria-labelledby="options-tb-size-label" data-testid="options-tb-size">
+                  {ICON_SIZES.map((s) => (
+                    <button
+                      key={s}
+                      role="radio"
+                      aria-checked={toolIconSize === s}
+                      className={`btn${toolIconSize === s ? ' active' : ''}`}
+                      onClick={() => setToolIconSize(s)}
+                      data-testid={`options-tb-size-${s}`}
+                    >
+                      <ToolIcon name="circle" size={s} />
+                      {TB_SIZE_LABEL[s]}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </>
           )}
           {tab === 'files' && (
@@ -330,6 +361,12 @@ export function OptionsDialog() {
               </div>
             </>
           )}
+        </div>
+        <div className="modal-actions">
+          <span className="options-foot-note">Changes apply at once and are saved with your preferences.</span>
+          <button className="btn active" onClick={close} data-testid="options-close">
+            Close
+          </button>
         </div>
       </div>
     </div>

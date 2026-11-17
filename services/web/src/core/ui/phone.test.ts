@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { agentVisible, backButtonPos } from './phone'
+import { AGENT_AUTO_OPEN_MIN_WIDTH, agentOpensByDefault, agentVisible, backButtonPos } from './phone'
 
 const size = { w: 140, h: 40 }
 
 describe('backButtonPos', () => {
-  it('sin zoom: abajo a la derecha del dibujo, con margen', () => {
+  it('sin zoom: abajo al centro del dibujo, con margen y en píxeles enteros', () => {
     const vv = { offsetLeft: 0, offsetTop: 0, width: 412, height: 915, scale: 1 }
     const draw = { left: 53, top: 57, right: 390, bottom: 753 }
-    expect(backButtonPos(draw, vv, size)).toEqual({ left: 390 - 10 - 140, top: 753 - 10 - 40, scale: 1 })
+    expect(backButtonPos(draw, vv, size)).toEqual({ left: Math.round((53 + 390 - 140) / 2), top: 753 - 10 - 40, scale: 1 })
+    expect(backButtonPos({ ...draw, left: 26, right: 360 }, vv, { w: 151, h: 44 }).left).toBe(118)
   })
 
   it('con zoom y corrido: queda dentro de lo visible y del mismo tamaño en la pantalla', () => {
@@ -44,5 +45,15 @@ describe('agentVisible', () => {
     expect(agentVisible({ agentOpen: true, agentShown: false }, true)).toBe(false)
     expect(agentVisible({ agentOpen: true, agentShown: true }, true)).toBe(true)
     expect(agentVisible({ agentOpen: false, agentShown: true }, true)).toBe(false)
+  })
+})
+
+describe('agentOpensByDefault', () => {
+  it('abre en la primera visita sólo si el dibujo conserva lugar (ventanas anchas)', () => {
+    expect(agentOpensByDefault(1920)).toBe(true)
+    expect(agentOpensByDefault(AGENT_AUTO_OPEN_MIN_WIDTH)).toBe(true)
+    expect(agentOpensByDefault(1600)).toBe(false)
+    expect(agentOpensByDefault(1280)).toBe(false)
+    expect(agentOpensByDefault(390)).toBe(false)
   })
 })

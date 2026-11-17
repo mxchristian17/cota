@@ -1,4 +1,5 @@
 import { useStore } from '../store/store'
+import { UiIcon } from './uiIcons'
 
 export function OpenDialog() {
   const open = useStore((s) => s.openOpen)
@@ -39,9 +40,9 @@ export function OpenDialog() {
       <div className="modal-backdrop" onClick={close} data-testid="open-dialog">
         <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
-            <h2>Open drawing — 📁 {fsFolderName}</h2>
+            <h2 className="title-with-icon">Open drawing — <UiIcon name="folder" /> {fsFolderName}</h2>
             <button className="icon-btn" onClick={close} aria-label="Close">
-              ✕
+              <UiIcon name="close" />
             </button>
           </div>
           {deviceButton}
@@ -51,7 +52,7 @@ export function OpenDialog() {
             <div className="doc-tree" data-testid="local-file-list">
               {folders.map((folder) => (
                 <div key={folder || '(root)'} className="doc-group">
-                  <div className="doc-group-title muted">📁 {folder || '(root)'}</div>
+                  <div className="doc-group-title muted"><UiIcon name="folder" size={14} /> {folder || '(root)'}</div>
                   <ul className="doc-list">
                     {groups.get(folder)!.map((f) => (
                       <li key={f.path} className="doc-row">
@@ -80,7 +81,7 @@ export function OpenDialog() {
         <div className="modal-header">
           <h2>Open drawing</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         {deviceButton}
@@ -94,7 +95,7 @@ export function OpenDialog() {
             <div className="theme-presets">
               {fsPending && fsFolderName ? (
                 <button className="btn" onClick={() => void reconnect().then(() => openDialog())} data-testid="open-reconnect">
-                  Allow access to 📁 {fsFolderName}
+                  Allow access to <UiIcon name="folder" size={14} /> {fsFolderName}
                 </button>
               ) : (
                 <button className="btn" onClick={() => void pickFolder().then(() => openDialog())} data-testid="open-pick-folder">
@@ -119,7 +120,7 @@ export function OpenDialog() {
               <div className="doc-tree">
                 {folders.map((folder) => (
                   <div key={folder || '(root)'} className="doc-group">
-                    <div className="doc-group-title muted">📁 {folder || '(root)'}</div>
+                    <div className="doc-group-title muted"><UiIcon name="folder" size={14} /> {folder || '(root)'}</div>
                     <ul className="doc-list">
                       {groups.get(folder)!.map((d) => (
                         <li key={d.id} className="doc-row">
@@ -128,7 +129,7 @@ export function OpenDialog() {
                           </button>
                           <span className="muted doc-date">{new Date(d.updated_at).toLocaleString()}</span>
                           <button className="icon-btn" title="Delete" onClick={() => void deleteDocument(d.id)}>
-                            🗑
+                            <UiIcon name="trash" />
                           </button>
                         </li>
                       ))}

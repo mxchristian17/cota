@@ -21,7 +21,8 @@ In the full editor on a tablet, two fingers pinch and move the view and one fing
 
 The full editor also works on a phone, fitted to the width of the screen: the menus go on a second row (swipe them
 sideways), the command prompt wraps instead of pushing the input off the screen, and the Properties palette and the
-agent panel open over the drawing (the agent starts closed). The **📱 Mobile view** button, at the bottom right of the
-drawing, goes back to the phone view; if you zoom the page with two fingers it stays on screen.
+agent panel open over the drawing (the agent starts closed). It starts with the command line only: the toolbars you
+turn on are remembered on the phone, apart from the computer's. The **Mobile view** button, at the bottom center of
+the drawing, goes back to the phone view; if you zoom the page with two fingers it stays on screen.
 
 **See also:** [MOBILEVIEW](../reference/view.md#mobileview)

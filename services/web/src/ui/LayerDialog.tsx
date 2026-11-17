@@ -3,6 +3,7 @@ import { useStore } from '../store/store'
 import { linetypeLabel } from '../core/linetype/linetypes'
 import { focusCommandLine } from './focus'
 import { LockIcon } from './LockIcon'
+import { UiIcon } from './uiIcons'
 
 /**
  * Administrador de capas (comando `LAYER`/`LA`), con el formato del *Layer Properties Manager* del
@@ -94,7 +95,7 @@ export function LayerDialog() {
         <div className="modal-header">
           <h2>Layer Properties Manager</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
 
@@ -155,18 +156,19 @@ export function LayerDialog() {
                     <button
                       className="icon-btn"
                       title="Set current layer (with objects selected, moves them to this layer)"
+                      aria-pressed={l.id === currentLayerId}
                       onClick={() => setCurrent(l.id)}
                       data-testid={`layer-${l.name}`}
                     >
-                      {l.id === currentLayerId ? '●' : '○'}
+                      <span className={'cur-mark' + (l.id === currentLayerId ? ' is-current' : '')} />
                     </button>
                   </td>
                   <td>
                     <LayerNameInput id={l.id} name={l.name} onRename={renameLayer} />
                   </td>
                   <td>
-                    <button className="icon-btn" title="Visibility" onClick={() => toggleVisible(l.id)}>
-                      {l.visible ? '👁' : '—'}
+                    <button className="icon-btn" title="Visibility" aria-pressed={!l.visible} onClick={() => toggleVisible(l.id)}>
+                      <UiIcon name={l.visible ? 'eye' : 'eye-off'} />
                     </button>
                   </td>
                   <td>
@@ -178,7 +180,7 @@ export function LayerDialog() {
                       onClick={() => toggleFrozen(l.id)}
                       data-testid={`layer-freeze-${l.name}`}
                     >
-                      {l.frozen ? '❄' : '☀'}
+                      <UiIcon name={l.frozen ? 'snow' : 'sun'} />
                     </button>
                   </td>
                   <td>
@@ -263,7 +265,7 @@ export function LayerDialog() {
                       onClick={() => deleteLayer(l.id)}
                       data-testid={`delete-layer-${l.name}`}
                     >
-                      🗑
+                      <UiIcon name="trash" />
                     </button>
                   </td>
                 </tr>
@@ -273,7 +275,7 @@ export function LayerDialog() {
         </div>
 
         <div className="modal-actions">
-          <button className="btn" onClick={onClose}>
+          <button className="btn primary" onClick={onClose}>
             Close
           </button>
         </div>

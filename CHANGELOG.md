@@ -4,6 +4,34 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.48.0] — 2026-11-17
+
+### Changed
+- **A cleaner, calmer interface**: the whole frame around the drawing is one graphite surface; blue is kept for the
+  primary action, focus and selection; what is active (a drawing aid that is on, the Model/Layout tab, the open menu,
+  the current layer, the view of the view cube) is marked with a thin orange edge. Every color, size, spacing and
+  shadow comes from one set of design tokens, native selects and checkboxes follow the dark theme, focus is visible on
+  every control, and dialogs have a titled header and a footer for their actions. Nothing moved: menus, toolbars,
+  command line and status bar are where they were.
+- **New toolbar icons, sharp at every size**: the 170 tool icons and the interface icons were redrawn in one visual
+  language (1 px lines, what the command creates in blue, what it removes dashed, grips as small squares) and each one
+  is drawn on the pixel grid of the size it is shown at, instead of scaling one drawing. **Options ▸ Display ▸
+  Toolbars ▸ Toolbar icons** chooses Small (16 px, the default), Medium (20 px) or Large (24 px); the choice is
+  remembered. The phone view uses the same icons.
+- **Toolbars at first start**: Draw on the left edge and Modify on the right (until now only Dimension); Dimension
+  stays one click away in **Tools ▸ Toolbars**. A setup you already saved does not change. On a phone, the full editor
+  starts with the command line only.
+- **Tooltips** on toolbar buttons show the command name, the command and its alias, and appear without the browser's
+  delay.
+- **Command line**: the history reads by parts (command name in bold, options in blue, default value dimmed, errors in
+  red) and the active prompt is marked.
+- **Status bar** grouped (precision · references · display) with fixed-width coordinates; the unfolded view cube
+  labels are larger and readable.
+- **Agent panel**: on a first visit it opens by itself only on wide windows; elsewhere it starts as a slim tab on the
+  right edge. Its links were hard to read (dark blue on dark gray) and now have full contrast. On a phone it takes the
+  whole width and leaves the message box in view.
+- **Mobile view button** in the full editor on a phone: back at the bottom center, with the new look.
+
 ## [2.47.0] — 2026-11-17
 
 ### Added

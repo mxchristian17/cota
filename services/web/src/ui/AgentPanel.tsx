@@ -6,6 +6,7 @@ import { focusCommandLine } from './focus'
 import { useStore } from '../store/store'
 import { agentVisible } from '../core/ui/phone'
 import { isPhone } from './appWindow'
+import { UiIcon } from './uiIcons'
 
 /**
  * Panel del agente (colapsable, a la derecha): conversación con un LLM que maneja Cota con las herramientas del
@@ -20,7 +21,8 @@ export function AgentPanel() {
   // Cerrado: una pestaña angosta a la derecha para volver a abrirlo (se quita en Options ▸ User Preferences).
   return (
     <button className="agent-tab" onClick={() => setPanel({ open: true })} title="Open the modeling agent (AGENT)" data-testid="agent-tab">
-      Agents
+      <UiIcon name="agent" />
+      <span className="agent-tab-label">Agents</span>
       <span className="agent-beta">beta</span>
     </button>
   )
@@ -74,8 +76,8 @@ function AgentBody() {
             </option>
           ))}
         </select>
-        <button className="icon-btn" title="Settings" onClick={() => setShowSettings(!showSettings)} data-testid="agent-settings-btn">
-          ⚙
+        <button className="icon-btn" title="Settings" onClick={() => setShowSettings(!showSettings)} data-testid="agent-settings-btn" aria-pressed={showSettings}>
+          <UiIcon name="gear" />
         </button>
         <button
           className="icon-btn"
@@ -86,7 +88,7 @@ function AgentBody() {
           }}
           data-testid="agent-close"
         >
-          ✕
+          <UiIcon name="close" />
         </button>
       </div>
       {showSettings && <Settings onDone={() => setShowSettings(false)} />}
@@ -94,10 +96,10 @@ function AgentBody() {
         <div className={`agent-ext-bar agent-ext-${s.external.status}`} data-testid="agent-external-bar">
           <span>
             {s.external.status === 'connected'
-              ? '⇄ External agent connected: its steps appear below.'
+              ? 'External agent connected: its steps appear below.'
               : s.external.status === 'blocked'
-                ? '⇄ The browser blocks Cota from reaching this computer: allow local network access in the site settings (the icon left of the address) and reload.'
-                : `⇄ Waiting for the external agent (bridge on port ${s.external.port})…`}
+                ? 'The browser blocks Cota from reaching this computer: allow local network access in the site settings (the icon left of the address) and reload.'
+                : `Waiting for the external agent (bridge on port ${s.external.port})…`}
           </span>
           <button className="btn btn-sm" onClick={() => s.setExternal({ on: false })} data-testid="agent-external-off">
             Disconnect
@@ -114,7 +116,12 @@ function AgentBody() {
         </button>
       </div>
       <div className="agent-feed" data-testid="agent-feed">
-        {!s.feed.length && <p className="muted agent-hint">Ask for what you want to model, e.g. “a 100×60 plate with four Ø8 holes 10 mm from the corners”.</p>}
+        {!s.feed.length && (
+          <div className="empty-state">
+            <UiIcon name="agent" />
+            <p className="muted agent-hint">Ask for what you want to model, e.g. “a 100×60 plate with four Ø8 holes 10 mm from the corners”.</p>
+          </div>
+        )}
         {s.feed.map((f, i) =>
           f.kind === 'tool' ? (
             <div key={i} className={`agent-tool${f.isError ? ' agent-err' : ''}`}>
@@ -131,7 +138,7 @@ function AgentBody() {
             <div className="muted">Run these commands?</div>
             <pre>{s.pending.script}</pre>
             <div className="agent-row">
-              <button className="btn" onClick={() => s.answer(false)} data-testid="agent-reject">
+              <button className="btn ghost" onClick={() => s.answer(false)} data-testid="agent-reject">
                 Reject
               </button>
               <button className="btn primary" onClick={() => s.answer(true)} data-testid="agent-accept">
@@ -209,7 +216,7 @@ function ExternalAgent() {
           Port
           <input className="field" inputMode="numeric" value={port} onChange={(e) => setPort(e.target.value)} onBlur={() => ext.on && portNum() !== ext.port && setExternal({ port: portNum() })} data-testid="agent-external-port" />
         </label>
-        <button className={`btn${ext.on ? '' : ' primary'}`} onClick={() => setExternal({ on: !ext.on, port: portNum() })} data-testid="agent-external-on">
+        <button className="btn" onClick={() => setExternal({ on: !ext.on, port: portNum() })} data-testid="agent-external-on">
           {ext.on ? 'Disconnect' : 'Connect'}
         </button>
       </div>

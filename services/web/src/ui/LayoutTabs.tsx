@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../store/store'
 import { MODEL_TAB } from '../core/document/DocumentModel'
 import { focusCommandLine } from './focus'
+import { UiIcon } from './uiIcons'
 
 interface Menu {
   x: number
@@ -104,8 +105,8 @@ export function LayoutTabs() {
           </button>
         ),
       )}
-      <button className="layout-tab add" title="New layout" data-testid="tab-add" onClick={run(newLayout)}>
-        +
+      <button className="layout-tab add" title="New layout" data-testid="tab-add" onClick={run(newLayout)} aria-label="New layout">
+        <UiIcon name="plus" size={13} />
       </button>
       {menu && (
         <div

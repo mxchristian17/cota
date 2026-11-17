@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../store/store'
+import { UiIcon } from './uiIcons'
 
 export function LoginDialog() {
   const open = useStore((s) => s.loginOpen)
@@ -22,7 +23,7 @@ export function LoginDialog() {
         <div className="modal-header">
           <h2>{register ? 'Create account' : 'Sign in'}</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         <div className="form">
@@ -48,7 +49,7 @@ export function LoginDialog() {
             />
           </label>
           {authError && <div className="form-error">{authError}</div>}
-          <button className="btn" onClick={submit} data-testid="login-submit">
+          <button className="btn primary" onClick={submit} data-testid="login-submit">
             {register ? 'Register & sign in' : 'Sign in'}
           </button>
           <button className="link-btn" onClick={() => setRegister(!register)}>

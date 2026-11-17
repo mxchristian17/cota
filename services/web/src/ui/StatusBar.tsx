@@ -1,4 +1,3 @@
-import { shownLayer } from '../core/layers/selectionLayer'
 import { LayerCombo } from './LayerCombo'
 import { useEffect, useState } from 'react'
 import { useStore } from '../store/store'
@@ -8,6 +7,7 @@ import { focusCommandLine } from './focus'
 import { isWorldUcs, WORLD_UCS, worldToUcs } from '../core/ucs'
 import { STANDARD_SCALES, formatScale, standardScale } from '../core/layout/scale'
 import { LayoutTabs } from './LayoutTabs'
+import { UiIcon } from './uiIcons'
 
 /**
  * Controles del layout: botón MODEL/PAPER y, para el viewport de MSPACE (o el único VIEWPORT
@@ -134,7 +134,7 @@ function OsnapControl() {
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => (menu ? setMenu(null) : show(e.currentTarget.previousElementSibling as HTMLElement))}
       >
-        ▾
+        <UiIcon name="caret-down" size={12} />
       </button>
       {menu && (
         <div
@@ -151,7 +151,7 @@ function OsnapControl() {
               data-testid={`osnap-menu-${k}`}
               onClick={() => setOsnap(k, !osnap[k])}
             >
-              <span className="check">{osnap[k] ? '✓' : ''}</span>
+              <span className="check">{osnap[k] ? <UiIcon name="check" size={13} /> : ''}</span>
               {OSNAP_LABELS[k]}
             </button>
           ))}
@@ -177,8 +177,6 @@ function OsnapControl() {
 
 export function StatusBar() {
   const cursor = useStore((s) => s.cursor)
-  const currentLayerId = useStore((s) => s.currentLayerId)
-  const layerSvc = useStore((s) => s.layerSvc)
   const ortho = useStore((s) => s.ortho)
   const gridSnap = useStore((s) => s.gridSnap)
   const otrack = useStore((s) => s.otrack)
@@ -194,13 +192,11 @@ export function StatusBar() {
   const toggleDynInput = useStore((s) => s.toggleDynInput)
   const setDrawingVar = useStore((s) => s.setDrawingVar)
   const setUcs = useStore((s) => s.setUcs)
-  const selection = useStore((s) => s.selection)
   const doc = useStore((s) => s.doc)
   const openLayers = useStore((s) => s.openLayers)
   useStore((s) => s.version) // refresca la lista de capas al crear/renombrar
   const engine = useStore((s) => s.engine)
   useStore((s) => s.prompt) // re-render al entrar/salir de un prompt (cambia el modo relativo)
-  const layer = layerSvc.get(shownLayer(currentLayerId, engine.busy ? [] : selection.map((id) => doc.getEntity(id))).id)
 
   const isWorld = isWorldUcs(ucs)
   const local = worldToUcs(cursor, ucs)
@@ -227,8 +223,8 @@ export function StatusBar() {
           X {local.x.toFixed(2)} &nbsp; Y {local.y.toFixed(2)} &nbsp; Z {local.z.toFixed(2)}
         </span>
       )}
+      <span className="sb-sep" aria-hidden="true" />
       <span className="layer-indicator">
-        <span className="swatch" style={{ background: layer?.color ?? '#fff' }} />
         {/* Combo de capa actual (equivale al control de capas de la cinta del CAD clásico): con objetos
             seleccionados, elegir una capa los mueve a ella. */}
         <LayerCombo className="field layer-select" testId="layer-select" onPicked={focusCommandLine} />
@@ -238,9 +234,10 @@ export function StatusBar() {
           data-testid="open-layers"
           onClick={withFocus(openLayers)}
         >
-          ⛭
+          <UiIcon name="layers" size={14} />
         </button>
       </span>
+      <span className="sb-sep" aria-hidden="true" />
       <span className="status-toggles">
         <button
           className={'status-toggle' + (gridOn ? ' on' : '')}
@@ -278,6 +275,7 @@ export function StatusBar() {
         >
           POLAR
         </button>
+        <span className="sb-sep sb-sep-inner" aria-hidden="true" />
         <OsnapControl />
         <button
           className={'status-toggle' + (otrack ? ' on' : '')}
@@ -288,6 +286,7 @@ export function StatusBar() {
         >
           OTRACK
         </button>
+        <span className="sb-sep sb-sep-inner" aria-hidden="true" />
         <button
           className={'status-toggle' + (dynInput ? ' on' : '')}
           title={dynInput ? 'Dynamic input (F12): x,y after the first point is relative; # = absolute' : 'Dynamic input (F12) off: x,y is absolute; @ = relative'}
@@ -315,6 +314,7 @@ export function StatusBar() {
           UCS
         </button>
       </span>
+      <span className="sb-sep" aria-hidden="true" />
       <LayoutControls />
       <AnnoScaleControl />
       <FullscreenButton />
@@ -369,7 +369,7 @@ function FullscreenButton() {
         focusCommandLine()
       }}
     >
-      ⤢
+      <UiIcon name="expand" size={14} />
     </button>
   )
 }
@@ -388,7 +388,7 @@ function CleanScreenButton() {
         focusCommandLine()
       }}
     >
-      ⛶
+      <UiIcon name="clean" size={14} />
     </button>
   )
 }

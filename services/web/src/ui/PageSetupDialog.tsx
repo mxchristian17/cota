@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../store/store'
 import type { PageSetup } from '../core/document/types'
 import { PAPER_SIZES, paperSizeMm } from '../core/layout/paper'
+import { UiIcon } from './uiIcons'
 
 const MARGINS = ['Top', 'Right', 'Bottom', 'Left'] as const
 
@@ -31,7 +32,7 @@ export function PageSetupDialog() {
         <div className="modal-header">
           <h2>Page Setup — {layout.name}</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         <div className="form">

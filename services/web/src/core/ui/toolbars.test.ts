@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { makeEngine } from '../../test/engineHarness'
 import { matchOsnapOverride } from '../snap/osnap'
-import { ICONS } from '../../ui/icons'
-import { DEFAULT_TOOLBARS, findToolbar, itemTitle, TOOLBARS } from './toolbars'
+import { ICONS, iconMarkup } from '../../ui/icons'
+import { ICON_SIZES } from '../../ui/iconGrid'
+import { DEFAULT_TOOLBARS, findToolbar, itemTitle, PHONE_TOOLBARS, TOOLBARS } from './toolbars'
+import { dockedOn } from './toolbar'
 
 describe('barras de herramientas clásicas', () => {
   const cmds = makeEngine().engine.getCommands()
@@ -23,12 +25,26 @@ describe('barras de herramientas clásicas', () => {
     }
   })
 
-  it('cada botón tiene su ícono', () => {
-    for (const { t, it } of items) if (it.kind === 'cmd') expect(ICONS[it.icon], `${t}: ${it.icon}`).toBeTruthy()
+  it('cada botón tiene su ícono, dibujado en los tres tamaños', () => {
+    for (const { t, it } of items) {
+      if (it.kind !== 'cmd') continue
+      expect(ICONS[it.icon], `${t}: ${it.icon}`).toBeTruthy()
+      for (const s of ICON_SIZES) expect(iconMarkup(it.icon, s), `${t}: ${it.icon} ${s}`).toMatch(/^</)
+    }
   })
 
-  it('por defecto sólo Dimension está visible', () => {
-    expect(Object.entries(DEFAULT_TOOLBARS).filter(([, s]) => s.visible).map(([id]) => id)).toEqual(['dimension'])
+  it('al arrancar: Draw a la izquierda y Modify a la derecha; Dimension oculta, con su lugar al lado de Draw', () => {
+    expect(Object.entries(DEFAULT_TOOLBARS).filter(([, s]) => s.visible).map(([id]) => id)).toEqual(['draw', 'modify'])
+    expect(dockedOn(DEFAULT_TOOLBARS, 'left')).toEqual(['draw'])
+    expect(dockedOn(DEFAULT_TOOLBARS, 'right')).toEqual(['modify'])
+    // Al mostrarla, Dimension queda acoplada a la izquierda, después de Draw.
+    const shown = { ...DEFAULT_TOOLBARS, dimension: { ...DEFAULT_TOOLBARS.dimension, visible: true } }
+    expect(dockedOn(shown, 'left')).toEqual(['draw', 'dimension'])
+  })
+
+  it('en un teléfono no arranca ninguna barra, pero cada una conserva su borde y su orden', () => {
+    expect(Object.values(PHONE_TOOLBARS).filter((s) => s.visible)).toEqual([])
+    for (const [id, s] of Object.entries(PHONE_TOOLBARS)) expect({ ...s, visible: true }).toEqual({ ...DEFAULT_TOOLBARS[id], visible: true })
   })
 
   it('se encuentran por nombre tecleado', () => {

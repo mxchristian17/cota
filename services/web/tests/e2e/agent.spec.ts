@@ -1,5 +1,9 @@
 import { expect, test, type Page } from '@playwright/test'
 
+// El panel abre solo en la primera visita en pantallas anchas (≥ 1680 px, propuesta de interfaz 2026-11-17): estas
+// pruebas usan una ventana ancha; la última describe la ventana angosta, donde arranca cerrado.
+test.use({ viewport: { width: 1800, height: 1000 } })
+
 const st = <T,>(page: Page, js: string) => page.evaluate((c) => new Function('s', c)((window as any).__cotaStore.getState()), js) as Promise<T>
 
 /** Proveedor simulado (API de Anthropic): respuestas guionadas, nunca una key ni un servicio real. */
@@ -240,5 +244,21 @@ test.describe('External agent (OpenCode, Claude Code…) through the Cota MCP br
     await page.getByTestId('agent-external-port').fill('19999') // sin puente: el pedido falla
     await page.getByTestId('agent-external-on').click()
     await expect(page.getByTestId('agent-external-bar')).toContainText('allow local network access', { timeout: 10_000 })
+  })
+})
+
+test.describe('Agent panel on a narrower window', () => {
+  test.use({ viewport: { width: 1280, height: 800 } })
+  test('starts closed with the Agents rail in view; opened by hand it stays open after a reload', async ({ page }) => {
+    await page.goto('/')
+    const input = page.getByTestId('command-input')
+    await expect(input).toBeVisible()
+    await expect(page.getByTestId('agent-panel')).toHaveCount(0)
+    await expect(page.getByTestId('agent-tab')).toContainText('Agents')
+    await page.getByTestId('agent-tab').click()
+    await expect(page.getByTestId('agent-panel')).toBeVisible()
+    await page.reload()
+    await expect(input).toBeVisible()
+    await expect(page.getByTestId('agent-panel')).toBeVisible()
   })
 })

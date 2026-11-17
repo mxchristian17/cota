@@ -6,7 +6,12 @@ Toolbars, settings, installing the app, and the keyboard and mouse.
 
 Cota has 23 classic toolbars with icons: Dimension, Standard, Styles, Layers, Layers II, Properties, Draw, Modify,
 Modify II, Object Snap, UCS, View, Visual Styles, Zoom, Viewports, Layouts, Modeling, Solid Editing, Text,
-Multileader, Insert, Inquiry and Drawing Views. Only Dimension is shown at first.
+Multileader, Insert, Inquiry and Drawing Views. At first only Draw (left edge) and Modify (right edge) are shown; on a
+phone, in the full editor, none is shown until you turn one on.
+
+**Icon size:** in **Options ▸ Display ▸ Toolbars**, *Toolbar icons* sets the icons to Small (16 px, the default),
+Medium (20 px) or Large (24 px). Each size is drawn on its own pixel grid, so the lines stay sharp at every size and on
+high-density screens.
 
 - **Show or hide them** from **Tools ▸ Toolbars** (a check mark means visible), by **right-clicking** any
   toolbar, with `TOOLBAR` (a dialog with *Show all*, *Hide all* and *Reset*), or from the command line with

@@ -2,12 +2,14 @@ import { LayerCombo } from './LayerCombo'
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/store'
 import { focusCommandLine } from './focus'
-import { ICONS } from './icons'
+import { iconMarkup } from './icons'
+import { ICON_PX, type IconSize } from './iconGrid'
 import { clampToolbar, dockedOn, dockSideAt, insertIndex, type ToolbarSide } from '../core/ui/toolbar'
 import { itemTitle, TOOLBAR_BY_ID, TOOLBARS, type ToolbarCombo, type ToolbarDef } from '../core/ui/toolbars'
 import { BYBLOCK, BYLAYER, linetypeLabel } from '../core/linetype/linetypes'
 import { LINEWEIGHTS, lineweightLabel } from '../core/document/objectProps'
 import { ColorSelect } from './ColorSelect'
+import { UiIcon } from './uiIcons'
 
 /**
  * Barras de herramientas clásicas: acopladas a un borde del área de dibujo (varias por borde) o flotantes con
@@ -18,8 +20,26 @@ import { ColorSelect } from './ColorSelect'
 const SIDES: ToolbarSide[] = ['top', 'left', 'right', 'bottom']
 const SIDE_LABEL: Record<ToolbarSide, string> = { left: 'Left', right: 'Right', top: 'Top', bottom: 'Bottom' }
 
-export function ToolIcon({ name }: { name: string }) {
-  return <svg className="tb-icon" viewBox="0 0 16 16" aria-hidden="true" dangerouslySetInnerHTML={{ __html: ICONS[name] ?? '' }} />
+/**
+ * Ícono de herramienta en el tamaño elegido (Options ▸ Display) o en uno fijo. Cada tamaño es su propio dibujo en
+ * su grilla de píxeles: el `viewBox` mide lo mismo que el ícono en pantalla, así nada se escala ni se borronea.
+ */
+export function ToolIcon({ name, size }: { name: string; size?: IconSize }) {
+  const pref = useStore((s) => s.toolIconSize)
+  const sz = size ?? pref
+  const px = ICON_PX[sz]
+  return (
+    <svg
+      className="tb-icon"
+      width={px}
+      height={px}
+      viewBox={`0 0 ${px} ${px}`}
+      data-size={sz}
+      aria-hidden="true"
+      focusable="false"
+      dangerouslySetInnerHTML={{ __html: iconMarkup(name, sz) }}
+    />
+  )
 }
 
 /** Rectángulo del área de dibujo (sus bordes son donde se acoplan las barras). */
@@ -127,6 +147,13 @@ function Combo({ combo, testId }: { combo: ToolbarCombo; testId: string }) {
 /** Botones y listas de una barra. Vertical no lleva listas (no entran), como en los CAD de escritorio. */
 function ToolbarBody({ def, vertical }: { def: ToolbarDef; vertical: boolean }) {
   const runMacro = useStore((s) => s.runMacro)
+  const listCommands = useStore((s) => s.listCommands)
+  /** Alias más corto de cada comando, para el tooltip (`LINE` → `L`). */
+  const aliasOf = (name: string): string => {
+    const c = listCommands().find((x) => x.name === name)
+    const a = (c?.aliases ?? []).filter((x) => x.length < name.length).sort((p, q) => p.length - q.length)[0]
+    return a ?? ''
+  }
   return (
     <div className="toolbar-body">
       {def.items.map((it, i) =>
@@ -138,8 +165,11 @@ function ToolbarBody({ def, vertical }: { def: ToolbarDef; vertical: boolean }) 
           <button
             key={i}
             className="tb-btn"
-            title={itemTitle(it)}
+            data-tip={it.label}
+            data-tip-cmd={it.run.filter((x) => x !== '').join(' ')}
+            data-tip-alias={aliasOf(it.run.find((x) => x !== '')?.replace(/^[_^C]+/, '').toUpperCase() ?? '')}
             aria-label={it.label}
+            aria-description={itemTitle(it)}
             data-testid={`tb-${def.id}-${it.icon}`}
             // Sin robar el foco: los botones de referencia a objetos entran en el prompt en curso.
             onMouseDown={(e) => e.preventDefault()}
@@ -248,7 +278,7 @@ function ToolbarView({ def, onMenu }: { def: ToolbarDef; onMenu: (id: string, x:
             }}
             data-testid={`${testBase}-close`}
           >
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
       ) : (
@@ -296,8 +326,8 @@ function ToolbarMenu({ at, onClose }: { at: { id: string | null; x: number; y: n
           </>
         )}
         {TOOLBARS.map((t) => (
-          <button key={t.id} className="command-item" onClick={act(() => setToolbar(t.id, { visible: !toolbars[t.id]?.visible }))} data-testid={`toolbar-menu-${t.id}`}>
-            <span className="command-check">{toolbars[t.id]?.visible ? '✓' : ''}</span>
+          <button key={t.id} className="command-item" onClick={act(() => setToolbar(t.id, { visible: !toolbars[t.id]?.visible }))} data-testid={`toolbar-menu-${t.id}`} aria-pressed={!!toolbars[t.id]?.visible}>
+            <span className="command-check">{toolbars[t.id]?.visible ? <UiIcon name="check" size={13} /> : ''}</span>
             {t.name}
           </button>
         ))}
@@ -373,14 +403,14 @@ export function ToolbarDialog() {
         <div className="modal-header">
           <h2>Toolbars</h2>
           <button className="icon-btn" onClick={done} aria-label="Close">
-            ✕
+            <UiIcon name="close" />
           </button>
         </div>
         <div className="toolbar-dialog-list">
           {TOOLBARS.map((t) => (
             <label key={t.id} className="toolbar-dialog-item">
               <input type="checkbox" checked={!!toolbars[t.id]?.visible} onChange={(e) => setToolbar(t.id, { visible: e.target.checked })} data-testid={`toolbar-check-${t.id}`} />
-              <ToolIcon name={(t.items.find((it) => it.kind === 'cmd') as { icon: string } | undefined)?.icon ?? ''} />
+              <ToolIcon size="sm" name={(t.items.find((it) => it.kind === 'cmd') as { icon: string } | undefined)?.icon ?? ''} />
               <span>{t.name}</span>
             </label>
           ))}
