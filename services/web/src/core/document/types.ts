@@ -781,6 +781,11 @@ export interface ShadeProps {
   index?: number[]
   /** Color de cada triángulo: r, g, b en 0..1 (3 números por triángulo). */
   colors: number[]
+  /**
+   * Triángulos en el orden de pintado exacto, sin las caras tapadas (`orderShade`); los dibujos anteriores se
+   * ordenan al abrirlos.
+   */
+  ordered?: boolean
 }
 
 export interface ShadeEntity extends EntityCommon {

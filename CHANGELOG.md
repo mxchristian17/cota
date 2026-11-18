@@ -4,6 +4,18 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.49.1] — 2026-11-18
+
+### Fixed
+- **Shaded drawing views showed hidden faces in streaks** (on screen, in the PDF and in the DXF): faces behind the
+  front of a part, such as the sides of each section of a radiator, came through as light slivers. The faces of a
+  shaded view are now painted in an exact order computed from their depth, and faces that are hidden everywhere are
+  left out (an isometric view of a 10-section radiator went from 20,881 to 6,619 triangles). Drawings from earlier
+  versions are ordered when opened.
+- **The front faces of a shaded isometric view were almost black**: the shading adds a light from the viewer to the
+  key light from the upper left, so no visible face falls below about half its color.
+- **The screen showed shaded views lighter than the plotted PDF**: both now show the same tones.
+
 ## [2.49.0] — 2026-11-18
 
 ### Added

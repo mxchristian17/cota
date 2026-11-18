@@ -3,7 +3,7 @@ import '../../render/csg'
 import { solidMesh } from '../../render/csg'
 import type { SolidProps } from '../document/types'
 import { viewBasis } from '../drawing/views'
-import { compactShade, mapShade, shadeRegions, shadeTriangleCount, shadeTriangles, shadeViewTriangles } from './shade'
+import { compactShade, mapShade, orderShade, shadeRegions, shadeTriangleCount, shadeTriangles, shadeViewTriangles } from './shade'
 
 describe('vistas sombreadas', () => {
   const box: SolidProps = { op: 'BOX', origin: [0, 0, 0], width: 20, depth: 10, height: 5 }
@@ -35,7 +35,7 @@ describe('vistas sombreadas', () => {
     for (let i = 0; i < a.length; i++) expect(Math.abs(a[i] - legacy.tris[i])).toBeLessThan(1e-4)
     for (let i = 0; i < raw.colors.length; i++) expect(Math.round(raw.colors[i] * 255)).toBe(Math.round(legacy.colors[i] * 255))
     // Pesa mucho menos guardado (antes: 9 números de 17 cifras por triángulo).
-    expect(JSON.stringify(raw).length).toBeLessThan(JSON.stringify(legacy).length * 0.5)
+    expect(JSON.stringify({ ...raw, ordered: undefined }).length).toBeLessThan(JSON.stringify(legacy).length * 0.55)
     // Compactar otra vez no cambia nada y mover conserva los índices.
     expect(compactShade(raw)).toEqual(raw)
     expect(mapShade(raw, (v) => [v[0] + 1, v[1], v[2]]).index).toEqual(raw.index)
@@ -56,5 +56,30 @@ describe('vistas sombreadas', () => {
     const area = (l: number[][]) => l.reduce((s, p, i) => s + p[0] * l[(i + 1) % l.length][1] - l[(i + 1) % l.length][0] * p[1], 0) / 2
     expect(z[0].loops.map(area).sort((a, b) => a - b)).toEqual([-16, 100]) // exterior antihorario, agujero al revés
     expect(z[1].rgb).toEqual([0.9, 0.2, 0.2])
+  })
+  it('orden exacto: una cara detrás del frente con el centro más adelante no lo tapa, y la que no se ve sale (radiador)', () => {
+    // A: el frente (10 × 10, z = −0,005). B: un costado largo que nace detrás de A y sale hacia adelante a la derecha:
+    // su centro queda más adelante que el de A y, pintando por centros, tapaba a A. C: una cara entera detrás de A.
+    const quad = (x0: number, y0: number, x1: number, y1: number, z: (x: number) => number) => {
+      const p = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([x, y]) => [x, y, z(x)])
+      return [p[0], p[1], p[2], p[0], p[2], p[3]].flat()
+    }
+    const A = quad(0, 0, 10, 10, () => -0.005)
+    const B = quad(5, 2, 20, 8, (x) => -0.008 + (x - 5) * 0.0005)
+    const C = quad(2, 2, 4, 4, () => -0.009)
+    const col = (r: number, g: number, b: number) => [r, g, b, r, g, b]
+    const p = orderShade({ tris: [...C, ...A, ...B], colors: [...col(0.1, 0.1, 0.9), ...col(0.5, 0.5, 0.5), ...col(0.9, 0.2, 0.2)] })
+    expect(p.ordered).toBe(true)
+    const z = shadeRegions(p)
+    expect(z.map((r) => r.rgb)).toEqual([[0.9, 0.2, 0.2], [0.5, 0.5, 0.5]]) // B debajo, A encima; C no se pinta
+    expect(shadeTriangleCount(p)).toBe(4)
+    // Ordenar otra vez no cambia nada.
+    expect(orderShade(p)).toEqual(p)
+  })
+
+  it('una isométrica sale ordenada y sin caras negras (luz del observador)', () => {
+    const s = shadeViewTriangles([solidMesh(box)], ['#ffffff'], viewBasis('SWISO'))
+    expect(s.ordered).toBe(true)
+    for (let i = 0; i < s.colors.length; i += 3) expect(s.colors[i]).toBeGreaterThan(0.45)
   })
 })

@@ -13,7 +13,7 @@ import { BYBLOCK, BYLAYER, CONTINUOUS, CONTINUOUS_DEF, isSpecialLinetype, librar
 import { defaultPageSetup } from '../layout/paper'
 import { updateDimension } from '../dimension/assoc'
 import { sanitizeNote } from '../geom/note'
-import { compactShade } from '../projection/shade'
+import { orderShade } from '../projection/shade'
 import {
   builtinDimStyles,
   BUILTIN_DIM_VARS,
@@ -87,12 +87,12 @@ export class DocumentModel {
   }
 
   /**
-   * Sombreados de las vistas guardados por 2.48 y anteriores (cada triángulo con sus tres vértices de 17 cifras): se
-   * compactan al abrir, así el próximo guardado pesa ~4 veces menos sin cambiar nada de lo que se ve.
+   * Sombreados de las vistas guardados por 2.49 y anteriores: se compactan (los de 2.48, cada triángulo con sus tres
+   * vértices de 17 cifras, pesan ~4 veces menos) y se ordenan para pintarlos sin que asomen las caras tapadas.
    */
   private compactShades(): void {
     for (const list of [this.data.entities, ...(this.data.layouts ?? []).map((l) => l.entities), ...(this.data.blocks ?? []).map((b) => b.entities)]) {
-      for (const e of list) if (e.type === 'SHADE' && !e.props.index) e.props = compactShade(e.props)
+      for (const e of list) if (e.type === 'SHADE' && !e.props.ordered) e.props = orderShade(e.props)
     }
   }
 

@@ -3478,14 +3478,20 @@ export class Viewport {
     g.setAttribute('position', this.local(shadeTriangles(e.props)))
     const col: number[] = []
     const n = shadeTriangleCount(e.props)
+    // Los colores son los del papel (sRGB, como en el PDF): los colores de vértice van en lineal, si no la pantalla
+    // los mostraba más claros que el plano impreso.
+    const c = new THREE.Color()
     for (let i = 0; i < n; i++) {
-      const [r, gr, b] = [e.props.colors[i * 3] ?? 0.7, e.props.colors[i * 3 + 1] ?? 0.7, e.props.colors[i * 3 + 2] ?? 0.7]
       const k = selected ? 0.6 : 1
-      for (let v = 0; v < 3; v++) col.push(r * k, gr * k, b * k + (selected ? 0.35 : 0))
+      c.setRGB((e.props.colors[i * 3] ?? 0.7) * k, (e.props.colors[i * 3 + 1] ?? 0.7) * k, Math.min(1, (e.props.colors[i * 3 + 2] ?? 0.7) * k + (selected ? 0.35 : 0)), THREE.SRGBColorSpace)
+      for (let v = 0; v < 3; v++) col.push(c.r, c.g, c.b)
     }
     g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3))
-    // Profundidad real en z (debajo del papel, ver `shadeViewTriangles`): las piezas que se cruzan se resuelven.
-    const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }))
+    // Los triángulos ya vienen en el orden de pintado exacto (`orderShade`): se pintan en ese orden, sin prueba de
+    // profundidad y antes que el resto. Con la profundidad (una milésima del modelo, debajo del papel) no alcanzaba la
+    // precisión del búfer y las caras tapadas asomaban en vetas (el costado de cada elemento de un radiador).
+    const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, depthTest: false, depthWrite: false }))
+    mesh.renderOrder = -1
     mesh.userData.entityId = e.id
     mesh.userData.lowPick = true // como el relleno de un sombreado: una línea cercana gana el pick
     return mesh
