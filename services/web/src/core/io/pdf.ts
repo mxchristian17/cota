@@ -191,6 +191,7 @@ export const paintOrder = (b: Record<PaintLayer, string>): string => b.draw + b.
  * Sombreado de una vista: cada zona de un color (una cara plana con todos sus triángulos, ver `shadeRegions`) se
  * rellena entera, en el orden de pintado (de atrás hacia adelante), y se repasa con un trazo de un píxel del mismo
  * color: sin vetas claras entre triángulos (el suavizado de cada borde dejaba ver el papel) ni entre zonas vecinas.
+ * Una zona cuyos contornos no cierran (`nonzero`) se rellena con sus triángulos y la regla no-cero, en un solo trazado.
  * En gris o monocromo se plotea su luminancia.
  */
 export function shadeOps(p: ShadeProps, map: (q: Vec3) => [number, number], plotStyle: PlotStyle): string {
@@ -201,7 +202,7 @@ export function shadeOps(p: ShadeProps, map: (q: Vec3) => [number, number], plot
     const c = `${f(r)} ${f(g)} ${f(b)}`
     s += `${c} rg\n${c} RG\n`
     for (const loop of z.loops) s += loop.map((q, j) => { const [x, y] = map(q); return `${f(x)} ${f(y)} ${j === 0 ? 'm' : 'l'}\n` }).join('') + 'h\n'
-    s += 'B*\n'
+    s += z.nonzero ? 'B\n' : 'B*\n'
   }
   // Ancho 0: el trazo más fino del dispositivo (un píxel en pantalla); el estado gráfico vuelve como estaba.
   return s ? `q\n0 w\n${s}Q\n` : ''

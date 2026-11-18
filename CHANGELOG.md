@@ -4,6 +4,14 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.49.2] — 2026-11-18
+
+### Fixed
+- **Shaded views in the PDF and the DXF had blank wedges and gaps** (the side of a radiator came out almost white):
+  faces whose triangles meet with a vertex on the side of a neighbor (common after boolean operations) were filled by
+  their outline, which did not close. Those faces are now filled by their triangles (PDF) or as one solid per triangle
+  (DXF), so the filled area is always that of the face.
+
 ## [2.49.1] — 2026-11-18
 
 ### Fixed

@@ -82,4 +82,14 @@ describe('vistas sombreadas', () => {
     expect(s.ordered).toBe(true)
     for (let i = 0; i < s.colors.length; i += 3) expect(s.colors[i]).toBeGreaterThan(0.45)
   })
+  it('zonas con un vértice sobre el lado de un vecino: el relleno cubre toda el área de sus triángulos (radiador)', () => {
+    // Un cuadrado de 10 en tres triángulos del mismo color: (5,5) cae sobre la diagonal del primero.
+    const P = [[0, 0], [10, 0], [0, 10], [10, 10], [5, 5]]
+    const T = [[0, 1, 2], [1, 3, 4], [4, 3, 2]]
+    const tris = T.flatMap((t) => t.flatMap((k) => [P[k][0], P[k][1], -0.001]))
+    const z = shadeRegions({ tris, colors: T.flatMap(() => [0.5, 0.5, 0.5]) })
+    const area = (l: number[][]) => l.reduce((s, p, i) => s + p[0] * l[(i + 1) % l.length][1] - l[(i + 1) % l.length][0] * p[1], 0) / 2
+    const total = z.reduce((s, r) => s + r.loops.reduce((a, l) => a + (r.nonzero ? Math.abs(area(l)) : area(l)), 0), 0)
+    expect(total).toBeCloseTo(100, 9)
+  })
 })

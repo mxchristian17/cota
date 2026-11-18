@@ -388,6 +388,12 @@ export interface ShadeRegion {
   rgb: [number, number, number]
   /** Contornos (el exterior y sus agujeros), cada uno cerrado implícitamente; rellenar con la regla par-impar. */
   loops: Vec3[][]
+  /**
+   * Los contornos no cierran con el área de sus triángulos (vértices sobre el lado de un vecino, típicos del teselado
+   * de las operaciones booleanas): `loops` son sus triángulos y se rellenan con la regla no-cero (la par-impar dejaba
+   * huecos y cuñas sin pintar en el PDF y el DXF).
+   */
+  nonzero?: boolean
 }
 
 /**
@@ -442,11 +448,20 @@ export function shadeRegions(p: ShadeProps): ShadeRegion[] {
       }
       if (loop.length >= 3) loops.push(loop)
     }
-    if (!loops.length) continue
-    regions.push({ rgb: shadeColor(p, members[0]), loops, at: members.reduce((a, i) => a + i, 0) / members.length })
+    const at = members.reduce((a, i) => a + i, 0) / members.length
+    // Control: el área de los contornos (par-impar) tiene que ser la de los triángulos.
+    const area2 = (l: Vec3[]) => l.reduce((a, q, k) => a + q[0] * l[(k + 1) % l.length][1] - l[(k + 1) % l.length][0] * q[1], 0)
+    let triArea = 0
+    for (const i of members) triArea += area2(tri[i]!.map(V))
+    const loopArea = loops.reduce((a, l) => a + area2(l), 0)
+    if (!loops.length || Math.abs(loopArea - triArea) > 1e-6 * Math.abs(triArea) + 1e-12) {
+      regions.push({ rgb: shadeColor(p, members[0]), loops: members.map((i) => tri[i]!.map(V)), nonzero: true, at })
+      continue
+    }
+    regions.push({ rgb: shadeColor(p, members[0]), loops, at })
   }
   regions.sort((a, b) => a.at - b.at)
-  return regions.map(({ rgb, loops }) => ({ rgb, loops }))
+  return regions.map(({ rgb, loops, nonzero }) => (nonzero ? { rgb, loops, nonzero } : { rgb, loops }))
 }
 
 /** Contorno de un sombreado: el rectángulo que lo envuelve (en su plano XY). */

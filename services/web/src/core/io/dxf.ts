@@ -259,6 +259,14 @@ function shadeDxf(props: ShadeProps, h: string): string | null {
   for (const r of regions) {
     const [cr, cg, cb] = r.rgb.map((c) => Math.round(Math.max(0, Math.min(1, c)) * 255))
     const head = h + p(420, cr * 65536 + cg * 256 + cb)
+    if (r.nonzero) {
+      // Zona sin contorno limpio: un SOLID por triángulo (el cuarto vértice repite el tercero).
+      for (const l of r.loops) {
+        const c = l.map(flat)
+        out += p(0, 'SOLID') + head + [c[0], c[1], c[2], c[2]].map((q, i) => p(10 + i, q[0]) + p(20 + i, q[1]) + p(30 + i, q[2])).join('')
+      }
+      continue
+    }
     const loop = r.loops.length === 1 ? r.loops[0].map(flat) : null
     if (loop && (loop.length === 3 || (loop.length === 4 && convexQuad(loop)))) {
       // SOLID: el cuarto vértice va en el lugar del tercero (el CAD clásico los recorre 1-2-4-3).
