@@ -380,10 +380,7 @@ export default function App() {
         >
           <UiIcon name="panel-left" />
         </button>
-        <span className="brand" title="Cota — free CAD in your browser" aria-label="Cota">
-          <img className="brand-mark" src={`${import.meta.env.BASE_URL}icon.svg`} alt="" width="18" height="18" />
-          <span dangerouslySetInnerHTML={{ __html: BRAND_HTML }} />
-        </span>
+        <span className="brand" title="Cota — free CAD in your browser" aria-label="Cota" dangerouslySetInnerHTML={{ __html: BRAND_HTML }} />
         <input
           className="doc-name-input"
           value={docFolder ? `${docFolder}/${docName}` : docName}

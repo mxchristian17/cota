@@ -4,6 +4,13 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.48.1] — 2026-11-17
+
+### Fixed
+- **The Cota logo appeared twice** in the top bar (computer and phone) after the new interface.
+- **Command aliases in the menus overlapped the description** when they were long (`CLOUDSTORAGE`): the alias column
+  is wider and a longer alias is cut with an ellipsis; hovering it shows all the aliases of the command.
+
 ## [2.48.0] — 2026-11-17
 
 ### Changed

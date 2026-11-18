@@ -192,15 +192,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-weight: 700;
-  font-size: var(--fs-md);
-  letter-spacing: 0.12em;
   color: var(--c-text);
-}
-.brand-mark {
-  flex: none;
-  display: block;
-  border-radius: 4px;
 }
 .spacer {
   flex: 1;
@@ -1802,7 +1794,8 @@ input::placeholder {
 }
 .command-item {
   display: grid;
-  grid-template-columns: 88px 30px 1fr;
+  /* Alias en su propia columna: el más largo (CLOUDSTORAGE) se recorta en vez de pisar la descripción. */
+  grid-template-columns: 92px 66px 1fr;
   align-items: baseline;
   gap: 6px;
   width: 100%;
@@ -1827,6 +1820,9 @@ input::placeholder {
   color: var(--c-ink-text);
   font-family: var(--font-mono);
   font-size: var(--fs-micro);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .command-item:hover .command-item-alias,
 .command-item:hover .command-item-desc {
@@ -3450,11 +3446,6 @@ div.lt-row {
 /* --- Celular (pasada 2): barra superior y dock inferior con la misma vara que el escritorio --- */
 .m-top .brand {
   font-size: 14px;
-}
-.m-top .brand-mark {
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
 }
 .m-space {
   background: var(--c-sunken);

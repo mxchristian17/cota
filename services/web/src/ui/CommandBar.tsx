@@ -133,7 +133,7 @@ export function CommandBar() {
                 ) : en.kind === 'cmd' ? (
                   <button key={en.cmd.name} className="command-item" onClick={() => run(en.cmd.name)} title={en.cmd.description} data-testid={`menu-cmd-${en.cmd.name}`}>
                     <span className="command-item-name mono">{en.cmd.name}</span>
-                    <span className="command-item-alias mono">{en.cmd.aliases[0] ?? ''}</span>
+                    <span className="command-item-alias mono" title={en.cmd.aliases.join(', ') || undefined}>{en.cmd.aliases[0] ?? ''}</span>
                     <span className="command-item-desc">{en.cmd.description}</span>
                   </button>
                 ) : en.id === 'zoom' ? (
