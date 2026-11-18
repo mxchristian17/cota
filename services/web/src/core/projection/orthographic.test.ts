@@ -104,3 +104,21 @@ describe('FLATSHOT: fusión de tramos y círculos exactos (revisión 2026-10-13)
   })
 })
 
+
+describe('reconocimiento de arcos (radiador, vista superior del elemento)', () => {
+  it('dos empalmes de esquina unidos por un borde recto largo no se vuelven un arco enorme', () => {
+    const pts: Array<[number, number]> = []
+    for (let k = 0; k <= 6; k++) {
+      const a = Math.PI + ((Math.PI / 2) * k) / 6
+      pts.push([3 + 2 * Math.cos(a), 2 + 2 * Math.sin(a)])
+    }
+    for (let k = 0; k <= 6; k++) {
+      const a = (3 * Math.PI) / 2 + ((Math.PI / 2) * k) / 6
+      pts.push([77 + 2 * Math.cos(a), 2 + 2 * Math.sin(a)])
+    }
+    const segs = pts.slice(1).map((b, i) => ({ a: pts[i], b, hidden: false }))
+    const items = mergeSegments(segs, 0.02)
+    expect(items.filter((it) => it.kind !== 'line' && it.r > 10)).toEqual([])
+    expect(items.some((it) => it.kind === 'line' && Math.abs(Math.hypot(it.b[0] - it.a[0], it.b[1] - it.a[1]) - 74) < 1e-6)).toBe(true)
+  })
+})

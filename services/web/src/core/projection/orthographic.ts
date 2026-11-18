@@ -294,7 +294,10 @@ export function projectHiddenGroups(groups: Mesh[][], basis: ProjBasis, opts: { 
   // propia arista (bordes cortados en trazos). En esas mallas no tapa a una arista un triángulo propio que pasa a menos de
   // esa distancia (en 3D) del punto.
   const meshes = groups.flat()
-  const touch = meshes.map((m) => (m.imported && !m.topo && !m.surf ? 1e-3 * meshDiag(m) : 0))
+  // En los sólidos propios, lo mismo con tres diezmilésimas: el teselado de un empalme deja aristas a centésimas de la cara
+  // vecina, y una cara casi paralela a la vista (de canto) las tapaba por profundidad (medio borde del cabezal de un
+  // radiador desaparecía en la vista superior).
+  const touch = meshes.map((m) => (m.imported && !m.topo && !m.surf ? 1e-3 : 3e-4) * meshDiag(m))
   const occluded = (pu: number, pv: number, pd: number, p?: Vec3, mi = -1): boolean => {
     const [gx, gy] = cellOf(pu, pv)
     for (const k of grid[gy * G + gx]) {
@@ -522,10 +525,15 @@ function splitChain(pts: P2[], closed: boolean, tol: number, hidden: boolean): P
   const fits = (i: number, j: number): ReturnType<typeof fitCircle> => {
     const f = fitCircle(pts.slice(i, j + 1))
     if (!f) return null
-    let L = 0
-    for (let k = i; k < j; k++) L = Math.max(L, d2(pts[k], pts[k + 1]))
+    const lens: number[] = []
+    for (let k = i; k < j; k++) lens.push(d2(pts[k], pts[k + 1]))
+    const L = Math.max(...lens)
     // Tramos de teselación: cortos respecto del radio (un tramo recto largo no es parte del arco).
     if (L > 0.3 * f.r) return null // > ~17° por tramo: no es teselación de un arco
+    // …y parejos: dos empalmes de esquina unidos por un borde recto largo pasaban por un arco enorme (con ese tramo la
+    // flecha admitida crecía a milímetros): la «sonrisa» bajo la vista superior del elemento de un radiador.
+    const sorted = [...lens].sort((a, b) => a - b)
+    if (L > 4 * sorted[Math.floor(sorted.length / 2)]) return null
     return f.err <= Math.max(tol, (1.5 * L * L) / (8 * f.r)) ? f : null
   }
   /** Giro total de i a j (para no llamar arco a una recta con ruido). */

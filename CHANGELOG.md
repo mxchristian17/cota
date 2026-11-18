@@ -4,6 +4,15 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.49.3] — 2026-11-18
+
+### Fixed
+- **Drawing views lost part of an outline** (half of the rear edge of a radiator section's header in its top view):
+  where a fillet's tessellation leaves an edge a hundredth of a millimeter from the next face, a face seen edge-on
+  counted as hiding it. A part's own faces now hide an edge only when they are farther than a small 3D distance from it.
+- **A large arc appeared under some views** (top view and section of a radiator section): two corner fillets joined by
+  a long straight edge were taken as one arc. Arcs are now recognized only from evenly tessellated chains.
+
 ## [2.49.2] — 2026-11-18
 
 ### Fixed
