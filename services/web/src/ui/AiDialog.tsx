@@ -70,9 +70,9 @@ export function AiDialog() {
 
   return (
     <div className="modal-backdrop" onClick={close} data-testid="ai-dialog">
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(640px, 94vw)' }}>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="ai-title" onClick={(e) => e.stopPropagation()} style={{ width: 'min(640px, 94vw)' }}>
         <div className="modal-header">
-          <h2>AI — generate / edit model</h2>
+          <h2 id="ai-title">AI — generate / edit model</h2>
           <div style={{ display: 'flex', gap: 4 }}>
             <button className="icon-btn" onClick={() => setMinimized(true)} title="Minimize (keep working / preview)" data-testid="ai-minimize">
               <UiIcon name="minus" />

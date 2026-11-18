@@ -9,6 +9,9 @@ import { DocumentModel } from '../document/DocumentModel'
 import { expandEntities } from '../editing/block'
 import { fieldContextFor, resolveFieldTexts } from '../fields/context'
 import { activateTab, addViewport, layoutViewports, viewportAt } from './layouts'
+import { iramTitleBlock } from './titleblock'
+import { textSize } from '../geom/text'
+import { makeEngine } from '../../test/engineHarness'
 import { fitViewport, modelToPaper, modelViewHeight, newViewportProps, viewAngles, viewBasis, viewNameOf, viewportRing } from './viewport'
 
 const close = (a: number[], b: number[]) => a.forEach((v, i) => expect(v).toBeCloseTo(b[i], 6))
@@ -168,6 +171,75 @@ describe('rótulo IRAM (criterio 13)', () => {
     const small = doc.addLayout('Chico', { ...defaultPageSetup('A4'), customSize: [100, 140], paper: 'CUSTOM', orientation: 'portrait' })
     activateTab(doc, small.id, '0')
     expect(small.entities.map((e) => e.type)).toEqual(['RECTANGLE', 'VIEWPORT'])
+  })
+})
+
+describe('rótulo: DWGPROPS, escala de las vistas y celdas (R10, B07, B08, B09)', () => {
+  const shownTexts = (doc: DocumentModel, tab: string) =>
+    resolveFieldTexts(expandEntities(doc.layoutEntities(tab), doc.blocks), fieldContextFor(doc, 'radiador.cota', tab)).flatMap((e) => (e.type === 'TEXT' ? [e] : []))
+
+  it('TITLE, DRAWN y COMPANY toman Title, Author y la propiedad Company de DWGPROPS', () => {
+    const doc = DocumentModel.createDefault()
+    activateTab(doc, 'L1', '0')
+    doc.meta.title = 'Radiador'
+    doc.meta.author = 'C. Orengia'
+    doc.meta.custom = { company: 'Taller Norte' }
+    const shown = shownTexts(doc, 'L1').map((e) => e.props.text)
+    for (const t of ['Radiador', 'C. Orengia', 'Taller Norte']) expect(shown).toContain(t)
+  })
+
+  it('SCALE toma la escala de la vista base cuando la hoja no tiene viewport (VIEWBASE)', () => {
+    const doc = DocumentModel.createDefault()
+    activateTab(doc, 'L1', '0')
+    const vp = layoutViewports(doc)[0]
+    doc.removeEntity(vp.id)
+    doc.setBlock({ name: '*VIEW1', entities: [{ id: 'l', type: 'LINE', layer: '0', props: { start: [-10, 0, 0], end: [10, 0, 0] } }] })
+    const view = { orientation: 'FRONT', basis: { right: [1, 0, 0], up: [0, 0, 1], out: [0, -1, 0] }, hidden: 'visible', source: null }
+    doc.addEntity({ type: 'INSERT', layer: '0', props: { name: '*VIEW1', position: [100, 150, 0], scale: [0.2, 0.2, 0.2], rotation: 0, view } } as never)
+    expect(shownTexts(doc, 'L1').map((e) => e.props.text)).toContain('1:5')
+  })
+
+  it('un título largo se comprime para no pisar la celda DATE', () => {
+    const doc = DocumentModel.createDefault()
+    activateTab(doc, 'L1', '0')
+    doc.meta.title = 'Radiador de calefacción con cabezales soldados y tapones roscados, conjunto general'
+    const t = shownTexts(doc, 'L1').find((e) => e.props.text.startsWith('Radiador'))!
+    expect(t.props.fitWidth).toBeGreaterThan(0)
+    expect(textSize(t.props).width).toBeLessThanOrEqual(t.props.fitWidth! + 1e-9)
+    const ins = doc.layoutEntities('L1').find((e) => e.type === 'INSERT')!
+    // El texto empieza en x = -173 del rótulo y la celda DATE en -40.
+    expect(ins.type === 'INSERT' && ins.props.position[0] - 173 + textSize(t.props).width).toBeLessThan(ins.type === 'INSERT' ? ins.props.position[0] - 40 : 0)
+  })
+
+  it('un rótulo de una versión anterior (atributos vacíos) se pone al día y UPDATEFIELD completa los vacíos', async () => {
+    const h = makeEngine()
+    const old = iramTitleBlock()
+    for (const e of old.entities) {
+      if (e.type === 'ATTDEF') e.props = { ...e.props, value: '' }
+      if (e.type === 'ATTDEF' || e.type === 'TEXT') delete e.props.fitWidth
+    }
+    h.doc.setBlock(old)
+    activateTab(h.doc, 'L1', '0')
+    const ins = h.doc.layoutEntities('L1').find((e) => e.type === 'INSERT')!
+    if (ins.type !== 'INSERT') throw new Error('sin rótulo')
+    ins.props.attributes = ins.props.attributes!.map((a) => ({ ...a, value: '' }))
+    h.doc.setActiveTab('L1')
+    h.doc.meta.title = 'Radiador'
+    await h.run('UPDATEFIELD', 'ALL', '')
+    expect(ins.props.attributes.find((a) => a.tag === 'TITLE')?.value).toBe('%<\\AcVar Title>%')
+    expect(shownTexts(h.doc, 'L1').map((e) => e.props.text)).toContain('Radiador')
+  })
+
+  it('ATTEDIT toma el rótulo con un punto dentro de una celda (tecleado)', async () => {
+    const h = makeEngine()
+    activateTab(h.doc, 'L1', '0')
+    h.doc.setActiveTab('L1')
+    const ins = h.doc.layoutEntities('L1').find((e) => e.type === 'INSERT')!
+    if (ins.type !== 'INSERT') throw new Error('sin rótulo')
+    const [x, y] = ins.props.position
+    await h.run('ATTEDIT', `#${x - 100},${y + 25}`, '', 'Plano de conjunto', '', '', '', '')
+    expect(h.prints.join('\n')).not.toContain('not a block')
+    expect(ins.props.attributes!.find((a) => a.tag === 'TITLE')?.value).toBe('Plano de conjunto')
   })
 })
 

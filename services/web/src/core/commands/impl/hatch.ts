@@ -42,7 +42,10 @@ export function boundarySet(ctx: CommandContext): Entity[] {
   const hidden = hiddenLayerIds(ctx.doc.layers)
   const frozen = frozenLayerIds(ctx.doc.layers)
   const visible = ctx.doc.entities.filter((e) => !hidden.has(e.layer) && !frozen.has(e.layer) && e.type !== 'HATCH')
-  return expandEntities(visible, ctx.doc.blocks, { attdisp: ctx.doc.attdisp, skipLayers: frozen })
+  // Las líneas ocultas de una vista de dibujo (capa MD_Hidden) no delimitan: están detrás de la cara que se raya. Con
+  // ellas el corte quedaba partido o abierto y el punto interior tomaba la hoja entera (R16).
+  const behind = new Set(ctx.doc.layers.filter((l) => /^MD_Hidden$/i.test(l.name)).map((l) => l.id))
+  return expandEntities(visible, ctx.doc.blocks, { attdisp: ctx.doc.attdisp, skipLayers: frozen }).filter((e) => !behind.has(e.layer))
 }
 
 /** `Properties` de -HATCH: patrón (o Solid/User defined), escala y ángulo. */

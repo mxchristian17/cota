@@ -3,6 +3,9 @@ import { ISO_AZ, type CameraMode, type ViewName } from '../core/view'
 
 const ISO_EL = Math.atan(1 / Math.SQRT2) // ~35.264°
 const EL_LIMIT = 1.5533 // ~89° (evita el gimbal lock del top/bottom exacto)
+/** Giro de un arrastre de todo el ancho de la vista en las órbitas (270°), y el ancho mínimo para calcularlo. */
+const ORBIT_SWEEP = 1.5 * Math.PI
+const ORBIT_MIN_WIDTH = 400
 
 /**
  * Controla dos cámaras (ortográfica y perspectiva) sobre un objetivo orbitable,
@@ -197,10 +200,19 @@ export class CameraController {
     this.update()
   }
 
+  /**
+   * Radianes por píxel de las órbitas: un arrastre de todo el ancho de la vista gira 270° (`ORBIT_SWEEP`). Con 0,01 fijo
+   * 60 px giraban ~35° por eje y la vista se escapaba (R36); el mínimo de ancho deja el teléfono como estaba.
+   */
+  orbitRate(): number {
+    return ORBIT_SWEEP / Math.max(ORBIT_MIN_WIDTH, this.width)
+  }
+
   orbit(dxPx: number, dyPx: number): void {
     this.upOverride = null
-    this.az -= dxPx * 0.01
-    this.el = Math.max(-EL_LIMIT, Math.min(EL_LIMIT, this.el + dyPx * 0.01))
+    const k = this.orbitRate()
+    this.az -= dxPx * k
+    this.el = Math.max(-EL_LIMIT, Math.min(EL_LIMIT, this.el + dyPx * k))
     this.update()
   }
 
@@ -209,8 +221,9 @@ export class CameraController {
    * en vez de girar alrededor del centro de la vista.
    */
   orbitAbout(dxPx: number, dyPx: number, pivot: THREE.Vector3): void {
-    const az = this.az - dxPx * 0.01
-    const el = Math.max(-EL_LIMIT, Math.min(EL_LIMIT, this.el + dyPx * 0.01))
+    const k = this.orbitRate()
+    const az = this.az - dxPx * k
+    const el = Math.max(-EL_LIMIT, Math.min(EL_LIMIT, this.el + dyPx * k))
     // El mismo giro que lleva la dirección de vista de (az, el) a la nueva: primero en planta, después en altura.
     const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), az - this.az)
     const pitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(-Math.sin(az), Math.cos(az), 0), -(el - this.el))
@@ -229,9 +242,10 @@ export class CameraController {
     const eye = this.eye().sub(this.target).normalize()
     const up = this.upVector().normalize()
     const right = new THREE.Vector3().crossVectors(up, eye).normalize()
+    const k = this.orbitRate()
     const q = new THREE.Quaternion()
-      .setFromAxisAngle(up, -dxPx * 0.01)
-      .multiply(new THREE.Quaternion().setFromAxisAngle(right, -dyPx * 0.01))
+      .setFromAxisAngle(up, -dxPx * k)
+      .multiply(new THREE.Quaternion().setFromAxisAngle(right, -dyPx * k))
     eye.applyQuaternion(q)
     const newUp = up.applyQuaternion(q).normalize()
     this.az = Math.atan2(eye.y, eye.x)

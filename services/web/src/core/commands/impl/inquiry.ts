@@ -10,6 +10,10 @@ import { formatDim, measureDim } from '../../dimension/dimGeometry'
 import { worldToUcs, WORLD_UCS } from '../../ucs'
 import type { PreviewShape } from '../../preview'
 import { sysvars } from '../sysvars'
+import { colorLabel, lineweightLabel } from '../../document/objectProps'
+import { BYBLOCK } from '../../linetype/linetypes'
+import { BYBLOCK_WEIGHT } from '../../editing/block'
+import type { Layer } from '../../document/types'
 
 const DEG = 180 / Math.PI
 const n4 = (v: number) => (Math.abs(v) < 5e-5 ? 0 : v).toFixed(4)
@@ -162,12 +166,28 @@ export const areaCommand: Command = {
   },
 }
 
-/** Líneas de LIST de un objeto: tipo, capa, espacio y su geometría. */
+/**
+ * Color, tipo de línea y grosor de un objeto (R25): los propios o ByLayer/ByBlock, y entre paréntesis lo que toma de
+ * su capa, p. ej. `Color: ByLayer (Red)  Linetype: DASHED  Lineweight: ByLayer (Default)`.
+ */
+function appearance(e: Entity, layer: Layer | undefined): string {
+  const byBlock = (v: string | undefined) => v?.toUpperCase() === BYBLOCK
+  const color = byBlock(e.color) ? 'ByBlock' : e.color ? colorLabel(e.color) : `ByLayer (${colorLabel(layer?.color ?? '#ffffff')})`
+  const own = e.lineType && e.lineType.toUpperCase() !== 'BYLAYER' ? e.lineType : undefined
+  const lt = byBlock(own) ? 'ByBlock' : own ? own.toUpperCase() : `ByLayer (${(layer?.lineType ?? 'CONTINUOUS').toUpperCase()})`
+  const lw =
+    e.lineWeight === BYBLOCK_WEIGHT ? 'ByBlock' : e.lineWeight !== undefined && e.lineWeight >= 0 ? lineweightLabel(e.lineWeight) : `ByLayer (${lineweightLabel(layer?.lineWeight ?? 0)})`
+  const scale = e.ltScale !== undefined && e.ltScale !== 1 ? `  Linetype scale: ${n4(e.ltScale)}` : ''
+  return `Color: ${color}  Linetype: ${lt}${scale}  Lineweight: ${lw}`
+}
+
+/** Líneas de LIST de un objeto: tipo, capa, espacio, color, tipo de línea, grosor y su geometría. */
 export function describeEntity(ctx: CommandContext, e: Entity): string[] {
-  const layer = ctx.doc.layers.find((l) => l.id === e.layer)?.name ?? e.layer
+  const lay = ctx.doc.layers.find((l) => l.id === e.layer)
+  const layer = lay?.name ?? e.layer
   const space = ctx.doc.activeLayout && ctx.doc.layoutEntities(ctx.doc.activeLayout.id).some((x) => x.id === e.id) ? 'Paper space' : 'Model space'
   const out = [`${e.type}  Layer: "${layer}"  Space: ${space}  Handle = ${e.id}`]
-  if (e.lineType) out.push(`  Linetype: ${e.lineType}`)
+  out.push(`  ${appearance(e, lay)}`)
   const P = (label: string, p: Vec3) => out.push(`  ${label} ${xyz(ctx, p)}`)
   switch (e.type) {
     case 'LINE': {
@@ -214,7 +234,8 @@ export function describeEntity(ctx: CommandContext, e: Entity): string[] {
       const m = ctx.app.solidMesh?.(e)
       if (m) {
         const q = meshProperties(m)
-        out.push(`  Volume = ${n4(q.volume)},  Surface area = ${n4(q.surface)}`)
+        // El volumen exacto (primitiva o núcleo) si se conoce; si no, el de la malla (R43).
+        out.push(`  Volume = ${n4(ctx.app.solidVolume?.(e) ?? q.volume)},  Surface area = ${n4(q.surface)}`)
         out.push(`  Bounding box: ${xyz(ctx, q.min)}  to  ${xyz(ctx, q.max)}`)
       }
       break
@@ -305,6 +326,8 @@ export const masspropCommand: Command = {
       const m = ctx.app.solidMesh?.(e)
       if (!m) continue
       const q = meshProperties(m)
+      // El volumen exacto (primitiva o núcleo) si se conoce; si no, el de la malla (R43).
+      q.volume = ctx.app.solidVolume?.(e) ?? q.volume
       vol += q.volume
       surf += q.surface
       for (let k = 0; k < 3; k++) {

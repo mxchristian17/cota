@@ -391,10 +391,13 @@ test.describe('Cota orbit commands', () => {
       await typeCmd(page, cmd)
       await page.mouse.move(cx, cy)
       await page.mouse.down()
-      await page.mouse.move(cx + 60, cy + 40, { steps: 6 })
+      await page.mouse.move(cx + 150, cy + 100, { steps: 6 })
       await page.mouse.up()
       const after = await cam()
-      expect(Math.abs(after[0] - before[0]) + Math.abs(after[1] - before[1])).toBeGreaterThan(0.3)
+      // Un arrastre de todo el ancho gira 270° (R36): 250 px en una vista de ~1250 px, menos de 1,3 rad entre los dos ejes.
+      const turned = Math.abs(after[0] - before[0]) + Math.abs(after[1] - before[1])
+      expect(turned).toBeGreaterThan(0.3)
+      if (cmd === '3DORBIT') expect(turned).toBeLessThan(1.3) // 3DFORBIT pasa por el polo: su acimut salta
       await page.keyboard.press('Escape')
       await expect(page.locator('.cmd-prompt')).toHaveText('Command:')
     }

@@ -19,9 +19,9 @@ export function LoginDialog() {
 
   return (
     <div className="modal-backdrop" onClick={close} data-testid="login-dialog">
-      <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="login-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>{register ? 'Create account' : 'Sign in'}</h2>
+          <h2 id="login-title">{register ? 'Create account' : 'Sign in'}</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
             <UiIcon name="close" />
           </button>

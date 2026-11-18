@@ -194,9 +194,9 @@ export function OptionsDialog() {
 
   return (
     <div className="modal-backdrop" onClick={close} data-testid="options-dialog">
-      <div className="modal modal-md options-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-md options-modal" role="dialog" aria-modal="true" aria-labelledby="options-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Options</h2>
+          <h2 id="options-title">Options</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
             <UiIcon name="close" />
           </button>

@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { makeEngine } from '../../../test/engineHarness'
+import { attdefJustify } from './attribs'
 import { resetSysvars, sysvars } from '../sysvars'
 import { expandEntities } from '../../editing/block'
 import { applyField, entityFields } from '../../editing/props'
@@ -40,7 +41,7 @@ describe('ATTDEF / atributos de bloque', () => {
 
   it('INSERT pide los valores (Preset no se pregunta); ESC cancela la inserción', async () => {
     const h = await withBlock()
-    await h.run('INSERT', 'PIEZA', '#100,0', '', '', 'Brida', 'Bronce')
+    await h.run('INSERT', 'PIEZA', '#100,0', '', '', '', 'Brida', 'Bronce')
     const ins = (h.ofType('INSERT') as InsertEntity[])[1]
     expect(ins.props.attributes).toEqual([
       { tag: 'NOMBRE', value: 'Brida' },
@@ -50,8 +51,10 @@ describe('ATTDEF / atributos de bloque', () => {
     expect(h.prints).toContain('Enter attribute values')
     // Con el diálogo (ATTDIA=1) cancelado no se crea la referencia.
     sysvars.ATTDIA = 1
-    await h.run('INSERT', 'PIEZA', '#200,0', '', '')
+    await h.run('INSERT', 'PIEZA', '#200,0', '', '', '')
     expect(h.ofType('INSERT')).toHaveLength(2)
+    // El diálogo no aparece sin aviso (R11).
+    expect(h.prints).toContain('Enter the attribute values of "PIEZA" in the Edit Attributes dialog (ATTDIA = 1; set ATTDIA to 0 to type them here).')
   })
 
   it('invisibles, constantes y ATTDISP Normal/ON/OFF', async () => {
@@ -110,5 +113,47 @@ describe('ATTDEF / atributos de bloque', () => {
     h.add('ATTDEF', { position: [0, 0, 0], height: 2.5, rotation: 0, justify: 'left', normal: [0, 0, 1], tag: 'SUELTO', prompt: '', value: '' })
     const dxf = exportDxf(expandEntities(h.doc.entities, h.doc.blocks), h.doc.layers)
     for (const t of ['S/N', 'Acero', 'X-1', 'SUELTO']) expect(dxf).toContain(`\n${t}\n`)
+  })
+})
+
+describe('ATTDEF en un bloque con base fuera del origen (R08) y justificación Middle (R09)', () => {
+  it('BLOCK lleva el atributo a coordenadas del bloque: la inserción lo dibuja dentro del círculo', async () => {
+    const h = makeEngine()
+    sysvars.ATTDIA = 0
+    await h.run('CIRCLE', '300,300', '5')
+    await h.run('ATTDEF', '', 'TAG', 'Valor', 'X', 'J', 'C', '300,298', '3', '0')
+    await h.run('BLOCK', 'L', '305,300', '', 'B1', '300,300')
+    const def = h.doc.getBlock('B1')!
+    const att = def.entities.find((e) => e.type === 'ATTDEF')!
+    expect(att.type === 'ATTDEF' && att.props.position).toEqual([0, -2, 0])
+    await h.run('INSERT', 'B1', '400,300', '1', '', '0', '7')
+    const out = expandEntities(h.ofType('INSERT'), h.doc.blocks)
+    const seven = out.find((e) => e.type === 'TEXT' && e.props.text === '7')!
+    expect(seven.type === 'TEXT' && seven.props.position).toEqual([400, 298, 0])
+  })
+
+  it('MOVE y SCALE de un ATTDEF suelto lo mueven (antes quedaba quieto)', async () => {
+    const h = makeEngine()
+    sysvars.ATTDIA = 0
+    await h.run('ATTDEF', '', 'N', '', '1', '10,10', '2', '0')
+    await h.run('MOVE', 'L', '', '0,0', '5,0')
+    const a = h.ofType('ATTDEF')[0]
+    expect(a.type === 'ATTDEF' && a.props.position).toEqual([15, 10, 0])
+  })
+
+  it('Middle/MC centra el número en el punto (globo): la caja del texto queda centrada', async () => {
+    const h = makeEngine()
+    sysvars.ATTDIA = 0
+    await h.run('ATTDEF', '', 'NUM', '', '1', 'J', 'MC', '50,50', '4', '0')
+    const a = h.ofType('ATTDEF')[0]
+    if (a.type !== 'ATTDEF') throw new Error('sin ATTDEF')
+    expect(a.props.justify).toBe('center')
+    expect(a.props.kind).toBe('text')
+    // Línea base 2 por debajo del punto (la mitad del alto): el texto queda centrado en 50,50.
+    expect(a.props.position[0]).toBeCloseTo(50)
+    expect(a.props.position[1]).toBeCloseTo(48)
+    expect(attdefJustify('M')).toEqual({ justify: 'center', drop: 0.5 })
+    expect(attdefJustify('TR')).toEqual({ justify: 'right', drop: 1 })
+    expect(attdefJustify('zz')).toBeNull()
   })
 })

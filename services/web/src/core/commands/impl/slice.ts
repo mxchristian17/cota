@@ -18,18 +18,23 @@ interface Plane {
   n: Vec3
 }
 
-/** Caja grande que ocupa el semiespacio del lado `+n` del plano (lo bastante para cubrir el sólido). */
-export function halfSpaceBox(plane: Plane, size: number): SolidProps {
+/**
+ * Caja grande que ocupa el semiespacio del lado `+n` del plano (lo bastante para cubrir el sólido). Se centra en el
+ * pie de `center` (el centro de los sólidos) sobre el plano: centrada en el punto tipeado, con un punto del plano lejos
+ * de la pieza la caja no la cubría entera y el corte dejaba una tira del lado descartado (R18).
+ */
+export function halfSpaceBox(plane: Plane, size: number, center: Vec3 = plane.p): SolidProps {
   const n = unit(plane.n)
   const u = unit(cross(Math.abs(n[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0], n))
   const v = cross(n, u) // u × v = n
-  const origin = sub(sub(plane.p, mul(u, size / 2)), mul(v, size / 2))
+  const foot = sub(center, mul(n, dot(sub(center, plane.p), n)))
+  const origin = sub(sub(foot, mul(u, size / 2)), mul(v, size / 2))
   return { op: 'BOX', origin, width: size, depth: size, height: size, basis: { x: u, y: v } }
 }
 
 /** Parte de `solid` del lado `side` (+1 o −1) del plano. */
-export function slicedSide(solid: SolidProps, plane: Plane, side: 1 | -1, size: number): SolidProps {
-  return { op: 'SUBTRACT', operands: [solid, halfSpaceBox({ p: plane.p, n: mul(plane.n, -side) }, size)] }
+export function slicedSide(solid: SolidProps, plane: Plane, side: 1 | -1, size: number, center?: Vec3): SolidProps {
+  return { op: 'SUBTRACT', operands: [solid, halfSpaceBox({ p: plane.p, n: mul(plane.n, -side) }, size, center)] }
 }
 
 function extent(solids: Entity[]): { c: Vec3; diag: number } {
@@ -121,8 +126,8 @@ export const sliceCommand: Command = {
     }
     for (const s of solids) {
       const original = s.props
-      s.props = slicedSide(original, plane, sides[0], size)
-      if (sides.length > 1) ctx.doc.addEntity({ type: 'SOLID3D', layer: s.layer, props: slicedSide(original, plane, -1, size) })
+      s.props = slicedSide(original, plane, sides[0], size, c)
+      if (sides.length > 1) ctx.doc.addEntity({ type: 'SOLID3D', layer: s.layer, props: slicedSide(original, plane, -1, size, c) })
     }
     ctx.doc.touch()
     ctx.print(`${solids.length} solid(s) sliced${sides.length > 1 ? ' (both sides kept)' : ''}.`)

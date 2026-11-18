@@ -3,7 +3,7 @@ import { regionPoints } from '../region/region'
 import { imageRing } from '../geom/image'
 import { shadeOutline } from '../projection/shade'
 import { loopPoints } from '../hatch/geometry'
-import type { Entity, MeshProps } from '../document/types'
+import type { Entity, MeshProps, SolidProps } from '../document/types'
 import { fromVec3, type Pt } from '../math'
 import { solidProfiles, solidWireframe } from './solid'
 import { meshEdges, meshWireframe } from './mesh'
@@ -140,6 +140,43 @@ export type Projector = (p: Pt) => [number, number] | null
 
 const CIRCLE_STEPS = 48
 
+/** Malla de triángulos de un sólido (la da la app: `AppHooks.solidMesh`); el core no arma mallas. */
+export type SolidMeshOf = (e: Entity) => MeshProps | null | undefined
+
+/** ¿El árbol quita material (SUBTRACT, INTERSECT; SLICE es una resta)? Entonces sus hojas abarcan más que el sólido. */
+export function cutsMaterial(p: SolidProps): boolean {
+  switch (p.op) {
+    case 'SUBTRACT':
+    case 'INTERSECT':
+      return true
+    case 'UNION':
+      return p.operands.some(cutsMaterial)
+    case 'SHELL':
+    case 'FILLETEDGE':
+    case 'CHAMFEREDGE':
+      return cutsMaterial(p.solid)
+    default:
+      return false
+  }
+}
+
+/**
+ * Malla evaluada de un sólido al que se le quitó material, o null si su contorno sirve tal cual. Las ventanas y los
+ * cruces la usan en lugar del alambre de las hojas: con él, después de SUBTRACT o SLICE la ventana tenía que abarcar
+ * también la herramienta (o el semiespacio del corte) para tomar la pieza (R18).
+ */
+export function cutSolidMesh(e: Entity, meshOf?: SolidMeshOf): MeshProps | null {
+  if (e.type !== 'SOLID3D' || !meshOf || !cutsMaterial(e.props)) return null
+  const m = meshOf(e)
+  return m && m.vertices.length ? m : null
+}
+
+/** Contorno para ventanas, cruces y bordes: el de la malla evaluada en los sólidos con material quitado. */
+export function selectionOutline(e: Entity, meshOf?: SolidMeshOf): Pt[][] {
+  const m = cutSolidMesh(e, meshOf)
+  return m ? meshWireframe(m).map((poly) => poly.map(fromVec3)) : entityOutline(e)
+}
+
 /**
  * Poli­líneas de contorno de la entidad en mundo (para proyectar y testear en pantalla).
  * Cada sublista es un tramo continuo (cerrado o abierto).
@@ -241,13 +278,17 @@ export function entitiesInScreenBox(
   project: Projector,
   /** Geometría de mundo de una inserción (sin ella, los bloques no tienen contorno y la caja nunca los tomaba). */
   expandInsert?: (e: Entity) => Entity[],
+  /** Malla evaluada de un sólido con material quitado (ver `cutSolidMesh`). */
+  meshOf?: SolidMeshOf,
 ): string[] {
   const ids: string[] = []
   for (const e of entities) {
     const parts = e.type === 'INSERT' && expandInsert ? expandInsert(e) : [e]
     const hit: BoxHit = { anyPoint: false, allInside: true, touches: false }
     for (const part of parts) {
+      const cut = cutSolidMesh(part, meshOf)
       if (part.type === 'MESH3D') meshInBox(part.props, rect, crossing, project, hit)
+      else if (cut) meshInBox(cut, rect, crossing, project, hit)
       else outlineInBox(entityOutline(part), rect, crossing, project, hit)
       // Ya decidido: toca la caja (cruce) o tiene un punto afuera (ventana).
       if (hit.touches || (!crossing && !hit.allInside)) break

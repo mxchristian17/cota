@@ -55,9 +55,9 @@ function DimStyleBody() {
     const title = edit.kind === 'new' ? `New Dimension Style: ${edit.name}` : edit.kind === 'modify' ? `Modify Dimension Style: ${edit.name}` : `Override Current Style: ${edit.name}`
     return (
       <div className="modal-backdrop" data-testid="dimstyle-dialog">
-        <div className="modal modal-lg dimstyle-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal modal-lg dimstyle-modal" role="dialog" aria-modal="true" aria-labelledby="dim-style-title" onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
-            <h2>{title}</h2>
+            <h2 id="dim-style-title">{title}</h2>
           </div>
           <div className="dimstyle-tabs" role="tablist">
             {DIM_TABS.map((t) => (
@@ -100,9 +100,9 @@ function DimStyleBody() {
 
   return (
     <div className="modal-backdrop" onClick={onClose} data-testid="dimstyle-dialog">
-      <div className="modal modal-lg dimstyle-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-lg dimstyle-modal" role="dialog" aria-modal="true" aria-labelledby="dim-style-title-2" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Dimension Style Manager</h2>
+          <h2 id="dim-style-title-2">Dimension Style Manager</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
             <UiIcon name="close" />
           </button>

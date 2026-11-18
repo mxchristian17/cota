@@ -15,9 +15,9 @@ export function OsnapDialog() {
 
   return (
     <div className="modal-backdrop" onClick={close} data-testid="osnap-dialog">
-      <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="osnap-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Object Snap</h2>
+          <h2 id="osnap-title">Object Snap</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
             <UiIcon name="close" />
           </button>

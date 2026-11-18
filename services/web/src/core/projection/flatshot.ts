@@ -6,6 +6,7 @@ import {
   projectHidden,
   segmentsBounds,
   snapToHints,
+  snapSilhouettes,
   type CircleHint,
   type Mesh,
   type ProjBasis,
@@ -56,7 +57,7 @@ export function flatshotItems(meshes: Mesh[], hints: CircleHint[], basis: ProjBa
   if (segs.length === 0) return []
   const bb = segmentsBounds(segs)
   const tol = Math.max(Math.hypot(bb.maxU - bb.minU, bb.maxV - bb.minV) * 2e-4, 1e-6)
-  return snapToHints(mergeSegments(segs, tol), basisHints(hints, basis))
+  return snapSilhouettes(snapToHints(mergeSegments(segs, tol), basisHints(hints, basis)), hints, basis)
 }
 
 /** Entidades de la definición del bloque (capa 0: toman la de la inserción, como en el CAD clásico). */

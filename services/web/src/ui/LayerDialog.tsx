@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../store/store'
+import { isViewLayerName } from '../core/layers/visibility'
 import { linetypeLabel } from '../core/linetype/linetypes'
 import { focusCommandLine } from './focus'
 import { LockIcon } from './LockIcon'
@@ -75,7 +76,9 @@ export function LayerDialog() {
   if (!open) return null
 
   const all = layerSvc.list()
-  const layers = all.filter((l) => l.name.toLowerCase().includes(filter.trim().toLowerCase()))
+  const q = filter.trim().toLowerCase()
+  // Las capas internas de las vistas de dibujo (MD_…) sólo aparecen si se las busca por nombre o son la actual.
+  const layers = all.filter((l) => l.name.toLowerCase().includes(q) && (!isViewLayerName(l.name) || q.startsWith('md') || l.id === currentLayerId))
 
   const onAdd = () => {
     const n = name.trim()
@@ -91,9 +94,9 @@ export function LayerDialog() {
 
   return (
     <div className="modal-backdrop" onClick={onClose} data-testid="layer-dialog">
-      <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="layer-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Layer Properties Manager</h2>
+          <h2 id="layer-title">Layer Properties Manager</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
             <UiIcon name="close" />
           </button>

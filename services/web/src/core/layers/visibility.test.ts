@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Layer } from '../document/types'
-import { hiddenLayerIds, layerEditable, layerShown, layerVisible } from './visibility'
+import { hiddenLayerIds, isViewLayerName, layerEditable, layerShown, layerVisible } from './visibility'
 
 const layer = (patch: Partial<Layer>): Layer => ({
   id: 'l',
@@ -26,5 +26,14 @@ describe('estados de capa (como en el CAD clásico)', () => {
     expect(layerVisible(layer({ locked: true }))).toBe(true)
     expect(layerEditable(layer({ locked: true }))).toBe(false)
     expect(layerVisible(layer({ visible: false }))).toBe(false)
+  })
+})
+
+describe('capas internas de las vistas de dibujo (R32)', () => {
+  it('MD_Visible y MD_Hidden son internas; las del usuario, no', () => {
+    expect(isViewLayerName('MD_Visible')).toBe(true)
+    expect(isViewLayerName('md_hidden')).toBe(true)
+    expect(isViewLayerName('MD_Cotas')).toBe(false)
+    expect(isViewLayerName('Visible')).toBe(false)
   })
 })

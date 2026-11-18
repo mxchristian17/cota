@@ -4,6 +4,7 @@ import { defaultPageSetup } from '../layout/paper'
 import { newViewportProps, viewAngles } from '../layout/viewport'
 import { MM_TO_PT } from './pdf'
 import { layoutPage, plotLayouts, plotsHidden, viewportContent } from './layoutPlot'
+import { DEFAULT_DIM_STYLE } from '../dimension/dimGeometry'
 import { pdfText } from '../../test/pdfText'
 
 const layer = (id: string, color: string, extra: Partial<Layer> = {}): Layer => ({
@@ -153,5 +154,18 @@ describe('PLOT completo (E9b)', () => {
     const c = cube('c', [10, 10, 0], 20)
     const page = layoutPage({ layout, paper: [c], model: [], layers, units: 'mm', meshOf })
     expect(strokes(page.content)).toBe(4) // en planta sólo se ve el contorno superior
+  })
+})
+
+describe('cotas del modelo vistas por un viewport (B25)', () => {
+  it('su medida va como texto invisible sobre los trazos: el PDF se puede buscar y copiar', () => {
+    const dim = {
+      id: 'd',
+      type: 'DIMENSION',
+      layer: '0',
+      props: { dimType: 'LINEAR', points: [[0, 0, 0], [800, 0, 0]], textPos: [400, 300, 0], style: { ...DEFAULT_DIM_STYLE, DIMSCALE: 50 } },
+    } as unknown as Entity
+    const ops = viewportContent(vp().props, [dim], layers, 'mm', style)
+    expect(ops).toMatch(/q\n3 Tr\nBT\n\/F1 1 Tf\n[-\d. ]+ Tm\n\(800\) Tj\nET\nQ\n/)
   })
 })

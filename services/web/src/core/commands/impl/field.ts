@@ -1,5 +1,6 @@
 import { viewZ } from './primitives'
-import { expandEntities } from '../../editing/block'
+import { blockAttdefs, expandEntities } from '../../editing/block'
+import { ensureIramBlock, IRAM_BLOCK } from '../../layout/titleblock'
 import { FIELD_NAMES, fieldCode, hasFields } from '../../fields/fields'
 import { matchKeyword } from '../keywords'
 import type { Command, CommandContext } from '../types'
@@ -86,6 +87,22 @@ export const updatefieldCommand: Command = {
     const ids = await ctx.getSelection('Select objects: ')
     if (!ids?.length) return
     const ents = ids.map((id) => ctx.doc.getEntity(id)).filter((e) => e !== undefined)
+    // Un atributo vacío cuyo valor por defecto es un campo lo toma (rótulos de versiones anteriores: TITLE, DRAWN…);
+    // el rótulo predeterminado de antes se pone al día primero.
+    if (ctx.doc.getBlock(IRAM_BLOCK)) ensureIramBlock(ctx.doc)
+    let filled = 0
+    for (const e of ents) {
+      if (e.type !== 'INSERT' || !e.props.attributes) continue
+      const defs = blockAttdefs(ctx.doc.getBlock(e.props.name))
+      for (const a of e.props.attributes) {
+        const def = defs.find((d) => d.tag === a.tag)
+        if (a.value === '' && def && hasFields(def.value)) {
+          a.value = def.value
+          filled++
+        }
+      }
+    }
+    if (filled) ctx.doc.touch()
     const n = expandEntities(ents, ctx.doc.blocks).filter((e) => e.type === 'TEXT' && hasFields(e.props.text)).length
     ctx.app.redraw()
     ctx.print(`${n} field(s) found. ${n} field(s) updated.`)

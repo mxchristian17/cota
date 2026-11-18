@@ -47,8 +47,11 @@ EXTRUDE L "" 10
 
 With a base point, the cursor moves in the plane through that point, so a part moved in an isometric view keeps
 its height unless you snap to something else or type a `z`. `MOVE`, `COPY`, `ROTATE`, `MIRROR`, `SCALE`, `ARRAY` and `ALIGN` work on solids in any view. `ROTATE`
-rotates about an axis perpendicular to the current view, so to turn a part about a vertical axis use the
-Top view, and about a horizontal axis use Front or Right.
+rotates about the Z axis of the current UCS, not of the view. With `UCSORTHO` = 1 (the default) the Top, Front,
+Right… views also set their UCS, so in Front the part turns about the axis that points at you; the command line says
+`UCS: Front …` when that happens. That UCS stays when you go to an isometric view, and typed coordinates are then
+relative to it: `UCS W` (or the Top view) goes back to World. With `UCSORTHO` = 0 the views never change the UCS
+and ROTATE always turns about the vertical axis of World.
 
 ## Looking at the model
 

@@ -426,8 +426,9 @@ export default function App() {
           title="Toggle autosave (every 2 min)"
           data-testid="autosave-toggle"
           aria-pressed={autosave}
+          aria-label={`Autosave ${autosave ? 'on' : 'off'}`}
         >
-          Autosave {autosave ? 'on' : 'off'}
+          <span className="autosave-label">Autosave {autosave ? 'on' : 'off'}</span>
         </button>
         <button className="btn ghost" onClick={openHelp} data-testid="help-button">
           Help

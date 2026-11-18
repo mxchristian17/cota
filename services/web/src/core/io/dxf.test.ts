@@ -4,7 +4,7 @@ import { exportDxf, importDxf, mtextIndent, plainMtext, shownDecimals } from './
 import { textTop } from '../geom/text'
 import type { TextProps } from '../document/types'
 import { DEFAULT_DIM_STYLE } from '../dimension/dimGeometry'
-import type { DimensionProps, Entity, ImageProps, Layer } from '../document/types'
+import type { DimensionProps, Entity, HatchProps, ImageProps, Layer } from '../document/types'
 import { formatDim, measureDim } from '../dimension/dimGeometry'
 import { BUILTIN_DIM_VARS } from '../dimension/style'
 
@@ -897,5 +897,32 @@ describe('atributos invisibles', () => {
     const rec = (flags: number, text: string) => `0\nATTRIB\n8\n0\n10\n0\n20\n0\n30\n0\n40\n2\n1\n${text}\n2\nTAG\n70\n${flags}\n`
     const r = importDxf(`0\nSECTION\n2\nENTITIES\n${rec(1, 'oculto')}${rec(0, 'visible')}0\nENDSEC\n0\nEOF\n`)
     expect(r.entities.map((e) => (e.props as { text: string }).text)).toEqual(['visible'])
+  })
+})
+
+describe('sombreado de las vistas en el DXF (R35)', () => {
+  // Un cuadrado de 10 en dos triángulos y una cara con un agujero en ocho, con la profundidad de pantalla en z y
+  // números con todas sus cifras (como los de una isométrica real).
+  const k = 1.0000000123456789
+  const P = [[0, 0], [10, 0], [10, 10], [0, 10], [3, 3], [7, 3], [7, 7], [3, 7]].map(([x, y]) => [x * k + 40, y * k])
+  const T = [[0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5], [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7]]
+  const tris = [0, 0, -0.0123456789, 10 * k, 0, -0.0223456789, 10 * k, 10 * k, -0.0323456789, 0, 0, -0.0123456789, 10 * k, 10 * k, -0.0323456789, 0, 10 * k, -0.0423456789]
+  const colors = [0.25, 0.5, 0.75, 0.25, 0.5, 0.75]
+  for (const t of T) for (const i of t) tris.push(P[i][0], P[i][1], -0.05123456789)
+  for (let i = 0; i < T.length; i++) colors.push(0.6, 0.6, 0.6)
+  const shade = { id: 's', type: 'SHADE', layer: '0', props: { tris, colors } } as Entity
+
+  it('cada cara sale como un relleno: el cuadrado en un SOLID de cuatro vértices, la cara con agujero en un HATCH', () => {
+    const dxf = exportDxf([shade], layers)
+    const ents = dxf.slice(dxf.indexOf('ENTITIES'))
+    expect(ents.match(/\n0\nSOLID\n/g)).toHaveLength(1)
+    expect(ents.match(/\n0\nHATCH\n/g)).toHaveLength(1)
+    expect(ents).toContain(`420\n${64 * 65536 + 128 * 256 + 191}\n`)
+    // En el plano de la vista (la profundidad de pantalla no va) y con 7 cifras significativas.
+    expect(ents).not.toMatch(/\n3[0-3]\n-0\.0/)
+    expect(ents).not.toMatch(/\n\d{2}\n-?\d+\.\d{8,}\n/)
+    // Se vuelven a leer como rellenos: el cuadrado entero y la cara con su contorno y su agujero.
+    const back = importDxf(dxf).entities.map((e) => (e.type === 'HATCH' ? (e.props as HatchProps).loops.map((l) => l.vertices.length) : null))
+    expect(back).toEqual([[4], [4, 4]])
   })
 })

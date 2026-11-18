@@ -32,7 +32,7 @@ import { lineSpans, rangedRaycast } from './rangedRaycast'
 import { ellipsePoints } from '../core/geom/ellipse'
 import { arcBasis, tessellateArc } from '../core/geom/arc'
 import { polylinePoints } from '../core/geom/polyline'
-import { BASELINE_DROP, attdefText, cssFontStack, fontMetrics, lineSpacingOf, textAxes, textCorners, textStrokePolylines, textTop } from '../core/geom/text'
+import { BASELINE_DROP, attdefText, cssFontStack, fitToWidth, fontMetrics, lineSpacingOf, textAxes, textCorners, textStrokePolylines, textTop } from '../core/geom/text'
 import { entityGrips, type Grip } from '../core/editing/grips'
 import { viewportRing } from '../core/layout/viewport'
 import { evaluateFields, fieldSegments, hasFields, type FieldContext } from '../core/fields/fields'
@@ -46,6 +46,7 @@ import { regionPolylines, regionSegments } from '../core/region/region'
 import { imageClip, imageFileName, imagePoint, imageRing, imageUv } from '../core/geom/image'
 import { isDoubleTap, isTap, pinchStep, touchConfig, TOUCH_AIM_OFFSET, type TouchPt } from './touchGesture'
 import { NOTE_COLORS, fitNoteText, notePoint, noteRing } from '../core/geom/note'
+import { shadeTriangleCount, shadeTriangles } from '../core/projection/shade'
 
 /** Distancia máxima (px) del cursor a una línea para tomarla con un clic. */
 const PICK_LINE_PX = 10
@@ -2293,7 +2294,8 @@ export class Viewport {
     const fields = this.data?.fields
     const segments = fields && hasFields(e.props.text) ? fieldSegments(e.props.text, fields) : null
     // Con campos: la caja de selección se mide sobre el texto evaluado.
-    const t = segments ? { ...e.props, text: segments.map((s) => s.text).join('') } : e.props
+    // Un texto con celda (rótulo) se encaja con su valor final.
+    const t = fitToWidth(segments ? { ...e.props, text: segments.map((s) => s.text).join('') } : e.props)
     const runsOk = !!t.runs && t.runs.map((r) => r.s).join('') === t.text
     if (t.stroke && !runsOk) {
       // Fuente de un trazo (las SHX del plano): líneas en el dibujo, como el texto de las cotas.
@@ -3472,9 +3474,10 @@ export class Viewport {
 
   private buildShade(e: Extract<Entity, { type: 'SHADE' }>, selected: boolean): THREE.Object3D {
     const g = new THREE.BufferGeometry()
-    g.setAttribute('position', this.local(e.props.tris))
+    // Un sombreado indexado se expande: cada triángulo lleva su color (sombreado plano).
+    g.setAttribute('position', this.local(shadeTriangles(e.props)))
     const col: number[] = []
-    const n = e.props.tris.length / 9
+    const n = shadeTriangleCount(e.props)
     for (let i = 0; i < n; i++) {
       const [r, gr, b] = [e.props.colors[i * 3] ?? 0.7, e.props.colors[i * 3 + 1] ?? 0.7, e.props.colors[i * 3 + 2] ?? 0.7]
       const k = selected ? 0.6 : 1

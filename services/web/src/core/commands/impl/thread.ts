@@ -11,8 +11,14 @@ import { arcPointAt } from '../../geom/arc'
 import { vadd, vdist, vdot, vlen, vnorm, vscale, vsub } from '../../geom/vec3'
 import { rayFaces, solidTopology } from '../../editing/topology'
 import { isDrawingView } from '../../drawing/views'
-import { SERIES_LABEL, closestIndex, fmtThread, nearestThreads, type ThreadSpec } from '../../thread/tables'
-import { cylinderOfFace, leaderOfArc, leaderOfSolidThread, solidThreadFor, solidThreads, threadArcFor, threadOnFace, threadSurfacePoint, type CylFace } from '../../thread/geometry'
+import { SERIES_LABEL, closestIndex, nearestThreads, type ThreadSpec } from '../../thread/tables'
+import { cylinderOfFace, exactCylinder, leaderOfArc, leaderOfSolidThread, solidThreadFor, solidThreads, threadArcFor, threadOnFace, threadSurfacePoint, type CylFace } from '../../thread/geometry'
+
+/**
+ * Números de los mensajes: con punto, como toda la línea de comandos (ahí la coma separa coordenadas). La coma de
+ * IRAM va en las cotas y en el designativo, que son texto del plano (R03).
+ */
+const num = (n: number): string => String(Number(n.toFixed(3)))
 
 /** Grosor de la línea fina de la rosca (mm). */
 export const THREAD_LW = 0.18
@@ -40,10 +46,10 @@ function arcPreview(a: ArcProps): PreviewShape[] {
 async function chooseThread(ctx: CommandContext, dia: number, internal: boolean): Promise<ThreadSpec | null> {
   const list = nearestThreads(dia, internal)
   const def = closestIndex(list, dia, internal)
-  ctx.print(`Nearest standard threads for Ø${fmtThread(dia)} (${internal ? 'hole: minor diameter' : 'shaft: major diameter'}):`)
+  ctx.print(`Nearest standard threads for Ø${num(dia)} (${internal ? 'hole: minor diameter' : 'shaft: major diameter'}):`)
   list.forEach((t, i) => {
-    const ref = internal ? `D1=${fmtThread(t.D1)}` : `d=${fmtThread(t.d)}`
-    ctx.print(`  ${i + 1}  ${t.designation}  —  ${SERIES_LABEL[t.series]}, ${ref}, P=${fmtThread(t.pitch)}${t.tpi ? ` (${t.tpi} tpi)` : ''}`)
+    const ref = internal ? `D1=${num(t.D1)}` : `d=${num(t.d)}`
+    ctx.print(`  ${i + 1}  ${t.designation}  —  ${SERIES_LABEL[t.series]}, ${ref}, P=${num(t.pitch)}${t.tpi ? ` (${t.tpi} tpi)` : ''}`)
   })
   const keys = list.map((_, i) => String(i + 1))
   const k = await askKeyword(ctx, `Select thread [${keys.join('/')}] <${def + 1}>: `, keys, String(def + 1))
@@ -143,8 +149,38 @@ function faceHit(ctx: CommandContext, p: Pt): FaceHit | 'flat' | null {
   return cyl ? { solid: best.e, cyl, point: best.point } : 'flat'
 }
 
+/**
+ * Cara cilíndrica sobre cuya superficie está el punto (tipeado como `x,y,z`, sin clic): la de menor desvío entre su
+ * distancia al eje y el radio, dentro del largo de la cara. Con el rayo de la vista, un punto tipeado tomaba la cara
+ * que lo tapaba (p. ej. la tapa en planta) y THREAD sólo andaba con clic (R05).
+ */
+function faceAtPoint(ctx: CommandContext, p: Pt): FaceHit | null {
+  const q = toVec3(p)
+  let best: { hit: FaceHit; err: number } | null = null
+  for (const e of visibleEntities(ctx.doc)) {
+    if (e.type !== 'SOLID3D') continue
+    const topo = solidTopology(e.props)
+    if (!topo) continue
+    for (let face = 0; face < topo.faceCount; face++) {
+      const cyl = cylinderOfFace(topo, face)
+      if (!cyl) continue
+      const axis = vsub(cyl.b, cyl.a)
+      const L = vlen(axis)
+      if (L < 1e-9) continue
+      const t = vdot(vsub(q, cyl.a), axis) / (L * L)
+      const tolT = 1e-6 + 1e-3 * (cyl.radius / L)
+      if (t < -tolT || t > 1 + tolT) continue
+      const foot = vadd(cyl.a, vscale(axis, t))
+      const err = Math.abs(vdist(q, foot) - cyl.radius)
+      if (err <= Math.max(1e-3 * cyl.radius, 1e-6) && (!best || err < best.err)) best = { hit: { solid: e, cyl, point: q }, err }
+    }
+  }
+  return best?.hit ?? null
+}
+
 async function thread3d(ctx: CommandContext, hit: FaceHit): Promise<void> {
-  const { solid, cyl, point } = hit
+  const { solid, point } = hit
+  const cyl = exactCylinder(solid.props, hit.cyl)
   const prev = solidThreads(solid.props).find((t) => threadOnFace(t, cyl))
   if (prev) {
     if (leaderOfSolidThread(ctx.doc.entities, prev)) return ctx.print(`Thread ${prev.info.designation} is already dimensioned.`)
@@ -153,7 +189,7 @@ async function thread3d(ctx: CommandContext, hit: FaceHit): Promise<void> {
     return
   }
   const internal = !cyl.shaft
-  ctx.print(`Cylindrical face Ø${fmtThread(2 * cyl.radius)}, length ${fmtThread(vdist(cyl.a, cyl.b))} (${internal ? 'hole' : 'shaft'}).`)
+  ctx.print(`Cylindrical face Ø${num(2 * cyl.radius)}, length ${num(vdist(cyl.a, cyl.b))} (${internal ? 'hole' : 'shaft'}).`)
   const spec = await chooseThread(ctx, 2 * cyl.radius, internal)
   if (!spec) return
   const t: SolidThread = solidThreadFor(cyl, spec)
@@ -204,7 +240,7 @@ export const threadCommand: Command = {
         const hit = viewThreadArc(e, ctx.doc.blocks.find((b) => b.name === e.props.name)?.entities ?? [], r.point)
         if (hit) return addMissingLeader(ctx, hit.arc, hit.nominal)
       }
-      const f = faceHit(ctx, r.point)
+      const f = faceAtPoint(ctx, r.point) ?? faceHit(ctx, r.point)
       if (f && f !== 'flat') return thread3d(ctx, f)
       ctx.print(f === 'flat' ? 'The face must be cylindrical.' : 'Select a circle, a thread or a cylindrical face of a solid.')
     }

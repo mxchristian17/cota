@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { CameraMode, ViewName } from '../core/view'
 import {
   cameraOnNet,
@@ -85,6 +86,11 @@ export interface ViewNetProps {
   onToggleStd: () => void
   /** Menú de UCS: la actual (`WCS`, nombre o `Unnamed`), las guardadas y "New UCS". */
   ucs?: { current: string; named: string[]; onPick: (name: string) => void }
+  /**
+   * Celular: el cubo queda plegado en un botón con el nombre de la vista (en la vista completa ocupaba un cuarto del
+   * dibujo); un toque lo despliega entero y elegir una vista lo vuelve a plegar.
+   */
+  compact?: boolean
 }
 
 /**
@@ -92,12 +98,15 @@ export interface ViewNetProps {
  * aristas las vistas a 45° entre dos caras y las esquinas las isométricas. Un punto marca dónde está la cámara
  * sobre el cubo y se mueve al orbitar.
  */
-export function ViewNet({ az, el, mode, std, onView, onViewDir, onToggleMode, onToggleStd, ucs }: ViewNetProps) {
+export function ViewNet({ az, el, mode, std, onView, onViewDir, onToggleMode, onToggleStd, ucs, compact = false }: ViewNetProps) {
+  const [open, setOpen] = useState(false)
+  const folded = compact && !open
   const cells = netCells(std)
   const { edges, corners } = hotspots(std)
   const cam = cameraOnNet(az, el, std)
   const goFace = (v: ViewName) => () => {
     onView(v)
+    setOpen(false)
     focusCommandLine()
   }
   const goDir = (h: Hotspot) => () => {
@@ -106,6 +115,7 @@ export function ViewNet({ az, el, mode, std, onView, onViewDir, onToggleMode, on
       const { az: a, el: e } = dirToAzEl(h.dir)
       onViewDir(a, e)
     }
+    setOpen(false)
     focusCommandLine()
   }
   const face = cells.find((c) => along(az, el, c.n))
@@ -113,8 +123,24 @@ export function ViewNet({ az, el, mode, std, onView, onViewDir, onToggleMode, on
   const corner = face || edge ? undefined : corners.find((h) => along(az, el, h.dir))
   const label = face?.face ?? edge?.name ?? (corner ? (corner.iso ?? corner.name) : '—')
 
+  if (folded) {
+    return (
+      <div className="viewcube viewnet viewnet-folded" data-testid="viewcube" data-std={std}>
+        <button className="viewnet-chip" onClick={() => setOpen(true)} aria-expanded={false} aria-label={`View: ${label}. Show the view cube`} title="Show the view cube" data-testid="viewnet-expand">
+          <span className="viewnet-chip-label">{label}</span>
+          <span className="viewnet-chip-proj">{mode === 'persp' ? 'Persp' : 'Ortho'}</span>
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="viewcube viewnet" data-testid="viewcube" data-std={std}>
+      {compact && (
+        <button className="viewcube-proj viewnet-fold" onClick={() => setOpen(false)} aria-expanded title="Hide the view cube" data-testid="viewnet-collapse">
+          Hide
+        </button>
+      )}
       <div className="viewnet-grid" style={{ width: NET_COLS * C, height: NET_ROWS * C }}>
         {cells.map((c) => (
           <button

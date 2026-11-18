@@ -95,7 +95,11 @@ interface AgentState {
   setKey: (key: string) => Promise<void>
   decideKey: (d: KeyDecision) => Promise<void>
   forgetKey: () => Promise<void>
-  send: (text: string) => Promise<void>
+  /**
+   * Manda un mensaje. `onAccepted` corre en cuanto se acepta (hay clave y no hay otro turno en curso): recién ahí se
+   * vacía la caja del mensaje. Devuelve 'no-key' sin clave (el mensaje queda escrito) e 'ignored' si no se manda.
+   */
+  send: (text: string, onAccepted?: () => void) => Promise<'sent' | 'no-key' | 'ignored'>
   stop: () => void
   answer: (ok: boolean) => void
   newChat: () => void
@@ -254,11 +258,16 @@ export const useAgentStore = create<AgentState>((set, get) => {
       await idbSet(KEYS_KEY, all)
       await refreshKey()
     },
-    send: async (text) => {
+    send: async (text, onAccepted) => {
       const t = text.trim()
-      if (!t || get().running) return
+      if (!t || get().running) return 'ignored'
       const c = await cfg()
-      if (!c) return set({ feed: [...get().feed, { kind: 'error', text: 'Set your API key first (⚙).' }] })
+      if (!c) {
+        // El campo de la clave queda a la vista (el panel abre los ajustes): el aviso dice dónde está, sin remitir a un ícono.
+        set({ feed: [...get().feed, { kind: 'error', text: 'Add your API key in the field above and press Save, then send again: your message is kept.' }] })
+        return 'no-key'
+      }
+      onAccepted?.()
       let conv = current()
       if (!conv) {
         conv = { id: `c${Date.now()}`, title: t.slice(0, 50), updatedAt: Date.now(), messages: [], context: 0 }
@@ -290,6 +299,7 @@ export const useAgentStore = create<AgentState>((set, get) => {
         abort = null
         set({ running: false, pending: null })
       }
+      return 'sent'
     },
     stop: () => {
       abort?.abort()

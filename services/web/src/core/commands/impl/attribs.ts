@@ -1,12 +1,30 @@
 import { viewZ } from './primitives'
 import type { AttdefProps, InsertEntity } from '../../document/types'
+import type { Vec3 } from '../../math'
+import { textAxes } from '../../geom/text'
 import { blockAttdefs, syncAttributes } from '../../editing/block'
 import { matchKeyword } from '../keywords'
+import { selectAtPoint } from '../../editing/pointPick'
+import { selectableEntities } from '../selectionSets'
 import { sysvars } from '../sysvars'
 import type { Command, CommandContext } from '../types'
 import { askAngle, askDistance, textSizeStore } from '../ask'
 
 const yn = (b: boolean | undefined) => (b ? 'Y' : 'N')
+
+/**
+ * Opción de justificación de ATTDEF → horizontal y bajada a la línea base (fracción del alto): Middle y MC centran el
+ * texto en el punto (p. ej. el número de un globo), las T* lo cuelgan del punto y las B* (y Left/Center/Right) se
+ * apoyan en él.
+ */
+export function attdefJustify(typed: string): { justify: AttdefProps['justify']; drop: number } | null {
+  const k = matchKeyword(typed || 'Left', ['Left', 'Center', 'Right', 'Middle', 'TL', 'TC', 'TR', 'ML', 'MC', 'MR', 'BL', 'BC', 'BR'])
+  if (!k) return null
+  if (k === 'Left' || k === 'Center' || k === 'Right') return { justify: k.toLowerCase() as AttdefProps['justify'], drop: 0 }
+  if (k === 'Middle') return { justify: 'center', drop: 0.5 }
+  const justify = k[1] === 'L' ? 'left' : k[1] === 'C' ? 'center' : 'right'
+  return { justify, drop: k[0] === 'T' ? 1 : k[0] === 'M' ? 0.5 : 0 }
+}
 
 /** ATTDEF (ATT): define un atributo (tag, prompt, valor por defecto, modos, posición y texto). . */
 export const attdefCommand: Command = {
@@ -38,13 +56,21 @@ export const attdefCommand: Command = {
     }
     const value = await ctx.getString(modes.constant ? 'Enter attribute value: ' : 'Enter default attribute value: ', { default: '' })
     if (value === null) return
+    // Justificación del CAD clásico: horizontal (Left/Center/Right) y vertical (Top/Middle/Baseline). El punto se
+    // guarda sobre la línea base (como TEXT y los ATTDEF de un DXF): Middle y las T/M baja el punto según el alto.
     let justify: AttdefProps['justify'] = 'left'
+    let drop = 0 // fracción del alto entre el punto pedido y la línea base
     let r = await ctx.getPoint('Specify start point of text or [Justify]: ', { keywords: ['Justify'] })
     if (r.kind === 'keyword') {
-      const j = await ctx.getString('Enter an option [Left/Center/Right] <Left>: ', { default: '' })
+      const j = await ctx.getString('Enter an option [Left/Center/Right/Middle/TL/TC/TR/ML/MC/MR/BL/BC/BR] <Left>: ', { default: '' })
       if (j === null) return
-      justify = (matchKeyword(j || 'Left', ['Left', 'Center', 'Right']) ?? 'Left').toLowerCase() as AttdefProps['justify']
-      r = await ctx.getPoint('Specify start point of text: ')
+      const opt = attdefJustify(j)
+      if (!opt) {
+        ctx.print('Invalid option keyword.')
+        return
+      }
+      ;({ justify, drop } = opt)
+      r = await ctx.getPoint(drop === 0.5 && justify === 'center' ? 'Specify middle point of text: ' : 'Specify start point of text: ')
     }
     if (r.kind !== 'point') return
     // Alto = TEXTSIZE del dibujo y la última rotación de texto: Enter los repite.
@@ -52,15 +78,21 @@ export const attdefCommand: Command = {
     if (h.kind !== 'distance') return
     const rot = await askAngle(ctx, 'TEXT.rotation', 'Specify rotation angle of text', { base: r.point, initial: 0 })
     if (rot.kind !== 'angle') return
+    const height = h.value > 0 ? h.value : ctx.doc.textSize
+    const rotation = (rot.deg * Math.PI) / 180
+    const normal = viewZ(ctx)
+    const { v } = textAxes({ position: [0, 0, 0], text: '', height, rotation, justify, normal, kind: 'text' })
+    const at: Vec3 = [r.point.x - v[0] * height * drop, r.point.y - v[1] * height * drop, r.point.z - v[2] * height * drop]
     ctx.doc.addEntity({
       type: 'ATTDEF',
       layer: ctx.currentLayerId(),
       props: {
-        position: [r.point.x, r.point.y, r.point.z],
-        height: h.value > 0 ? h.value : ctx.doc.textSize,
-        rotation: (rot.deg * Math.PI) / 180,
+        position: at,
+        height,
+        rotation,
         justify,
-        normal: viewZ(ctx),
+        normal,
+        kind: 'text',
         tag,
         prompt,
         value,
@@ -86,6 +118,8 @@ export async function askAttributeValues(ctx: CommandContext, blockName: string)
     if (v) v.value = value
   }
   if (sysvars.ATTDIA === 1) {
+    // El diálogo no aparece sin aviso: la línea de comandos dice qué pide y cómo pedirlo acá (R11).
+    ctx.print(`Enter the attribute values of "${blockName}" in the Edit Attributes dialog (ATTDIA = 1; set ATTDIA to 0 to type them here).`)
     const res = await ctx.app.editAttributes(`Edit Attributes — ${blockName}`, ask.map((a) => ({ tag: a.tag, prompt: a.prompt, value: a.value })))
     if (!res) return null
     ask.forEach((a, i) => set(a.tag, res[i] ?? a.value))
@@ -104,7 +138,10 @@ export async function askAttributeValues(ctx: CommandContext, blockName: string)
 async function pickAttributedInsert(ctx: CommandContext, prompt: string): Promise<InsertEntity | null> {
   const r = await ctx.getPoint(prompt)
   if (r.kind !== 'point') return null
-  const e = r.pick?.id ? ctx.doc.getEntity(r.pick.id) : undefined
+  // Un punto tecleado (o un clic que no tocó una línea, p. ej. dentro de una celda del rótulo) elige la inserción
+  // por su geometría o por su caja, como «Select objects» (B09).
+  const id = r.pick?.id ?? selectAtPoint(selectableEntities(ctx.doc), [r.point.x, r.point.y, r.point.z], ctx.app.solidMesh ? (e) => ctx.app.solidMesh?.(e) : undefined, ctx.doc.blocks)
+  const e = id ? ctx.doc.getEntity(id) : undefined
   if (e?.type !== 'INSERT') {
     ctx.print('That object is not a block.')
     return null

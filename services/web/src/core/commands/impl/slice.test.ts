@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeEngine } from '../../../test/engineHarness'
-import { solidGeometry } from '../../../render/csg'
+import { solidGeometry, solidMesh } from '../../../render/csg'
 import type { SolidProps } from '../../document/types'
 
 const volume = (p: SolidProps): number => {
@@ -42,5 +42,16 @@ describe('CIRCLE: el radio indicado con un punto se mide en el plano del círcul
     const h = makeEngine()
     await h.run('CIRCLE', '#0,0,10', '#5,0,0')
     expect((h.ofType('CIRCLE')[0].props as { radius: number }).radius).toBeCloseTo(5, 9)
+  })
+})
+
+describe('SLICE con el punto del plano lejos de la pieza (R18)', () => {
+  it('el semiespacio cubre toda la pieza: no queda una tira del lado descartado', async () => {
+    const h = makeEngine()
+    h.add('SOLID3D', { op: 'BOX', origin: [147.5, 25, 0], width: 25, depth: 80, height: 10 })
+    await h.run('SLICE', 'ALL', '', 'ZX', '#0,65,0', '#160,30,0')
+    const [s] = h.ofType('SOLID3D')
+    const ys = solidMesh(s.props as never).vertices.map((v) => v[1])
+    expect([Math.min(...ys), Math.max(...ys)].map((y) => Math.round(y * 1e6) / 1e6)).toEqual([25, 65])
   })
 })

@@ -14,7 +14,8 @@ Specify center point for circle or [3P/2P/Ttr (tan tan radius)]:
 
 - **Options** are in square brackets. Type the capitalized letters (`3P`, `T`) or click the option.
 - **The default** is in angle brackets, `<10.0000>`: press <kbd>Enter</kbd> to accept it.
-- <kbd>Enter</kbd> (or <kbd>Space</kbd>, or a right-click) finishes the current step.
+- <kbd>Enter</kbd> (or <kbd>Space</kbd>, or a right-click) finishes the current step. Only prompts for free text
+  (a text, a block, layer or file name) take <kbd>Space</kbd> as a character; options and numbers never do.
 - <kbd>Esc</kbd> cancels the command.
 - <kbd>Enter</kbd> on an empty command line repeats the last command.
 - <kbd>↑</kbd> and <kbd>↓</kbd> walk through the command history.

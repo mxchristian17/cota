@@ -91,3 +91,12 @@ describe('estilos de cota (/E4)', () => {
     expect(BUILTIN_DIM_VARS['ISO-25'].DIMDSEP).toBe(',')
   })
 })
+
+describe('IRAM 4513 usa coma decimal (B21)', () => {
+  it('el estilo por defecto de un dibujo nuevo acota 12,5 y lo informa así', async () => {
+    const h = makeEngine()
+    expect(h.doc.dimStyleDef('IRAM 4513')!.vars.DIMDSEP).toBe(',')
+    await h.run('DIMLINEAR', '#0,0', '#12.5,0', '#5,10')
+    expect(h.prints).toContain('Dimension text = 12,5')
+  })
+})

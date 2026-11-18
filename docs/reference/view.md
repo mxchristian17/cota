@@ -41,6 +41,13 @@ VIEW R Detail
 
 **Notes**
 
+- With `UCSORTHO` = 1 (the default), an orthographic view also sets its UCS and says so: `UCS: Front (UCSORTHO = 1:
+  orthographic views set their UCS). Typed coordinates and ROTATE now use it; UCS W returns to World.` Top sets
+  World. An isometric view keeps the UCS and reminds you when it is not World. Clicking a face of the view cube
+  does the same. With `UCSORTHO` = 0 views never change the UCS.
+
+**Notes**
+
 - The view cube in the corner of the viewport does the same with a click on a face, an edge or a corner.
 - Views of each viewport and each layout are saved with the drawing.
 

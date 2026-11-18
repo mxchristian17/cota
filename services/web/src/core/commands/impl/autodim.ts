@@ -3,6 +3,8 @@ import type { DimensionProps, Entity } from '../../document/types'
 import type { Vec3 } from '../../math'
 import { autodim, dimensionedPositions, type DimRequest, type Geo2D, type P2 } from '../../dimension/autodim'
 import { expandEntities } from '../../editing/block'
+import { entityBounds, type Box } from '../../editing/bounds'
+import { printableArea } from '../../layout/paper'
 import { isDrawingView } from '../../drawing/views'
 import type { ProjBasis } from '../../projection/orthographic'
 import { bulgeArc, bulgeAt, polylineSpans } from '../../geom/polyline'
@@ -46,6 +48,40 @@ function geometry(entities: Entity[]): Geo2D[] {
     }
   }
   return out
+}
+
+/** Caja (en planta) de un grupo de entidades. */
+function boxOf(es: Entity[]): Box {
+  const b: Box = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
+  for (const e of es) {
+    const eb = entityBounds(e)
+    b.minX = Math.min(b.minX, eb.minX)
+    b.minY = Math.min(b.minY, eb.minY)
+    b.maxX = Math.max(b.maxX, eb.maxX)
+    b.maxY = Math.max(b.maxY, eb.maxY)
+  }
+  return b
+}
+const sameBox = (a: Box, b: Box) => Math.abs(a.minX - b.minX) + Math.abs(a.minY - b.minY) + Math.abs(a.maxX - b.maxX) + Math.abs(a.maxY - b.maxY) < 1e-9
+
+/**
+ * Lugar libre a cada lado de la caja `b` de una vista: hasta la caja más cercana de `others` que se le enfrenta (en la
+ * franja de la vista) o hasta el borde del área imprimible.
+ */
+function roomAround(b: Box, others: Box[], sheet: Box): { below: number; above: number; left: number; right: number } {
+  const overlapX = (o: Box) => o.maxX > b.minX && o.minX < b.maxX
+  const overlapY = (o: Box) => o.maxY > b.minY && o.minY < b.maxY
+  let below = b.minY - sheet.minY
+  let above = sheet.maxY - b.maxY
+  let left = b.minX - sheet.minX
+  let right = sheet.maxX - b.maxX
+  for (const o of others) {
+    if (overlapX(o) && o.maxY <= b.minY + 1e-9) below = Math.min(below, b.minY - o.maxY)
+    if (overlapX(o) && o.minY >= b.maxY - 1e-9) above = Math.min(above, o.minY - b.maxY)
+    if (overlapY(o) && o.maxX <= b.minX + 1e-9) left = Math.min(left, b.minX - o.maxX)
+    if (overlapY(o) && o.minX >= b.maxX - 1e-9) right = Math.min(right, o.minX - b.maxX)
+  }
+  return { below: Math.max(0, below), above: Math.max(0, above), left: Math.max(0, left), right: Math.max(0, right) }
 }
 
 /** Cota de un pedido, en el estilo actual; `lfac` lleva la medida del papel a unidades del modelo. */
@@ -92,6 +128,8 @@ export const autodimCommand: Command = {
       z: number
       /** Vista y vista madre (las proyectadas no repiten lo acotado en su madre en el eje que comparten). */
       id?: string
+      /** Caja de la vista en la hoja (para el lugar libre alrededor). */
+      box?: Box
       parent?: string
       shared?: 'x' | 'y'
     }
@@ -99,9 +137,22 @@ export const autodimCommand: Command = {
     let skipped = 0
     const views = ctx.doc.inPaperSpace ? ctx.doc.entities.filter(isDrawingView) : []
     if (views.length) {
-      const sel = await ctx.getSelectionOrKeyword('Select drawing views to dimension or [All] <All>: ', ['All'])
-      if (sel === null) return
-      const ids = sel.kind === 'selection' && sel.ids.length ? new Set(sel.ids) : null
+      // Un intento de selección que no encontró nada no acota todas las vistas: se vuelve a pedir (B12).
+      let ids: Set<string> | null = null
+      for (;;) {
+        const sel = await ctx.getSelectionOrKeyword('Select drawing views to dimension or [All] <All>: ', ['All'])
+        if (sel === null) return
+        if (sel.kind === 'selection' && sel.ids.length) ids = new Set(sel.ids)
+        else if (sel.kind === 'selection' && sel.tried) {
+          ctx.print('Nothing selected. Select the views to dimension, or press Enter for all of them.')
+          continue
+        }
+        break
+      }
+      if (ids && ![...ids].some((id) => isDrawingView(ctx.doc.getEntity(id)))) {
+        ctx.print('No drawing views in the selection.')
+        return
+      }
       const visible = ctx.doc.layers.find((l) => l.name.toLowerCase() === 'md_visible')?.id
       for (const v of views) {
         if (ids && !ids.has(v.id)) continue
@@ -112,7 +163,7 @@ export const autodimCommand: Command = {
         }
         const kids = expandEntities([v], ctx.doc.blocks).filter((e) => !visible || e.layer === visible)
         const shared = view.align === 'h' ? 'y' : view.align === 'v' ? 'x' : undefined
-        targets.push({ geo: geometry(kids), axes: { x: true, y: true }, lfac: 1 / (v.props.scale[0] || 1), z: 0, id: v.id, parent: view.parent, shared })
+        targets.push({ geo: geometry(kids), axes: { x: true, y: true }, lfac: 1 / (v.props.scale[0] || 1), z: 0, id: v.id, parent: view.parent, shared, box: boxOf(expandEntities([v], ctx.doc.blocks)) })
       }
     } else {
       const ids = await ctx.getSelection('Select objects to dimension: ')
@@ -135,6 +186,15 @@ export const autodimCommand: Command = {
     const offset = 3 * st.DIMTXT * k
     const step = Math.max(st.DIMDLI, 2 * st.DIMTXT) * 1.4 * k
     let n = 0
+    let dropped = 0
+    // Lugar libre de cada vista: hasta las otras vistas, el rótulo, las cotas ya puestas y el área imprimible (B06).
+    const layout = ctx.doc.inPaperSpace ? ctx.doc.activeLayout : undefined
+    const sheet = layout ? printableArea(layout.pageSetup) : null
+    const obstacles: Box[] = layout
+      ? ctx.doc.entities.flatMap((e) => (e.type === 'INSERT' || e.type === 'DIMENSION' ? [boxOf(expandEntities([e], ctx.doc.blocks))] : [])).filter((b) => Number.isFinite(b.minX))
+      : []
+    // Ancho de un texto de cota (en la hoja): cifras de la medida en unidades del modelo.
+    const textWidth = (lfac: number) => (span: number) => (String(Number((span * lfac).toFixed(st.DIMDEC ?? 2))).length + 1) * st.DIMTXT * k * 0.8
     // Las madres antes que sus proyectadas: lo que acota la madre en el eje compartido no se repite.
     targets.sort((a, b) => (a.parent ? 1 : 0) - (b.parent ? 1 : 0))
     const done = new Map<string, { x: number[]; y: number[] }>()
@@ -144,13 +204,27 @@ export const autodimCommand: Command = {
       const tol = Math.max(size * 1e-4, 1e-6)
       const parentDone = t.parent ? done.get(t.parent) : undefined
       const skip = parentDone && t.shared ? { [t.shared]: parentDone[t.shared] } : undefined
-      const reqs = autodim(t.geo, { type: type === 'Chain' ? 'chain' : 'baseline', features: features === 'Overall' ? 'overall' : 'all', axes: t.axes, offset, step, tol, skip })
+      const room = t.box && sheet ? roomAround(t.box, obstacles.filter((b) => b !== t.box && !sameBox(b, t.box!)), sheet) : undefined
+      const reqs = autodim(t.geo, {
+        type: type === 'Chain' ? 'chain' : 'baseline',
+        features: features === 'Overall' ? 'overall' : 'all',
+        axes: t.axes,
+        offset,
+        step,
+        tol,
+        skip,
+        room,
+        textWidth: textWidth(t.lfac),
+        onPlan: (_axis, plan) => (dropped += plan.dropped),
+      })
       if (t.id) done.set(t.id, dimensionedPositions(reqs))
       for (const r of reqs) {
-        ctx.doc.addEntity({ type: 'DIMENSION', layer: ctx.currentLayerId(), props: dimensionOf(ctx, r, t.lfac, t.z) })
+        const e = ctx.doc.addEntity({ type: 'DIMENSION', layer: ctx.currentLayerId(), props: dimensionOf(ctx, r, t.lfac, t.z) })
+        if (layout) obstacles.push(boxOf([e]))
         n++
       }
     }
     ctx.print(`${n} dimension(s) created${views.length ? ` in ${targets.length} view(s)` : ''}${skippedNote ? `; ${skippedNote}` : ''}.`)
+    if (dropped) ctx.print(`${dropped} position(s) left out: no room around the view (move the views apart or use Chain).`)
   },
 }

@@ -28,6 +28,7 @@ export function translateEntity(e: Entity, dx: number, dy: number, dz = 0): void
       e.props.center = t(e.props.center) // el semieje `major` es relativo: no se traslada
       break
     case 'TEXT':
+    case 'ATTDEF': // sin esto BLOCK dejaba el atributo en coordenadas de mundo y la inserción lo duplicaba (R08)
       e.props.position = t(e.props.position)
       break
     case 'RECTANGLE':
@@ -98,6 +99,7 @@ export function scaleEntity(e: Entity, c: Vec3, f: number): void {
       e.props.major = [e.props.major[0] * f, e.props.major[1] * f, e.props.major[2] * f]
       break
     case 'TEXT':
+    case 'ATTDEF':
       e.props.position = s(e.props.position)
       e.props.height *= f
       break

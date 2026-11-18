@@ -11,7 +11,7 @@ import type { AngleResult, CommandContext, DistanceResult, GetAngleOptions, GetD
  */
 export async function askKeyword(ctx: CommandContext, prompt: string, keywords: string[], def?: string): Promise<string | null> {
   for (;;) {
-    const s = await ctx.getString(prompt, def === undefined ? undefined : { default: def })
+    const s = await ctx.getString(prompt, def === undefined ? { word: true } : { default: def, word: true })
     if (s === null) return null
     const k = matchKeyword(stripUnderscore(s), keywords)
     if (k) return k
@@ -31,7 +31,7 @@ export interface AskNumberOptions {
 export async function askNumber(ctx: CommandContext, prompt: string, opts: AskNumberOptions = {}): Promise<NumberOrKeyword | null> {
   const def = opts.def === undefined ? undefined : String(opts.def)
   for (;;) {
-    const s = await ctx.getString(prompt, def === undefined ? undefined : { default: def })
+    const s = await ctx.getString(prompt, def === undefined ? { word: true } : { default: def, word: true })
     if (s === null) return null
     const text = stripUnderscore(s).trim()
     const v = parseNumber(text)

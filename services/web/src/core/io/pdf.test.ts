@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { computePlotTransform, exportPdf, MM_TO_PT, PAGE_SIZES, PlotRasters, plotContentStream, strokeStyleOps, worldToPage } from './pdf'
 import type { Entity, ImageEntity, Layer } from '../document/types'
+import { DEFAULT_DIM_STYLE } from '../dimension/dimGeometry'
 import { pdfText } from '../../test/pdfText'
 
 const layers: Layer[] = [
@@ -166,12 +167,27 @@ describe('vistas sombreadas en el PDF', () => {
     layer: '0',
     props: { tris: [0, 0, -0.001, 10, 0, -0.001, 0, 10, -0.001], colors: [1, 0, 0] },
   } as Entity
-  it('cada triángulo se rellena con su color; en grises, con su luminancia', () => {
+  it('cada zona se rellena con su color y se repasa con un trazo fino del mismo color; en grises, con su luminancia', () => {
     const t = { s: 1, ox: 0, oy: 0 }
     const color = plotContentStream([shade], layers, t)
-    expect(color).toContain('1 0 0 rg')
-    expect(color).toMatch(/h\nf\n/)
+    expect(color).toContain('1 0 0 rg\n1 0 0 RG\n')
+    expect(color).toMatch(/q\n0 w\n[\s\S]*h\nB\*\nQ\n/)
     const gray = plotContentStream([shade], layers, t, { plotStyle: 'grayscale', lineWeights: true })
     expect(gray).toContain('0.3 0.3 0.3 rg')
+  })
+})
+
+describe('texto de las cotas en el PDF (B25)', () => {
+  const layers: Layer[] = [{ id: '0', name: '0', color: '#ffffff', visible: true, locked: false, lineType: 'CONTINUOUS', lineWeight: 0.25, printable: true } as Layer]
+  const dim = {
+    id: 'd',
+    type: 'DIMENSION',
+    layer: '0',
+    props: { dimType: 'LINEAR', points: [[0, 0, 0], [80, 0, 0]], textPos: [40, 10, 0], style: { ...DEFAULT_DIM_STYLE } },
+  } as unknown as Entity
+  it('con la fuente de un trazo se ve con sus trazos y lleva el texto invisible encima: se busca y se copia', () => {
+    const ops = plotContentStream([dim], layers, { s: 1, ox: 0, oy: 0 })
+    expect(ops).toMatch(/q\n3 Tr\nBT\n\/F1 1 Tf\n[-\d. ]+ Tm\n\(80\) Tj\nET\nQ\n/)
+    expect(ops).toMatch(/ l\nS\n/) // los trazos siguen
   })
 })

@@ -928,6 +928,30 @@ export function solidEdgePositions(props: SolidProps): Float32Array {
   return out
 }
 
+/**
+ * Volumen exacto de un sólido, o null si sólo se conoce el de su malla: las primitivas por su fórmula y lo que calculó el
+ * núcleo exacto (OCCT) por su resultado. La malla de un cilindro es un prisma inscripto (−0,3 % con 48 lados): LIST y
+ * MASSPROP no deben informar ese volumen (R43).
+ */
+export function exactSolidVolume(props: SolidProps): number | null {
+  switch (props.op) {
+    case 'BOX':
+      return Math.abs(props.width * props.depth * props.height)
+    case 'CYLINDER':
+      return Math.PI * props.radius ** 2 * Math.abs(props.height)
+    case 'CONE': {
+      const [r, t] = [props.radius, props.radiusTop ?? 0]
+      return (Math.PI * Math.abs(props.height) * (r * r + r * t + t * t)) / 3
+    }
+    case 'SPHERE':
+      return (4 / 3) * Math.PI * props.radius ** 3
+    case 'TORUS':
+      return props.tube < props.radius ? 2 * Math.PI ** 2 * props.radius * props.tube ** 2 : null
+  }
+  const r = kernelResult(JSON.stringify(props))
+  return r?.ok && r.stats.volume > 0 ? r.stats.volume : null
+}
+
 /** Evalúa un sólido a malla de triángulos (vértices + caras) para exportar a OBJ. */
 export function solidMesh(props: SolidProps): MeshProps {
   const { vertices, faces } = solidMeshWithSurfaces(props)

@@ -1,4 +1,5 @@
 import { ABOUT } from '../../about'
+import { sanitizeSegment } from '../../io/paths'
 import { formatTrace, traceLog } from '../../session/traceLog'
 import { askKeyword, askNumber } from '../ask'
 import type { Command } from '../types'
@@ -15,6 +16,16 @@ function downloadText(text: string, name: string): boolean {
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
   return true
+}
+
+/**
+ * Nombre del archivo del registro: el del dibujo abierto (el de la barra de título, no el nombre interno del documento,
+ * que queda «drawing1» al abrir un archivo) y la hora, sin caracteres que un sistema de archivos no acepte.
+ */
+export function tracebackFileName(drawing: string, at: Date): string {
+  const safe = sanitizeSegment(drawing) || 'drawing'
+  const stamp = at.toISOString().slice(0, 19).replace(/[-:T]/g, '')
+  return `traceback-${safe}-${stamp}.txt`
 }
 
 /**
@@ -36,17 +47,17 @@ export const tracebackCommand: Command = {
       ctx.print('The session log is empty.')
       return
     }
+    const drawing = ctx.app.docName?.() || ctx.doc.name || 'drawing'
     const screen = typeof window !== 'undefined' ? `${window.innerWidth}x${window.innerHeight} @${window.devicePixelRatio}` : 'n/a'
     const text = formatTrace(w, {
       cota: ABOUT.version,
-      drawing: ctx.doc.name,
+      drawing,
       exported: new Date().toISOString(),
       requested: `last ${r.value} ${mode.toLowerCase()}`,
       browser: typeof navigator !== 'undefined' ? navigator.userAgent : 'n/a',
       screen,
     })
-    const stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '')
-    const saved = downloadText(text, `traceback-${ctx.doc.name || 'drawing'}-${stamp}.txt`)
+    const saved = downloadText(text, tracebackFileName(drawing, new Date()))
     if (typeof navigator !== 'undefined' && text.length < 2_000_000) void navigator.clipboard?.writeText(text).catch(() => undefined)
     ctx.print(
       `${w.events.length} event(s) exported${saved ? ' to a .txt file (also copied to the clipboard when it fits)' : ''}. ` +

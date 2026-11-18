@@ -34,7 +34,7 @@ import { DEFAULT_PALETTE, normalizePalette, type PaletteState } from '../core/ui
 import { dockToolbar, normalizeToolbar, normalizeToolbars, type ToolbarSide, type ToolbarState, type ToolbarStates } from '../core/ui/toolbar'
 import { DEFAULT_TOOLBARS, findToolbar, PHONE_TOOLBARS } from '../core/ui/toolbars'
 import { pickPrefs, readLocalPrefs, writeLocalPrefs, type Prefs } from '../core/ui/prefs'
-import { enterFullscreen, exitFullscreen, fileAccept, isPhone, mobileParam, type ViewMode } from '../ui/appWindow'
+import { enterFullscreen, exitFullscreen, fileAccept, isPhone, mobileActive, mobileParam, type ViewMode } from '../ui/appWindow'
 import { isIconSize, type IconSize } from '../ui/iconGrid'
 import { DEFAULT_VISUAL_STYLE, VISUAL_STYLES, type CameraMode, type ViewName, type VisualStyle } from '../core/view'
 import type { CameraState, Viewport } from '../render/Viewport'
@@ -93,16 +93,16 @@ import {
 } from '../core/io/fileSystem'
 import { CLOUD_ENABLED } from '../core/io/backend'
 import { idbDelete, idbGet, idbSet } from '../core/io/idb'
-import { DRAWING_EXT, DRAWING_EXTS, isBackupFile, isDrawingFile, splitDrawingPath, drawingFileName, joinPath } from '../core/io/paths'
+import { DRAWING_EXT, DRAWING_EXTS, isBackupFile, isDrawingFile, splitDrawingPath, drawingFileName, joinPath, sanitizeSegment } from '../core/io/paths'
 import { selectableEntities } from '../core/commands/selectionSets'
 import { DEFAULT_FLATSHOT, flatshotItems, type FlatshotOptions } from '../core/projection/flatshot'
-import { alignDrawingViews, isDrawingView, isShaded, showsHidden, viewBlockEntities } from '../core/drawing/views'
+import { alignDrawingViews, anchorOrigin, isDrawingView, isShaded, showsHidden, viewBlockEntities } from '../core/drawing/views'
 import { shadeViewTriangles } from '../core/projection/shade'
 import { solidThreads, threadViewItems } from '../core/thread/geometry'
 import { parseScript } from '../core/commands/script'
 import type { ScriptResult } from '../core/commands/CommandEngine'
 import { solidTopology } from '../core/editing/topology'
-import { onSolidsChanged, solidMesh, solidMeshWithSurfaces } from '../render/csg'
+import { exactSolidVolume, onSolidsChanged, solidMesh, solidMeshWithSurfaces } from '../render/csg'
 import { onKernelMessage } from '../render/occtKernel'
 import { parseStl } from '../core/io/stl'
 import { requestViewGen } from '../ui/ViewGenDialog'
@@ -629,7 +629,12 @@ export const useStore = create<AppState>((set, get) => {
   let currentFile: FsFileHandle | null = null
   /** Revisión del dibujo la última vez que se abrió, creó o guardó (para avisar de cambios sin guardar). */
   let savedRev = doc.revision
-  const markSaved = () => (savedRev = doc.revision)
+  // Sin el ruido de punto flotante ya al abrir o guardar: si no, la limpieza que corre al terminar el primer comando
+  // (`cleanNumbers`, p. ej. en las mallas de un STEP) contaba como un cambio y NEW/OPEN pedían guardar sin motivo (B26).
+  const markSaved = () => {
+    doc.cleanNumbers()
+    savedRev = doc.revision
+  }
 
   /** Aplica el tema a todos los viewports vivos y a las variables CSS. */
   const applyTheme = (theme: Theme) => {
@@ -999,17 +1004,15 @@ export const useStore = create<AppState>((set, get) => {
     const threads = threaded.flatMap((p) => threadViewItems(p, basis, solidTopology(p), 0)).filter((it) => opts.showObscured || !it.hidden)
     return [...flatshotItems(meshes, hints, basis, opts), ...threads]
   }
-  /** Centro 3D (caja envolvente) de lo que se documenta, proyectado a la vista: el origen común de las vistas. */
-  const viewOrigin = (ids: string[] | null, basis: ProjBasis): [number, number] | null => {
+  /** Centro 3D (caja envolvente) de lo que se documenta: el punto que va en la inserción de sus vistas. */
+  const viewAnchor = (ids: string[] | null): Vec3 | null => {
     const lo = [Infinity, Infinity, Infinity]
     const hi = [-Infinity, -Infinity, -Infinity]
     for (const m of modelMeshes(ids).meshes) {
       for (const v of m.vertices) for (let k = 0; k < 3; k++) [lo[k], hi[k]] = [Math.min(lo[k], v[k]), Math.max(hi[k], v[k])]
     }
     if (!isFinite(lo[0])) return null
-    const c = [0, 1, 2].map((k) => (lo[k] + hi[k]) / 2)
-    const dotb = (b: number[]) => c[0] * b[0] + c[1] * b[1] + c[2] * b[2]
-    return [dotb(basis.right), dotb(basis.up)]
+    return [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2]
   }
   /** Dibujo nuevo desde una plantilla; sus preferencias (colores, osnaps, estilo…) pasan a ser las del usuario. */
   const applyTemplate = (t: DrawingTemplate, full = true) => {
@@ -1034,25 +1037,44 @@ export const useStore = create<AppState>((set, get) => {
     for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619)
     return `${text.length}:${(h >>> 0).toString(36)}`
   }
+  /** Vistas de dibujo de todo el dibujo (modelo y layouts). */
+  const allDrawingViews = () => [doc.modelEntities, ...doc.layouts.map((x) => x.entities)].flatMap((l) => l.filter(isDrawingView))
+  /**
+   * Vistas de dibujos anteriores (sin `anchor`): mientras el modelo sigue como cuando se calcularon, se fija su punto
+   * 3D de inserción (el centro de entonces), así un cambio posterior del modelo no las recentra.
+   */
+  const pinViewAnchors = (sig = modelSignature()) => {
+    const anchors = new Map<string, Vec3 | null>()
+    for (const e of allDrawingViews()) {
+      const v = e.props.view
+      if (v.anchor || v.sig !== sig) continue
+      const key = JSON.stringify(v.source)
+      if (!anchors.has(key)) anchors.set(key, viewAnchor(v.source))
+      const a = anchors.get(key)
+      if (a) v.anchor = a
+    }
+  }
   /** VIEWUPDATE: recalcula las vistas de dibujo desactualizadas (o todas con `force`). */
   const updateDrawingViews = (ids: string[] | null, force = false): number => {
     const sig = modelSignature()
+    pinViewAnchors(sig)
     const layers = { visible: ensureLayerId('MD_Visible', undefined, '#ffffff'), hidden: ensureLayerId('MD_Hidden', 'HIDDEN', '#ffffff') }
     let n = 0
-    for (const l of [doc.modelEntities, ...doc.layouts.map((x) => x.entities)]) {
-      for (const e of l) {
-        if (!isDrawingView(e) || (ids && !ids.includes(e.id))) continue
-        const v = e.props.view
-        if (!force && v.sig === sig) continue
-        const items = projectModel(v.source, v.basis, { showObscured: showsHidden(v.hidden), tangential: true })
-        const shade = isShaded(v.hidden) ? (() => {
-          const { meshes, colors } = modelMeshes(v.source)
-          return shadeViewTriangles(meshes, colors, v.basis)
-        })() : null
-        doc.setBlock({ name: e.props.name, entities: viewBlockEntities(items, layers, shade, viewOrigin(v.source, v.basis)).entities })
-        v.sig = sig
-        n++
-      }
+    for (const e of allDrawingViews()) {
+      if (ids && !ids.includes(e.id)) continue
+      const v = e.props.view
+      if (!force && v.sig === sig) continue
+      const items = projectModel(v.source, v.basis, { showObscured: showsHidden(v.hidden), tangential: true })
+      const shade = isShaded(v.hidden) ? (() => {
+        const { meshes, colors } = modelMeshes(v.source)
+        return shadeViewTriangles(meshes, colors, v.basis)
+      })() : null
+      // La vista conserva su punto 3D de inserción: sólo cambia su contenido (R20). Sin él (dibujo anterior que
+      // cambió antes de fijarlo), el centro actual, como antes.
+      v.anchor ??= viewAnchor(v.source) ?? undefined
+      doc.setBlock({ name: e.props.name, entities: viewBlockEntities(items, layers, shade, v.anchor ? anchorOrigin(v.anchor, v.basis) : null).entities })
+      v.sig = sig
+      n++
     }
     if (n) doc.touch()
     return n
@@ -1359,6 +1381,7 @@ export const useStore = create<AppState>((set, get) => {
     qselect: () => get().openQselect(),
     script: () => get().openScript(),
     solidMesh: (e) => (e.type === 'SOLID3D' ? solidMesh(e.props) : e.type === 'MESH3D' ? e.props : null),
+    solidVolume: (e) => (e.type === 'SOLID3D' ? exactSolidVolume(e.props) : null),
     plotDialog: (window) =>
       new Promise((resolve) => {
         plotResolve?.('cancel')
@@ -1426,7 +1449,7 @@ export const useStore = create<AppState>((set, get) => {
     },
     currentViewBasis: () => currentViewBasis(),
     projectModel: (ids, basis, opts) => projectModel(ids, basis, opts),
-    viewOrigin: (ids, basis) => viewOrigin(ids, basis),
+    viewAnchor: (ids) => viewAnchor(ids),
     shadeModel: (ids, basis) => {
       const { meshes, colors } = modelMeshes(ids)
       return shadeViewTriangles(meshes, colors, basis)
@@ -1771,6 +1794,36 @@ export const useStore = create<AppState>((set, get) => {
   const whenIdle = (fn: () => void, tries = 50): void => {
     if (!engine.busy || tries <= 0) fn()
     else setTimeout(() => whenIdle(fn, tries - 1), 5)
+  }
+
+  /**
+   * Antes de reemplazar el dibujo por otro (OPEN, soltar un archivo, la lista de la carpeta o de la nube, un `.cota`
+   * elegido en IMPORT): con cambios sin guardar pregunta como NEW, `Save changes to …? [Yes/No] <Yes>` (R28). `true`
+   * si se puede seguir (no había cambios, se eligió No o se guardó); Esc, un clic o un guardado fallido lo cancelan.
+   */
+  const askSaveChanges = async (): Promise<boolean> => {
+    if (!get().isDirty()) return true
+    // Un comando a medio pedir (p. ej. soltar un archivo en medio de LINE) se cancela antes de preguntar, y se espera
+    // a que termine el que eligió el archivo (IMPORT de un `.cota`): su cierre borraría la pregunta.
+    if (engine.pendingKind()) engine.cancel()
+    await new Promise<void>((r) => whenIdle(r))
+    const name = get().docName || 'drawing1'
+    // La vista del celular en obra no tiene línea de comandos: ahí pregunta el navegador.
+    if (get().viewForce ?? mobileActive(get().viewMode)) {
+      const ok = window.confirm(`"${name}" has unsaved changes. Discard them and open the other drawing?`)
+      if (!ok) print('Open cancelled: the drawing was kept.')
+      return ok
+    }
+    const k = await engine.requestKeyword(`Save changes to ${name}? [Yes/No] <Yes>: `, ['Yes', 'No'], 'Yes')
+    if (!k) {
+      print('Open cancelled: the drawing was kept.')
+      return false
+    }
+    if (k === 'Yes' && !(await get().saveDocument())) {
+      print('The drawing was not saved: OPEN cancelled.')
+      return false
+    }
+    return true
   }
 
   return {
@@ -2139,6 +2192,8 @@ export const useStore = create<AppState>((set, get) => {
       }
       if (engine.busy || engine.hasPending) engine.cancel()
       get().viewports.forEach((vp) => vp.clearTracking())
+      // Al salir de un layout, las vistas de dibujos anteriores fijan su punto de inserción antes de que cambie el modelo.
+      if (doc.activeLayout) pinViewAnchors()
       activateTab(doc, id, get().currentLayerId, sheetInit())
       // Al entrar a un layout, sus vistas de dibujo se ponen al día con el modelo (VIEWUPDATEAUTO).
       if (doc.activeLayout) updateDrawingViews(null)
@@ -2347,14 +2402,15 @@ export const useStore = create<AppState>((set, get) => {
       const area = engine.selectionArea
       const cross = area ? area === 'crossing' : crossing
       const expand = (e: Entity): Entity[] => expandEntities([e], doc.blocks, { attdisp: doc.attdisp })
-      const ids = entitiesInScreenBox(selectable, rect, cross, project, expand)
+      const meshOf = (e: Entity) => (e.type === 'SOLID3D' ? solidMesh(e.props) : null)
+      const ids = entitiesInScreenBox(selectable, rect, cross, project, expand, meshOf)
       // Como el CAD clásico: dentro de un comando avisa lo que quedó afuera por estar en una capa bloqueada.
       const reportLocked = () => {
         const locked = doc.entities.filter((e) => {
           const l = layerSvc.get(e.layer)
           return !!l && l.locked && l.visible && !l.frozen
         })
-        const n = locked.length ? entitiesInScreenBox(locked, rect, cross, project, expand).length : 0
+        const n = locked.length ? entitiesInScreenBox(locked, rect, cross, project, expand, meshOf).length : 0
         if (n) print(`${n} ${n === 1 ? 'was' : 'were'} on a locked layer.`)
       }
       if (area) {
@@ -3234,6 +3290,8 @@ export const useStore = create<AppState>((set, get) => {
       const name = splitDrawingPath(file.name).name || 'drawing1'
       // Sin ruta: el próximo SAVE crea un archivo nuevo (carpeta de trabajo) o un documento en la nube.
       const detached = { docId: null, docName: name, docFolder: '', fsFilePath: null, openOpen: false, selection: [] }
+      const supported = isDrawingFile(lower) || MODEL_EXTS.some((x) => lower.endsWith(x)) || lower.endsWith('.dxf') || lower.endsWith('.dwg')
+      if (supported && !(await askSaveChanges())) return
       try {
         if (isDrawingFile(lower)) {
           const data = JSON.parse(await file.text()) as DocumentData
@@ -3288,8 +3346,11 @@ export const useStore = create<AppState>((set, get) => {
     },
     exportModel: (format) => {
       const docName = get().docName || 'drawing'
+      // Desde una hoja, el DXF/DWG es esa hoja aplanada: lleva su nombre, así exportar la siguiente no pisa el archivo.
+      const sheet = format !== 'OBJ' && !doc.editingBlock ? doc.activeLayout : undefined
+      const base = sheet ? `${docName}-${sanitizeSegment(sheet.name) || 'layout'}` : docName
       const download = (content: BlobPart, ext: string, mime: string) => {
-        const name = `${docName}.${ext}`
+        const name = `${base}.${ext}`
         const blob = new Blob([content], { type: mime })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
@@ -3302,19 +3363,26 @@ export const useStore = create<AppState>((set, get) => {
         print(`<Exported "${name}">`)
       }
       if (format === 'OBJ') {
-        const meshes: ObjMesh[] = []
-        for (const e of expandEntities(doc.entities, doc.blocks)) {
-          if (e.type === 'MESH3D') meshes.push({ name: e.id, vertices: e.props.vertices, faces: e.props.faces })
-          else if (e.type === 'SOLID3D') {
-            const m = solidMesh(e.props)
-            meshes.push({ name: e.id, vertices: m.vertices, faces: m.faces })
-          }
-        }
-        if (meshes.length === 0) {
+        // El OBJ es la geometría 3D del modelo, aunque la pestaña activa sea una hoja (en el papel no hay sólidos: desde
+        // un plano de conjunto no se descargaba nada). En el editor de bloques, la del bloque abierto.
+        const source = expandEntities(doc.editingBlock ? doc.entities : doc.modelEntities, doc.blocks).filter((e) => e.type === 'MESH3D' || e.type === 'SOLID3D')
+        if (source.length === 0) {
           print('Nothing to export (no 3D geometry for OBJ).')
           return
         }
-        download(exportObj(meshes), 'obj', 'text/plain')
+        // Un ensamble grande tarda unos segundos: el aviso se ve antes de que empiece.
+        print(`Writing OBJ (${source.length} object(s))…`)
+        setTimeout(() => {
+          const meshes: ObjMesh[] = []
+          for (const e of source) {
+            if (e.type === 'MESH3D') meshes.push({ name: e.id, vertices: e.props.vertices, faces: e.props.faces })
+            else if (e.type === 'SOLID3D') {
+              const m = solidMesh(e.props)
+              meshes.push({ name: e.id, vertices: m.vertices, faces: m.faces })
+            }
+          }
+          download(exportObj(meshes), 'obj', 'text/plain')
+        }, 30)
         return
       }
       // Las inserciones salen desarmadas; lo de una inserción en una capa congelada, en esa capa (así sigue oculto).
@@ -3713,6 +3781,9 @@ export const useStore = create<AppState>((set, get) => {
         print(`Could not open "${path}".`)
         return
       }
+      // La lista queda cerrada mientras se pregunta en la línea de comandos.
+      if (get().isDirty()) set({ openOpen: false })
+      if (!(await askSaveChanges())) return
       try {
         if (fileName.toLowerCase().endsWith('.dxf')) {
           // En el hilo aparte, como al abrir del equipo (también el DXF binario).
@@ -3757,6 +3828,8 @@ export const useStore = create<AppState>((set, get) => {
       }
     },
     loadDocument: async (id) => {
+      if (get().isDirty()) set({ openOpen: false })
+      if (!(await askSaveChanges())) return
       try {
         const payload = await api.getDocument(id)
         doc.load(payload.data)

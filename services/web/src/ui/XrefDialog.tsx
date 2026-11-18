@@ -16,9 +16,9 @@ export function XrefDialog() {
   const loaded = ask.items.filter((it) => it.status === 'loaded').length
   return (
     <div className="modal-backdrop" data-testid="xref-dialog">
-      <div className="modal xref-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal xref-modal" role="dialog" aria-modal="true" aria-labelledby="xref-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>External references not found</h2>
+          <h2 id="xref-title">External references not found</h2>
         </div>
         <p className="xref-intro">
           This drawing uses other drawings that could not be found. Choose each file to open it with the drawing, or go on

@@ -37,7 +37,7 @@ describe('IMPORT de modelos 3D al dibujo abierto (B04)', () => {
       ['MESH3D', '0'],
       ['MESH3D', '0'],
     ])
-    await h.run('INSERT', 'NEMA-17_Stepper_Motor_40mm', '100,0,0', '1', '0')
+    await h.run('INSERT', 'NEMA-17_Stepper_Motor_40mm', '100,0,0', '1', '', '0')
     expect(h.doc.entities.map((e) => (e.type === 'INSERT' ? e.props.position : e.type))).toEqual([
       [0, 0, 0],
       [100, 0, 0],

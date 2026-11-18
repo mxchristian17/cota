@@ -28,6 +28,8 @@ interface CornerTool {
   corner(a: CurvePick, b: CurvePick, shift: boolean): CornerResult
   vertexRule(): VertexRule
   verb: string
+  /** Confirmación de la esquina hecha (`shift`: esquina viva) en la línea de comandos (R04). */
+  done(shift: boolean): string
   message(err: CornerError): string
   /** Variante 3D a la que se redirige si el primer pick es un sólido. */
   edges: EdgeTool
@@ -82,6 +84,7 @@ async function second(ctx: CommandContext, tool: CornerTool, log: EditLog, a: Cu
       return false
     }
     applyCorner(ctx, log, k)
+    ctx.print(tool.done(!!r.pick?.shift))
     return true
   }
 }
@@ -169,6 +172,7 @@ const FILLET_TOOL: CornerTool = {
   corner: (a, b, shift) => filletCorner(a, b, shift ? 0 : sysvars.FILLETRAD),
   vertexRule: () => filletVertex(sysvars.FILLETRAD),
   verb: 'filleted',
+  done: (shift) => (shift || sysvars.FILLETRAD === 0 ? 'Corner created (radius 0).' : `Fillet created (radius ${fmt(sysvars.FILLETRAD)}).`),
   edges: FILLETEDGE_TOOL,
   message: (e) =>
     ({
@@ -263,6 +267,12 @@ const CHAMFER_TOOL: CornerTool = {
   corner: (a, b, shift) => chamferCorner(a, b, shift ? { method: 'Distance', d1: 0, d2: 0 } : chamferSpec()),
   vertexRule: () => chamferVertex(chamferSpec()),
   verb: 'chamfered',
+  done: (shift) =>
+    shift
+      ? 'Corner created (distances 0).'
+      : sysvars.CHAMMODE === 'Distance'
+        ? `Chamfer created (Dist1 = ${fmt(sysvars.CHAMFERA)}, Dist2 = ${fmt(sysvars.CHAMFERB)}).`
+        : `Chamfer created (Length = ${fmt(sysvars.CHAMFERC)}, Angle = ${fmt(sysvars.CHAMFERD)}).`,
   edges: CHAMFEREDGE_TOOL,
   message: (e) =>
     ({

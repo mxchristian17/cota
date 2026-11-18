@@ -38,9 +38,9 @@ export function OpenDialog() {
     const folders = [...groups.keys()].sort((a, b) => a.localeCompare(b))
     return (
       <div className="modal-backdrop" onClick={close} data-testid="open-dialog">
-        <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="open-title" onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
-            <h2 className="title-with-icon">Open drawing — <UiIcon name="folder" /> {fsFolderName}</h2>
+            <h2 id="open-title" className="title-with-icon">Open drawing — <UiIcon name="folder" /> {fsFolderName}</h2>
             <button className="icon-btn" onClick={close} aria-label="Close">
               <UiIcon name="close" />
             </button>
@@ -77,9 +77,9 @@ export function OpenDialog() {
 
   return (
     <div className="modal-backdrop" onClick={close} data-testid="open-dialog">
-      <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="open-title-2" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Open drawing</h2>
+          <h2 id="open-title-2">Open drawing</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
             <UiIcon name="close" />
           </button>

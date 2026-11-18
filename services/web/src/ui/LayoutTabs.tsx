@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/store'
 import { MODEL_TAB } from '../core/document/DocumentModel'
 import { focusCommandLine } from './focus'
@@ -41,6 +41,11 @@ export function LayoutTabs() {
   }, [menu])
 
   const active = doc.activeTab
+  const strip = useRef<HTMLSpanElement>(null)
+  // La pestaña activa queda a la vista dentro de la franja (con muchas hojas, la franja se desplaza).
+  useEffect(() => {
+    strip.current?.querySelector<HTMLElement>('.layout-tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [active])
   const layouts = doc.layouts
   const go = (id: string) => {
     setActiveTab(id)
@@ -60,7 +65,15 @@ export function LayoutTabs() {
   const idx = target ? layouts.indexOf(target) : -1
 
   return (
-    <span className="layout-tabs" data-testid="layout-tabs">
+    <span
+      className="layout-tabs"
+      data-testid="layout-tabs"
+      ref={strip}
+      // La rueda desplaza las pestañas de costado (la franja no muestra barra de desplazamiento).
+      onWheel={(e) => {
+        if (e.currentTarget.scrollWidth > e.currentTarget.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.currentTarget.scrollLeft += e.deltaY
+      }}
+    >
       <button
         className={'layout-tab' + (active === MODEL_TAB ? ' active' : '')}
         data-testid="tab-Model"

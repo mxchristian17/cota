@@ -44,7 +44,7 @@ LTSCALE 10
 
 | Variable | Values | What it controls |
 | --- | --- | --- |
-| `UCSORTHO` | 1 on, 0 off | Whether switching to a standard view (Front, Left…) also sets the matching UCS, so you draw on the plane you see. |
+| `UCSORTHO` | 1 on, 0 off | Whether switching to an orthographic view (Top, Front, Left…) also sets the matching UCS, so you draw on the plane you see; the command line says so (`UCS: Front …`). Isometric views keep the UCS; `UCS W` returns to World. |
 | `UCSFOLLOW` | 0 off, 1 on | Whether changing the UCS also switches to its plan view. |
 | `UCSDETECT` | 1 on, 0 off | Dynamic UCS: while a command asks for its first point, hovering a flat face of a solid places the UCS on that face. |
 

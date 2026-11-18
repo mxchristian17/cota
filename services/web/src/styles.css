@@ -599,6 +599,33 @@ textarea {
   text-align: center;
 }
 
+/* Celular: el cubo plegado en un botón con la vista actual (objetivo táctil de 44 px); desplegado, «Hide» lo pliega. */
+.viewnet-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 10px;
+  background: var(--c-raised);
+  color: var(--c-text);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-pop);
+  cursor: pointer;
+}
+.viewnet-chip-label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  letter-spacing: var(--track-micro);
+}
+.viewnet-chip-proj {
+  color: var(--c-text-3);
+  font-size: var(--fs-micro);
+}
+.viewnet-fold {
+  align-self: flex-end;
+}
+
 /* --- Cubo desplegado en Monge --- */
 .viewnet-grid {
   position: relative;
@@ -912,6 +939,12 @@ textarea {
   overflow-x: auto;
   scrollbar-width: none;
   border-right: 1px solid var(--c-line);
+}
+/* Con muchas hojas (o el panel del agente abierto) las pestañas se achican y se desplazan dentro de su franja: el resto
+   de la barra de estado (LWT, UCS, la escala) queda siempre a la vista. Model y una hoja entran siempre. */
+.statusbar > .layout-tabs {
+  flex: 0 1 auto;
+  min-width: 9rem;
 }
 .layout-tab {
   background: transparent;
@@ -1320,6 +1353,10 @@ select.prop-value {
   color: var(--c-text-3);
   font-weight: 600;
 }
+/* La descripción nunca ensancha la tabla: corta en las barras de las opciones y, si hace falta, dentro de la palabra. */
+.help-table .help-desc {
+  overflow-wrap: anywhere;
+}
 .help-hint {
   color: var(--c-text-3);
   font-size: var(--fs-sm);
@@ -1619,6 +1656,24 @@ input::placeholder {
 .custom-prop-row .field {
   flex: 1;
   min-width: 0;
+}
+/* Grupo de casillas con un título (márgenes, tamaño a medida): el título como el de un campo, cada casilla con el suyo
+   arriba, más tenue. */
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: var(--fs-sm);
+  color: var(--c-text-2);
+}
+.custom-prop-row > label {
+  flex: 1 1 0;
+  min-width: 0;
+  gap: 3px;
+}
+.custom-prop-row > label > span {
+  color: var(--c-text-3);
+  font-size: var(--fs-sm);
 }
 
 /* --- Plantillas de layout --- */
@@ -2558,9 +2613,10 @@ div.lt-row {
 .plot-inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .plot-inline .field { flex: 1; min-width: 0; }
 .plot-note { font-size: 12px; margin: 4px 0; }
-.plot-preview { position: relative; min-height: 300px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
-.plot-preview canvas { display: block; }
-.plot-caption { position: absolute; left: 8px; bottom: 6px; font-size: 11px; }
+.plot-preview { display: flex; flex-direction: column; min-height: 300px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.plot-page { position: relative; flex: 1; min-height: 0; }
+.plot-page canvas { position: absolute; inset: 0; display: block; }
+.plot-caption { flex: none; padding: 3px 8px 5px; font-size: 11px; }
 @media (max-width: 640px) {
   .plot-body { grid-template-columns: 1fr; }
   .plot-preview { min-height: 220px; }
@@ -3049,6 +3105,16 @@ div.lt-row {
   }
   .app-phone .topbar .workspace-btn {
     max-width: 84px;
+  }
+  /* El nombre del dibujo se lleva el lugar (antes «radiadc»): la carpeta y el autoguardado quedan como íconos (el
+     punto del autoguardado dice si está activo; los dos conservan su nombre accesible y su ayuda). */
+  .app-phone .topbar .workspace-label,
+  .app-phone .topbar .autosave-label,
+  .app-phone .topbar .spacer {
+    display: none;
+  }
+  .app-phone .topbar .autosave-btn::before {
+    display: inline-block;
   }
 }
 /* Los paneles abiertos van encima del dibujo en vez de achicarlo (quedaba una franja de unos pocos píxeles). */

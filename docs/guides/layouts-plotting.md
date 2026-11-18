@@ -9,7 +9,10 @@ A **layout** is a drawing sheet. Click the **Layout1** tab (or **+** to add one;
   inside / outside a viewport) switch between working in the model and on the sheet. `VPMAX` / `VPMIN`,
   `VPCLIP` and `VPLAYER` (per-viewport layer visibility) complete the set.
 - **Title block:** each new layout comes with a frame and a title block whose fields (file name, sheet
-  `n OF m`, date, drawing properties) fill themselves. Save and reuse sheets as `.cotat` templates.
+  `n OF m`, date, scale, drawing properties) fill themselves: TITLE takes the drawing's Title, DRAWN its Author and
+  COMPANY the custom property `Company` of [DWGPROPS](../reference/file.md#dwgprops); replace any of them with
+  `ATTEDIT` (a point inside its cell selects the title block). SCALE is the viewport's scale, or that of the base
+  drawing view on a sheet made with VIEWBASE. A long text is narrowed to fit its cell. Save and reuse sheets as `.cotat` templates.
 - **Drawing views from the 3D model:** `VIEWBASE` places a base view and its projected views (orthographic
   and isometric), with hidden lines and optional shading; choose first- or third-angle projection with
   `VIEWSTD`. `VIEWPROJ` adds more projected views, `VIEWEDIT` changes a view (scale, hidden lines) and

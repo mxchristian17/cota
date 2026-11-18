@@ -78,4 +78,16 @@ describe('Tolerancias y overrides de cotas sobre vistas a escala', () => {
     expect(formatDim(b)).toBe('100 ±0,2')
     expect(formatDim(a)).toBe('100 ±0,2')
   })
+
+  it('R15: DIMLINEAR a mano sobre una vista 1:2 informa y ofrece la medida de la pieza (no la del papel)', async () => {
+    const { h } = await sheet()
+    h.prints.length = 0
+    // Vertical sobre el lado izquierdo de la vista 1:2: 25 de papel = 50 de pieza.
+    await h.run('DIMLINEAR', '#75,87.5', '#75,112.5', 'V', 'T', '', '#60,100')
+    const out = h.prints.join('\n')
+    expect(out).toContain('Enter dimension text <50>')
+    expect(out).toContain('Dimension text = 50')
+    expect(out).not.toContain('Dimension text = 25')
+    expect(formatDim(h.ofType('DIMENSION').at(-1)!.props as DimensionProps)).toBe('50')
+  })
 })

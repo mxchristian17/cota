@@ -1,6 +1,8 @@
 /**
  * Multicomandos (scripts del CAD clásico): entradas separadas por espacios o saltos de línea; `""` es un Enter
- * vacío y el texto con espacios va entre comillas (`\"` dentro de ellas es una comilla).
+ * vacío y el texto con espacios va entre comillas (`\"` dentro de ellas es una comilla). La comilla que cierra es la
+ * que sigue de un espacio, un salto de línea o el final: `"Tapón G 1/2""` es `Tapón G 1/2"` (R12; antes cerraba en la
+ * primera y el resto del lote se fusionaba en una entrada).
  */
 export function parseScript(text: string): string[] {
   const out: string[] = []
@@ -14,7 +16,7 @@ export function parseScript(text: string): string[] {
     if (c === '"') {
       let tok = ''
       i++
-      while (i < text.length && text[i] !== '"') {
+      while (i < text.length && !(text[i] === '"' && (i + 1 >= text.length || /\s/.test(text[i + 1])))) {
         if (text[i] === '\\' && text[i + 1] === '"') {
           tok += '"'
           i += 2

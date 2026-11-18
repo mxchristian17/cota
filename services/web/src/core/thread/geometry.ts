@@ -2,6 +2,7 @@ import type { Vec3 } from '../math'
 import type { ArcProps, DimensionEntity, Entity, SolidProps, SolidThread } from '../document/types'
 import { vadd, vcross, vdot, vlen, vnorm, vscale, vsub } from '../geom/vec3'
 import { rayFaces, type Topology } from '../editing/topology'
+import { solidLeaves } from '../editing/solid'
 import { MIN_THREAD_GAP_MM, threadDepth, threadInfo, type ThreadInfo, type ThreadSpec } from './tables'
 
 /**
@@ -54,6 +55,23 @@ export interface CylFace {
   radius: number
   /** Normal hacia afuera del material: true = eje (rosca exterior), false = agujero (interior). */
   shaft: boolean
+}
+
+/**
+ * La cara ajustada con los datos exactos del árbol del sólido, si un cilindro suyo es esa cara (mismo eje y radio
+ * dentro del 1 %): el radio y el eje salen del parámetro, no de la malla (R03: un agujero Ø30,5 informaba Ø30,514).
+ */
+export function exactCylinder(props: SolidProps, cyl: CylFace): CylFace {
+  const d = vnorm(vsub(cyl.b, cyl.a))
+  for (const leaf of solidLeaves(props)) {
+    if (leaf.op !== 'CYLINDER') continue
+    const ax = vnorm(leaf.axis ?? [0, 0, 1])
+    if (Math.abs(vdot(ax, d)) < 1 - 1e-6 || Math.abs(leaf.radius - cyl.radius) > 0.01 * leaf.radius) continue
+    const onAxis = (p: Vec3): Vec3 => vadd(leaf.base, vscale(ax, vdot(vsub(p, leaf.base), ax)))
+    if (vlen(vsub(cyl.a, onAxis(cyl.a))) > 0.01 * leaf.radius) continue
+    return { ...cyl, a: onAxis(cyl.a), b: onAxis(cyl.b), radius: leaf.radius }
+  }
+  return cyl
 }
 
 /** Base ortonormal perpendicular a `d`. */

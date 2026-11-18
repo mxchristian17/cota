@@ -13,6 +13,7 @@ import { BYBLOCK, BYLAYER, CONTINUOUS, CONTINUOUS_DEF, isSpecialLinetype, librar
 import { defaultPageSetup } from '../layout/paper'
 import { updateDimension } from '../dimension/assoc'
 import { sanitizeNote } from '../geom/note'
+import { compactShade } from '../projection/shade'
 import {
   builtinDimStyles,
   BUILTIN_DIM_VARS,
@@ -82,6 +83,17 @@ export class DocumentModel {
     if (this.data.activeLayout && !this.getLayout(this.data.activeLayout)) delete this.data.activeLayout
     this.normalizeDimStyles()
     this.normalizeLinetypes()
+    this.compactShades()
+  }
+
+  /**
+   * Sombreados de las vistas guardados por 2.48 y anteriores (cada triángulo con sus tres vértices de 17 cifras): se
+   * compactan al abrir, así el próximo guardado pesa ~4 veces menos sin cambiar nada de lo que se ve.
+   */
+  private compactShades(): void {
+    for (const list of [this.data.entities, ...(this.data.layouts ?? []).map((l) => l.entities), ...(this.data.blocks ?? []).map((b) => b.entities)]) {
+      for (const e of list) if (e.type === 'SHADE' && !e.props.index) e.props = compactShade(e.props)
+    }
   }
 
   // --- Tipos de línea -----------------------------------------------------------------------
@@ -404,6 +416,20 @@ export class DocumentModel {
     else delete d.overrides
     d.style = resolveDimVars(this.dimStyleDef(d.styleName ?? 'Standard')?.vars, d.overrides)
     this._rev++
+  }
+
+  /**
+   * Una cota nueva en la hoja activa sobre una vista de dibujo mide la pieza: DIMLFAC = 1/escala de la vista (como
+   * las cotas asociadas a la vista del CAD clásico). Los comandos de cota la usan también en la previsualización y en
+   * `Enter dimension text <…>`, así lo que se ve al acotar es lo que queda (R15). Sin vista, o con un DIMLFAC propio,
+   * las mismas props.
+   */
+  viewDimProps(d: DimensionProps): DimensionProps {
+    if (!this.activeLayout || d.overrides?.DIMLFAC) return d
+    const f = viewDimFactor(this.entities, this.blocks, d)
+    if (f === null || Math.abs(f - 1) <= 1e-12) return d
+    const base = d.style.DIMLFAC || 1
+    return { ...d, style: { ...d.style, DIMLFAC: base * f }, overrides: { ...(d.overrides ?? {}), DIMLFAC: base * f } }
   }
 
   /** ¿La cota está en la hoja activa sobre una vista de dibujo (mide la pieza con su factor)? */
@@ -946,13 +972,7 @@ export class DocumentModel {
     if (input.lineWeight === undefined && v?.CELWEIGHT !== undefined && v.CELWEIGHT >= 0) entity.lineWeight = v.CELWEIGHT
     else if (entity.lineWeight === undefined || entity.lineWeight < 0) delete entity.lineWeight
     // En una hoja, una cota sobre una vista de dibujo mide la pieza (factor 1/escala de la vista).
-    if (entity.type === 'DIMENSION' && this.activeLayout && !entity.props.overrides?.DIMLFAC) {
-      const f = viewDimFactor(this.entities, this.blocks, entity.props)
-      if (f !== null && Math.abs(f - 1) > 1e-12) {
-        const base = entity.props.style.DIMLFAC || 1
-        entity.props = { ...entity.props, style: { ...entity.props.style, DIMLFAC: base * f }, overrides: { ...(entity.props.overrides ?? {}), DIMLFAC: base * f } }
-      }
-    }
+    if (entity.type === 'DIMENSION') entity.props = this.viewDimProps(entity.props)
     this.entities.push(entity)
     this._rev++
     return entity

@@ -35,8 +35,8 @@ describe('PASTECLIP en otro dibujo lleva las definiciones de bloque (B27)', () =
     await h.run('PASTECLIP', '1000,1000,0')
     expect(h.prints).toContain('1 block definition(s) added: NEMA17.')
     expect(h.doc.getBlock('NEMA17')?.entities).toHaveLength(2)
-    await h.run('INSERT', 'NEMA17', '1100,1000,0', '1', '0')
-    await h.run('INSERT', 'nema17', '1200,1000,0', '1', '90') // sin distinguir mayúsculas
+    await h.run('INSERT', 'NEMA17', '1100,1000,0', '1', '', '0')
+    await h.run('INSERT', 'nema17', '1200,1000,0', '1', '', '90') // sin distinguir mayúsculas
     const refs = inserts(h.doc)
     expect(refs.map((e) => e.props.position)).toEqual([
       [1000, 1000, 0],
@@ -120,7 +120,7 @@ describe('PASTECLIP en otro dibujo lleva las definiciones de bloque (B27)', () =
 describe('INSERT de un bloque inexistente (B27)', () => {
   it('sin bloques en el dibujo toma el nombre, avisa y no crea una inserción vacía', async () => {
     const h = makeEngine()
-    await h.run('INSERT', 'NEMA17', '100,0,0', '1', '0')
+    await h.run('INSERT', 'NEMA17', '100,0,0', '1', '', '0')
     expect(h.prints).toContain('Block "NEMA17" not found: the drawing has no blocks. Define one with BLOCK, or bring one with PASTECLIP or IMPORT.')
     expect(h.doc.entities.filter((e) => e.type === 'INSERT')).toHaveLength(0)
   })
@@ -204,5 +204,41 @@ describe('portapapeles entre pestañas del navegador (B05)', () => {
     await b.h.run('PASTEORIG')
     await settle()
     expect(b.h.doc.entities.map((e) => e.type)).toEqual(['CIRCLE', 'LINE', 'CIRCLE'])
+  })
+})
+
+describe('INSERT pide la escala Y como el CAD clásico (R11)', () => {
+  it('X, Y (Enter = X) y rotación; un 0 o un texto vuelve a pedir el factor', async () => {
+    const h = makeEngine()
+    h.doc.setBlock({ name: 'B', entities: [{ id: 'b1', type: 'LINE', layer: '0', props: { start: [0, 0, 0], end: [1, 0, 0] } }] })
+    await h.run('INSERT', 'B', '#0,0', '2', '3', '45')
+    await h.run('INSERT', 'B', '#10,0', '2', '', '0')
+    await h.run('INSERT', 'B', '#20,0', '0', 'x', '1.5', '', '')
+    const ins = h.ofType('INSERT').map((e) => { const p = e.props as { scale: number[]; rotation: number }; return [p.scale, Math.round((p.rotation * 180) / Math.PI)] })
+    expect(ins).toEqual([
+      [[2, 3, 2], 45],
+      [[2, 2, 2], 0],
+      [[1.5, 1.5, 1.5], 0],
+    ])
+    expect(h.prints.filter((l) => l === 'Requires a nonzero number.')).toHaveLength(2)
+  })
+})
+
+describe('pegar en un dibujo nuevo conserva la capa (B15)', () => {
+  it('COPYBASE de una pieza en PERFIL, NEW y PASTECLIP: la copia queda en PERFIL (no en el id «L1»)', async () => {
+    const h = makeEngine()
+    const perfil = new LayerService(h.doc).create('PERFIL', { color: '#00ffff' })
+    h.add('POLYLINE', { vertices: [[0, 0, 0], [20, 0, 0], [20, 10, 0]], closed: true }, perfil.id)
+    await h.run('COPYBASE', 'ALL', '', '0,0,0')
+    openOther(h.doc) // NEW: dibujo vacío, sin la capa
+    expect(h.doc.layers.map((l) => l.name)).toEqual(['0'])
+    await h.run('PASTECLIP', '0,0,0')
+    const [pasted] = h.doc.entities
+    const layer = h.doc.layers.find((l) => l.id === pasted.layer)
+    expect(layer?.name).toBe('PERFIL')
+    expect(layer?.color).toBe('#00ffff')
+    h.prints.length = 0
+    await h.run('LIST', 'ALL', '')
+    expect(h.prints.find((l) => l.startsWith('POLYLINE'))).toContain('Layer: "PERFIL"')
   })
 })

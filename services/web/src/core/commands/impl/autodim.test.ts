@@ -70,4 +70,51 @@ describe('AUTODIM en vistas de dibujo', () => {
     // Mide la pieza (DIMLFAC = 1/escala), no el papel.
     expect(dims(h).every((d) => d.props.style.DIMLFAC === 2)).toBe(true)
   })
+
+  it('B12: una ventana de cruce tecleada toma las vistas; un punto que no encuentra nada vuelve a pedir', async () => {
+    const { h, ids } = layoutWithViews([
+      { at: [100, 100], view: { orientation: 'FRONT', basis: viewBasis('FRONT'), hidden: 'visible', source: null } },
+      { at: [250, 100], view: { orientation: 'TOP', basis: viewBasis('TOP'), hidden: 'visible', source: null } },
+    ])
+    await h.run('AUTODIM', '#500,500', '')
+    expect(h.prints.join('\n')).toContain('Nothing selected')
+    expect(dims(h)).toHaveLength(0)
+    await h.run('C', '#60,60', '#140,140', '', '', '')
+    expect(dims(h).length).toBeGreaterThan(0)
+    // Sólo la vista de la izquierda (x de 75 a 125): la otra no se tocó.
+    for (const d of dims(h)) expect(d.props.points[0][0]).toBeLessThan(150)
+    expect(ids).toHaveLength(2)
+  })
+
+  it('B06/R19: las cotas no invaden la vista vecina: sin lugar debajo van arriba y, si no, sólo la total', async () => {
+    // Dos vistas 1:2 (50 × 25 en la hoja) una sobre otra con 8 mm entre ellas, la de abajo pegada al borde del área.
+    const { h } = layoutWithViews([
+      { at: [150, 25], view: { orientation: 'FRONT', basis: viewBasis('FRONT'), hidden: 'visible', source: null } },
+      { at: [150, 58], view: { orientation: 'TOP', basis: viewBasis('TOP'), hidden: 'visible', source: null } },
+    ])
+    await h.run('AUTODIM', '', '', '')
+    const lower = { minX: 125, maxX: 175, minY: 12.5, maxY: 37.5 }
+    const upper = { minX: 125, maxX: 175, minY: 45.5, maxY: 70.5 }
+    for (const d of dims(h).filter((x) => x.props.dimType === 'LINEAR')) {
+      const y = d.props.textPos[1]
+      const x = d.props.textPos[0]
+      // Ninguna línea de cota cae dentro de una vista.
+      for (const b of [lower, upper]) expect(x > b.minX && x < b.maxX && y > b.minY && y < b.maxY).toBe(false)
+    }
+    // La de arriba pone sus horizontales arriba (no entre las vistas).
+    const upperH = dims(h).filter((d) => d.props.rotation === 0 && d.props.points[0][1] > 40)
+    expect(upperH.length).toBeGreaterThan(0)
+    for (const d of upperH) expect(d.props.textPos[1]).toBeGreaterThan(upper.maxY)
+  })
+})
+
+describe('AUTODIM: cadena con textos que se pisan', () => {
+  it('las cotas angostas de una cadena se escalonan en media fila', async () => {
+    const { autodim } = await import('../../dimension/autodim')
+    const L = (a: [number, number], b: [number, number]) => ({ kind: 'line' as const, a, b })
+    const geo = [L([0, 0], [20, 0]), L([0, 0], [0, 10]), L([2, 0], [2, 10]), L([4, 0], [4, 10]), L([20, 0], [20, 10]), L([0, 10], [20, 10])]
+    const reqs = autodim(geo, { type: 'chain', features: 'all', axes: { x: true, y: false }, offset: 5, step: 7, tol: 1e-6, textWidth: () => 3 })
+    const rows = reqs.filter((r) => r.kind === 'linear').map((r) => r.at[1])
+    expect(new Set(rows).size).toBe(3) // fila, media fila y la total
+  })
 })

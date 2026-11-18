@@ -1,7 +1,8 @@
 import { isHidden } from '../editing/isolation'
 import type { DocumentModel } from '../document/DocumentModel'
-import type { Entity } from '../document/types'
-import { entityOutline } from '../editing/bounds'
+import type { BlockDef, Entity } from '../document/types'
+import { selectionOutline, type SolidMeshOf } from '../editing/bounds'
+import { expandEntities } from '../editing/block'
 import { layerEditable, layerVisible } from '../layers/visibility'
 import type { Pt, Vec3 } from '../math'
 
@@ -65,14 +66,21 @@ const edges = (pts: P2[], closed: boolean): Array<[P2, P2]> => {
   return out
 }
 
+/**
+ * Contorno de una entidad para las selecciones por teclado; una inserción (bloque, rótulo, vista de dibujo) da el de
+ * su geometría de mundo: sin `blocks` no tiene contorno y Window/Crossing/Fence nunca la tomaban (R06).
+ */
+const outlineOf = (e: Entity, blocks?: BlockDef[], meshOf?: SolidMeshOf): Pt[][] =>
+  e.type === 'INSERT' && blocks ? expandEntities([e], blocks).flatMap((part) => selectionOutline(part, meshOf)) : selectionOutline(e, meshOf)
+
 /** Entidades dentro (`window`) o que tocan (`crossing`) el polígono `poly` (≥ 3 vértices). */
-export function inPolygon(ents: Entity[], poly: Pt[], crossing: boolean, plane: WindowPlane = WORLD_XY): string[] {
+export function inPolygon(ents: Entity[], poly: Pt[], crossing: boolean, plane: WindowPlane = WORLD_XY, blocks?: BlockDef[], meshOf?: SolidMeshOf): string[] {
   const xy = onPlane(plane)
   const pg = poly.map(xy)
   const border = edges(pg, true)
   return ents
     .filter((e) => {
-      const outline = entityOutline(e).map((l) => l.map(xy))
+      const outline = outlineOf(e, blocks, meshOf).map((l) => l.map(xy))
       const pts = outline.flat()
       if (!pts.length) return false
       if (!crossing) return pts.every((p) => inside(p, pg))
@@ -92,10 +100,10 @@ export function rectPolygon(a: Pt, b: Pt, plane: WindowPlane = WORLD_XY): Pt[] {
 }
 
 /** Entidades que cruza la polilínea `fence`. */
-export function byFence(ents: Entity[], fence: Pt[], plane: WindowPlane = WORLD_XY): string[] {
+export function byFence(ents: Entity[], fence: Pt[], plane: WindowPlane = WORLD_XY, blocks?: BlockDef[], meshOf?: SolidMeshOf): string[] {
   const xy = onPlane(plane)
   const f = edges(fence.map(xy), false)
   return ents
-    .filter((e) => entityOutline(e).some((l) => edges(l.map(xy), false).some(([a, b]) => f.some(([c, d]) => segCross(a, b, c, d)))))
+    .filter((e) => outlineOf(e, blocks, meshOf).some((l) => edges(l.map(xy), false).some(([a, b]) => f.some(([c, d]) => segCross(a, b, c, d)))))
     .map((e) => e.id)
 }

@@ -854,6 +854,42 @@ export function viewHints(hints: CircleHint[], view: ViewDir, offset: P2 = [0, 0
 }
 
 /** Lleva cada círculo o arco al círculo exacto de una primitiva que coincide (radio y centro). */
+/**
+ * Contornos de los cilindros vistos de costado a su radio exacto: el teselado pone la silueta en un vértice del
+ * polígono, a r·cos(δ) del eje (un Ø42 se acotaba 41,99, R19). Una línea paralela al eje proyectado de un círculo
+ * del sólido (`hints`, con su normal ⟂ a la vista) y a la distancia del radio dentro del error del teselado (32 lados
+ * o más, siempre por dentro) se corre a r. Sólo se mueve en perpendicular al eje.
+ */
+export function snapSilhouettes(items: ProjItem[], hints: CircleHint[], basis: ProjBasis): ProjItem[] {
+  const dot3 = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+  const side = hints.flatMap((h) => {
+    if (!h.n || Math.abs(dot3(h.n, basis.out)) > 1e-6) return []
+    const a: P2 = [dot3(h.n, basis.right), dot3(h.n, basis.up)]
+    const L = Math.hypot(a[0], a[1])
+    if (L < 1e-9) return []
+    const u: P2 = [a[0] / L, a[1] / L]
+    return [{ c: [dot3(h.c, basis.right), dot3(h.c, basis.up)] as P2, u, p: [-u[1], u[0]] as P2, r: h.r }]
+  })
+  if (!side.length) return items
+  return items.map((it) => {
+    if (it.kind !== 'line') return it
+    const d: P2 = [it.b[0] - it.a[0], it.b[1] - it.a[1]]
+    const len = Math.hypot(d[0], d[1])
+    if (len < 1e-9) return it
+    for (const h of side) {
+      if (Math.abs(d[0] * h.u[1] - d[1] * h.u[0]) / len > 1e-6) continue // no es paralela al eje
+      const rel = (q: P2): P2 => [q[0] - h.c[0], q[1] - h.c[1]]
+      const off = rel(it.a)[0] * h.p[0] + rel(it.a)[1] * h.p[1]
+      const err = Math.abs(off) - h.r
+      if (err > 1e-9 || err < -0.006 * h.r - 1e-9 || Math.abs(err) < 1e-12) continue
+      const k = (Math.sign(off) * h.r - off)
+      const mv = (q: P2): P2 => [q[0] + h.p[0] * k, q[1] + h.p[1] * k]
+      return { ...it, a: mv(it.a), b: mv(it.b) }
+    }
+    return it
+  })
+}
+
 export function snapToHints(items: ProjItem[], hints: Array<{ c: P2; r: number }>): ProjItem[] {
   return items.map((it) => {
     if (it.kind === 'line') return it

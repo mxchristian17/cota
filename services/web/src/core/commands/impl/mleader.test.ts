@@ -3,6 +3,8 @@ import { makeEngine } from '../../../test/engineHarness'
 import { dimDisplay } from '../../dimension/dimGeometry'
 import type { DimensionProps } from '../../document/types'
 import { resolveFieldTexts } from '../../fields/context'
+import { expandEntities } from '../../editing/block'
+import { sysvars, resetSysvars } from '../sysvars'
 
 type H = ReturnType<typeof makeEngine>
 const dims = (h: H) => h.ofType('DIMENSION').map((e) => e.props as DimensionProps)
@@ -66,5 +68,27 @@ describe('multileaders y líneas de centro', () => {
       expect(q[0]).toBeCloseTo(5, 9)
     }
     expect(c.assoc).toHaveLength(4)
+  })
+
+  it('R07: MLEADER con contenido Bloque pide el atributo y el globo muestra el número, apoyado en el aterrizaje', async () => {
+    const h = makeEngine()
+    sysvars.ATTDIA = 0
+    try {
+      await h.run('CIRCLE', '#0,0', '5')
+      await h.run('ATTDEF', '', 'NUM', 'Posición', '?', 'J', 'MC', '#0,0', '3', '0')
+      h.setSelection(h.doc.entities.map((e) => e.id))
+      await h.run('BLOCK', 'GLOBO', '#0,0')
+      await h.run('ERASE', 'L', '')
+      await h.run('MLEADER', 'O', 'C', 'B', 'GLOBO', '#100,100', '#120,110', '7')
+      expect(h.prints.join('\n')).toContain('Posición')
+      const ins = h.ofType('INSERT')
+      expect(ins).toHaveLength(1)
+      const txt = expandEntities(ins, h.doc.blocks).find((e) => e.type === 'TEXT')
+      expect(txt?.type === 'TEXT' && txt.props.text).toBe('7')
+      // El borde izquierdo del círculo toca el extremo del aterrizaje y el centro queda a su altura.
+      expect(ins[0].type === 'INSERT' && ins[0].props.position).toEqual([125, 110, 0])
+    } finally {
+      resetSysvars()
+    }
   })
 })

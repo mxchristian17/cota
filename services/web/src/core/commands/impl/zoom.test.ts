@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeEngine } from '../../../test/engineHarness'
+import { orthoUcs } from '../../ucs'
 
 const last = (h: ReturnType<typeof makeEngine>, name: string) => [...h.calls].reverse().find((c) => c[0] === name)?.[1]
 
@@ -92,5 +93,25 @@ describe('ZOOM, PAN, LIMITS y VIEW', () => {
     await h.run('VIEW', 'FRONT')
     await h.run('VIEW', 'O', 'L')
     expect(h.views.slice(-2)).toEqual(['FRONT', 'LEFT'])
+  })
+})
+
+describe('VIEW avisa cuando cambia la UCS (R42, B11)', () => {
+  it('con UCSORTHO una vista ortogonal pone su UCS y lo dice; una isométrica recuerda que sigue', async () => {
+    let ucs = { origin: [0, 0, 0], x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] } as never
+    let name: string | null = 'World'
+    const h = makeEngine({
+      getUcs: () => ucs,
+      ucsName: () => name,
+      setView: (v: string) => {
+        if (v === 'FRONT') [ucs, name] = [orthoUcs('FRONT') as never, 'Front']
+      },
+    } as never)
+    await h.run('VIEW', 'FRONT')
+    expect(h.prints.at(-1)).toBe('UCS: Front (UCSORTHO = 1: orthographic views set their UCS). Typed coordinates and ROTATE now use it; UCS W returns to World.')
+    await h.run('VIEW', 'SWISO')
+    expect(h.prints.at(-1)).toBe('UCS: still Front (isometric views keep the UCS); UCS W returns to World.')
+    await h.run('VIEW', 'FRONT')
+    expect(h.prints.at(-1)).toBe('View: Front')
   })
 })

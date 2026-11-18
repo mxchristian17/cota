@@ -206,7 +206,8 @@ async function askLocation(
   const opts: Partial<DimensionProps> = {}
   let last: Vec3 | null = null // último cursor: la medida que ofrece `Text` es la de la cota en pantalla
   for (;;) {
-    const make = (c: Vec3): DimensionProps => ({ ...build(c), ...opts })
+    // Sobre una vista de dibujo, la medida de la pieza (DIMLFAC de la vista) desde la previsualización (R15).
+    const make = (c: Vec3): DimensionProps => ctx.doc.viewDimProps({ ...build(c), ...opts })
     const r = await ctx.getPoint(`${prompt} or [${keywords.join('/')}]: `, {
       keywords,
       base: null,
@@ -282,7 +283,7 @@ async function twoPointFlow(ctx: CommandContext, dimType: 'LINEAR' | 'ALIGNED'):
   }))
   if (!props) return null
   const e = addDim(ctx, props)
-  ctx.print(`Dimension text = ${formatDim({ ...props, textOverride: null })}`)
+  ctx.print(`Dimension text = ${formatDim({ ...e.props, textOverride: null })}`)
   return e
 }
 
@@ -325,7 +326,7 @@ async function radialFlow(ctx: CommandContext, dimType: 'RADIUS' | 'DIAMETER' | 
     if (r.kind !== 'point') return null
     override = toVec3(r.point)
   }
-  const measured = formatDim({ ...base, dimType, points: [ci.c, on], textPos: on })
+  const measured = formatDim(ctx.doc.viewDimProps({ ...base, dimType, points: [ci.c, on], textPos: on }))
   ctx.print(`Dimension text = ${measured}`)
   const props = await askLocation(ctx, 'Specify dimension line location', ['Mtext', 'Text', 'Angle'], (cursor) => ({
     ...base,
@@ -471,8 +472,8 @@ export const dimAngularCommand: Command = {
       textPos: cursor,
     }))
     if (props) {
-      addDim(ctx, props)
-      ctx.print(`Dimension text = ${formatDim({ ...props, textOverride: null })}`)
+      const e = addDim(ctx, props)
+      ctx.print(`Dimension text = ${formatDim({ ...e.props, textOverride: null })}`)
     }
   },
 }
@@ -641,7 +642,7 @@ async function chainFlow(ctx: CommandContext, baseline: boolean): Promise<void> 
     else if (next.dimType === 'ORDINATE') Object.assign(next, withAssoc(ctx, [ref]))
     const e = addDim(ctx, next)
     created.push(e.id)
-    ctx.print(`Dimension text = ${formatDim({ ...next, textOverride: null })}`)
+    ctx.print(`Dimension text = ${formatDim({ ...e.props, textOverride: null })}`)
     base = e
   }
 }

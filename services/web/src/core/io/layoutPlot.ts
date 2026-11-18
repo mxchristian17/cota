@@ -13,7 +13,7 @@ import { dimDisplay, type DimContext } from '../dimension/dimGeometry'
 import { paperSizeMm } from '../layout/paper'
 import { paperPerModel } from '../layout/scale'
 import { viewBasis, viewportRing } from '../layout/viewport'
-import { MM_TO_PT, entityOps, f, imageOps, paintLayer, paintOrder, pdfDocument, pdfFont, plotContentStream, polyStroke, specialOps, strokeStyleOps, textTm, type PaintLayer, type PdfPage, type PlotRasters, type PlotStyleOpts, type PlotTransform } from './pdf'
+import { MM_TO_PT, entityOps, f, hiddenTextOps, imageOps, paintLayer, paintOrder, pdfDocument, pdfFont, plotContentStream, polyStroke, specialOps, strokeStyleOps, textTm, type PaintLayer, type PdfPage, type PlotRasters, type PlotStyleOpts, type PlotTransform } from './pdf'
 import type { LinetypeContext } from '../linetype/linetypes'
 import { entityBounds } from '../editing/bounds'
 
@@ -218,8 +218,12 @@ export function viewportContent(
       }
     }
     if (e.type === 'DIMENSION') {
-      // Flechas rellenas; el texto (vectorial) ya viene como trazos en `entityStrokes`.
-      for (const poly of dimDisplay(e.props, dim).fills) {
+      // Flechas rellenas; el texto (vectorial) ya viene como trazos en `entityStrokes`, y encima va invisible para que
+      // la medida se pueda buscar y copiar en el PDF.
+      const d = dimDisplay(e.props, dim)
+      const dt = d.text
+      if (dt.value && overlaps(boxOf(d.textStrokes.flat().map(proj)), clip)) body += hiddenTextOps(dt.value, d.textStrokes, dt.pos, dt.dir, dt.up, toPt)
+      for (const poly of d.fills) {
         const pts = poly.map(proj)
         if (!overlaps(boxOf(pts), clip)) continue
         body += pts.map(([x, y], i) => `${f(x * MM_TO_PT)} ${f(y * MM_TO_PT)} ${i === 0 ? 'm' : 'l'}\n`).join('') + 'h\nf\n'

@@ -47,9 +47,9 @@ function ScriptBody({ initial, shared }: { initial: string; shared: boolean }) {
 
   return (
     <div className="modal-backdrop" onClick={done} data-testid="script-dialog">
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="script-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Script</h2>
+          <h2 id="script-title">Script</h2>
           <button className="icon-btn" onClick={done} aria-label="Close">
             <UiIcon name="close" />
           </button>

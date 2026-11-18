@@ -35,9 +35,9 @@ export function DwgPropsDialog() {
 
   return (
     <div className="modal-backdrop" onClick={close} data-testid="dwgprops-dialog">
-      <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="dwg-props-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Drawing Properties</h2>
+          <h2 id="dwg-props-title">Drawing Properties</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
             <UiIcon name="close" />
           </button>

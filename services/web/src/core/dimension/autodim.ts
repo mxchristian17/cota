@@ -37,6 +37,23 @@ export interface AutodimOptions {
   step: number
   /** Tolerancia para considerar iguales coordenadas y radios. */
   tol: number
+  /**
+   * Lugar libre alrededor de la vista (hasta la vista vecina o el borde de la hoja), en unidades de la vista. Si las
+   * filas de cotas no entran debajo (o a la izquierda) van del otro lado; si tampoco, en cadena; y si aún no entran,
+   * sólo la total (B06, R19). Sin `room`, sin límite.
+   */
+  room?: { below: number; above: number; left: number; right: number }
+  /** Ancho del texto de una cota que mide `span` (unidades de la vista): las de una cadena que se pisan se escalonan. */
+  textWidth?: (span: number) => number
+  /** Cómo quedó cada eje (para informar lo que no entró). */
+  onPlan?: (axis: 'x' | 'y', plan: AxisPlan) => void
+}
+
+/** Cómo quedó un eje: lado, tipo y cuántas posiciones no entraron. */
+export interface AxisPlan {
+  side: 'near' | 'far'
+  type: 'baseline' | 'chain'
+  dropped: number
 }
 
 /** Extremos y cuadrantes que recorre un arco (su caja real: un empalme ocupa un cuarto, no el círculo). */
@@ -83,46 +100,78 @@ export function autodim(geo: Geo2D[], o: AutodimOptions): DimRequest[] {
   const xs = distinct(xsAll, tol).filter((x) => x > x0 + tol && !done(o.skip?.x, x))
   const ys = distinct(ysAll, tol).filter((y) => y > y0 + tol && !done(o.skip?.y, y))
 
-  /** Punto de origen de la línea de referencia: lo más bajo (o lo más a la izquierda) de la geometría en esa posición. */
-  const lowAt = (x: number): P2 => {
+  /** Punto de origen de la línea de referencia: lo más bajo/alto (o lo más a la izquierda/derecha) de la geometría en esa posición. */
+  const endAt = (x: number, high: boolean): P2 => {
     let best: P2 | null = null
-    for (const l of vert) if (Math.abs(l.a[0] - x) <= tol) for (const p of [l.a, l.b]) if (!best || p[1] < best[1]) best = p
-    for (const c of circles) if (Math.abs(c.c[0] - x) <= tol && (!best || c.c[1] < best[1])) best = c.c
-    for (const p of pts) if (Math.abs(p[0] - x) <= tol && (!best || p[1] < best[1])) best = p
-    return best ?? [x, y0]
+    const better = (p: P2) => !best || (high ? p[1] > best[1] : p[1] < best[1])
+    for (const l of vert) if (Math.abs(l.a[0] - x) <= tol) for (const p of [l.a, l.b]) if (better(p)) best = p
+    for (const c of circles) if (Math.abs(c.c[0] - x) <= tol && better(c.c)) best = c.c
+    for (const p of pts) if (Math.abs(p[0] - x) <= tol && better(p)) best = p
+    return best ?? [x, high ? y1 : y0]
   }
-  const leftAt = (y: number): P2 => {
+  const sideAt = (y: number, right: boolean): P2 => {
     let best: P2 | null = null
-    for (const l of horz) if (Math.abs(l.a[1] - y) <= tol) for (const p of [l.a, l.b]) if (!best || p[0] < best[0]) best = p
-    for (const c of circles) if (Math.abs(c.c[1] - y) <= tol && (!best || c.c[0] < best[0])) best = c.c
-    for (const p of pts) if (Math.abs(p[1] - y) <= tol && (!best || p[0] < best[0])) best = p
-    return best ?? [x0, y]
+    const better = (p: P2) => !best || (right ? p[0] > best[0] : p[0] < best[0])
+    for (const l of horz) if (Math.abs(l.a[1] - y) <= tol) for (const p of [l.a, l.b]) if (better(p)) best = p
+    for (const c of circles) if (Math.abs(c.c[1] - y) <= tol && better(c.c)) best = c.c
+    for (const p of pts) if (Math.abs(p[1] - y) <= tol && better(p)) best = p
+    return best ?? [right ? x1 : x0, y]
+  }
+
+  /** Filas que ocupa un tipo de acotación con `n` posiciones. */
+  const rowsOf = (type: 'baseline' | 'chain', n: number) => (type === 'baseline' ? n : n > 1 ? 2 : 1)
+  const fits = (rows: number, room: number | undefined) => room === undefined || o.offset + (rows - 1) * o.step + 0.6 * o.step <= room + 1e-9
+  /** Lado, tipo y posiciones de un eje según el lugar libre (ver `room`). */
+  const plan = (list: number[], near: number | undefined, far: number | undefined, total: number): { list: number[]; plan: AxisPlan } => {
+    for (const type of o.type === 'baseline' ? (['baseline', 'chain'] as const) : (['chain'] as const)) {
+      const rows = rowsOf(type, list.length)
+      if (fits(rows, near)) return { list, plan: { side: 'near', type, dropped: 0 } }
+      if (fits(rows, far)) return { list, plan: { side: 'far', type, dropped: 0 } }
+    }
+    // Sin lugar: sólo la total, del lado con más espacio.
+    const side = (near ?? Infinity) >= (far ?? Infinity) ? 'near' : 'far'
+    return { list: [total], plan: { side, type: o.type, dropped: list.length - 1 } }
   }
 
   if (o.axes.x && xs.length) {
-    const base = lowAt(x0)
+    const { list, plan: px } = plan(xs, o.room?.below, o.room?.above, x1)
+    o.onPlan?.('x', px)
+    const far = px.side === 'far'
+    const rowY = (row: number) => (far ? y1 + o.offset + row * o.step : y0 - o.offset - row * o.step)
+    const base = endAt(x0, far)
     let prev = base
-    xs.forEach((x, i) => {
-      const p = lowAt(x)
-      const row = o.type === 'baseline' ? i : 0
-      // La total, en paralelo, queda la más alejada (la última); en cadena, la total va en una fila aparte.
-      out.push({ kind: 'linear', axis: 'x', p1: o.type === 'baseline' ? base : prev, p2: p, at: [(prev[0] + p[0]) / 2, y0 - o.offset - row * o.step] })
+    const ends = [-Infinity, -Infinity] // fin del último texto en la fila y en la media fila (cadena)
+    list.forEach((x, i) => {
+      const p = endAt(x, far)
+      let row = px.type === 'baseline' ? i : 0
+      if (px.type === 'chain' && o.textWidth) {
+        // En cadena, una cota cuyo texto pisaría el de la anterior pasa a media fila (textos escalonados).
+        const w = o.textWidth(Math.abs(p[0] - prev[0]))
+        const left = (prev[0] + p[0]) / 2 - w / 2
+        const k = left >= ends[0] || left < ends[1] ? 0 : 1
+        ends[k] = left + w
+        row = k * 0.5
+      }
+      out.push({ kind: 'linear', axis: 'x', p1: px.type === 'baseline' ? base : prev, p2: p, at: [(prev[0] + p[0]) / 2, rowY(row)] })
       prev = p
     })
-    if (o.type === 'chain' && xs.length > 1) out.push({ kind: 'linear', axis: 'x', p1: base, p2: lowAt(x1), at: [(x0 + x1) / 2, y0 - o.offset - o.step] })
+    if (px.type === 'chain' && list.length > 1) out.push({ kind: 'linear', axis: 'x', p1: base, p2: endAt(x1, far), at: [(x0 + x1) / 2, rowY(1)] })
   }
   if (o.axes.y && ys.length) {
-    const base = leftAt(y0)
+    const { list, plan: py } = plan(ys, o.room?.left, o.room?.right, y1)
+    o.onPlan?.('y', py)
+    const far = py.side === 'far'
+    const colX = (col: number) => (far ? x1 + o.offset + col * o.step : x0 - o.offset - col * o.step)
+    const base = sideAt(y0, far)
     let prev = base
-    ys.forEach((y, i) => {
-      const p = leftAt(y)
-      const col = o.type === 'baseline' ? i : 0
-      out.push({ kind: 'linear', axis: 'y', p1: o.type === 'baseline' ? base : prev, p2: p, at: [x0 - o.offset - col * o.step, (prev[1] + p[1]) / 2] })
+    list.forEach((y, i) => {
+      const p = sideAt(y, far)
+      const col = py.type === 'baseline' ? i : 0
+      out.push({ kind: 'linear', axis: 'y', p1: py.type === 'baseline' ? base : prev, p2: p, at: [colX(col), (prev[1] + p[1]) / 2] })
       prev = p
     })
-    if (o.type === 'chain' && ys.length > 1) out.push({ kind: 'linear', axis: 'y', p1: base, p2: leftAt(y1), at: [x0 - o.offset - o.step, (y0 + y1) / 2] })
+    if (py.type === 'chain' && list.length > 1) out.push({ kind: 'linear', axis: 'y', p1: base, p2: sideAt(y1, far), at: [colX(1), (y0 + y1) / 2] })
   }
-
   if (o.features === 'all') {
     // Diámetros y radios: uno por medida, con la cantidad (n×) de los iguales.
     const radial = (kind: 'diameter' | 'radius', list: Array<{ c: P2; r: number; mid?: number }>) => {

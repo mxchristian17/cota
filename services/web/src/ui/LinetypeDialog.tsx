@@ -72,9 +72,9 @@ export function LinetypeDialog() {
 
   return (
     <div className="modal-backdrop" onClick={close} data-testid="linetype-dialog">
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="linetype-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>{loading ? 'Load or Reload Linetypes' : layer ? `Select Linetype — ${layer.name}` : 'Linetype Manager'}</h2>
+          <h2 id="linetype-title">{loading ? 'Load or Reload Linetypes' : layer ? `Select Linetype — ${layer.name}` : 'Linetype Manager'}</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
             <UiIcon name="close" />
           </button>

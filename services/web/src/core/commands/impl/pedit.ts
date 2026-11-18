@@ -149,11 +149,13 @@ async function editVertex(ctx: CommandContext, s: PeditSession, id: string): Pro
       if (q.kind !== 'point') continue
       s.begin([id])
       s.set(id, moveVertex(p, i, vec(q.point)))
+      ctx.print('Vertex moved.')
     } else if (k === 'Insert') {
       const q = await ctx.getPoint('Specify location for new vertex: ', { base: asPt(pts[i]) })
       if (q.kind !== 'point') continue
       s.begin([id])
       s.set(id, insertVertex(p, i, vec(q.point)))
+      ctx.print('Vertex inserted.')
       i++
     } else if (k === 'Tangent') {
       const a = await ctx.getAngle('Specify direction of vertex tangent: ', { base: asPt(pts[i]) })
@@ -171,6 +173,7 @@ async function editVertex(ctx: CommandContext, s: PeditSession, id: string): Pro
       if (b?.kind !== 'number') continue
       s.begin([id])
       s.set(id, setSegmentWidth(p, i, a.value, b.value))
+      ctx.print(`Segment width set to ${fmt(a.value)} - ${fmt(b.value)}.`)
     } else if (k === 'Break' || k === 'Straighten') {
       // Segundo marcador: Next/Previous hasta `Go`.
       let j = i
@@ -195,8 +198,10 @@ async function editVertex(ctx: CommandContext, s: PeditSession, id: string): Pro
       // En una ajustada se opera sobre el marco y se vuelve a ajustar.
       const base: PolylineProps = p.fit ? { vertices: pts.map((v) => [...v] as Vec3), closed: p.closed, ...(p.normal ? { normal: p.normal } : {}) } : p
       const fix = (q: PolylineProps): PolylineProps => (p.fit ? refit({ ...q, fit: p.fit, frame: q.vertices }, sysvars.SPLINETYPE, sysvars.SPLINESEGS) : q)
-      if (k === 'Straighten') s.set(id, fix(straightenBetween(base, i, j)))
-      else {
+      if (k === 'Straighten') {
+        s.set(id, fix(straightenBetween(base, i, j)))
+        ctx.print('Segments straightened.')
+      } else {
         const pieces = breakBetween(base, i, j)
         if (!pieces.length) continue
         s.set(id, fix(pieces[0]))
@@ -205,6 +210,7 @@ async function editVertex(ctx: CommandContext, s: PeditSession, id: string): Pro
           st.added.push(added)
         }
         ctx.doc.touch()
+        ctx.print(pieces.length > 1 ? `Polyline broken into ${pieces.length} pieces.` : 'Segments removed.')
       }
       i = 0
     }
@@ -220,30 +226,46 @@ async function applyOption(ctx: CommandContext, s: PeditSession, k: string, ids:
       if (e) s.set(id, fn(e.props))
     }
   }
-  if (k === 'Close' || k === 'Open') each((p) => {
-    const q = setClosed(p, k === 'Close')
-    return q.fit ? refit(q, sysvars.SPLINETYPE, sysvars.SPLINESEGS) : q
-  })
-  else if (k === 'Width') {
+  // Confirmación de cada opción en la línea de comandos (R04).
+  const polys = ids.length === 1 ? '1 polyline' : `${ids.length} polylines`
+  const done = (what: string): void => ctx.print(`${polys} ${what}.`)
+  if (k === 'Close' || k === 'Open') {
+    each((p) => {
+      const q = setClosed(p, k === 'Close')
+      return q.fit ? refit(q, sysvars.SPLINETYPE, sysvars.SPLINESEGS) : q
+    })
+    done(k === 'Close' ? 'closed' : 'opened')
+  } else if (k === 'Width') {
     const cur = poly(ctx, ids[0])?.props.widths?.[0]?.[0] ?? 0
     const r = await askNumber(ctx, `Specify new width for all segments <${fmt(cur)}>: `, { def: cur, check: (v) => (v >= 0 ? null : 'Requires a non-negative number.') })
-    if (r?.kind === 'number') each((p) => setGlobalWidth(p, r.value))
-  } else if (k === 'Fit') each(fitPolyline)
-  else if (k === 'Spline') each((p) => splinePolyline(p, sysvars.SPLINETYPE, sysvars.SPLINESEGS))
-  else if (k === 'Decurve') each(decurvePolyline)
-  else if (k === 'Reverse') {
+    if (r?.kind === 'number') {
+      each((p) => setGlobalWidth(p, r.value))
+      done(`set to width ${fmt(r.value)}`)
+    }
+  } else if (k === 'Fit') {
+    each(fitPolyline)
+    done('fitted with arcs')
+  } else if (k === 'Spline') {
+    each((p) => splinePolyline(p, sysvars.SPLINETYPE, sysvars.SPLINESEGS))
+    done('turned into a spline-fit polyline')
+  } else if (k === 'Decurve') {
+    each(decurvePolyline)
+    done('decurved')
+  } else if (k === 'Reverse') {
     each(reversePolyline)
     ctx.print(ids.length === 1 ? 'Polyline reversed.' : `${ids.length} polylines reversed.`)
   } else if (k === 'Ltype gen') {
     const cur = poly(ctx, ids[0])?.props.ltGen ? 'ON' : 'OFF'
     const r = await askKeyword(ctx, `Enter polyline linetype generation option [ON/OFF] <${cur === 'ON' ? 'On' : 'Off'}>: `, ['ON', 'OFF'], cur)
-    if (r)
+    if (r) {
       each((p) => {
         const q = clean(p)
         if (r === 'ON') q.ltGen = true
         else delete q.ltGen
         return q
       })
+      done(`with linetype generation ${r}`)
+    }
   } else if (k === 'Undo') {
     if (!s.undo()) ctx.print('All PEDIT operations undone.')
   }

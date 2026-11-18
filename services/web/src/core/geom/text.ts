@@ -53,8 +53,25 @@ const addv = (p: Vec3, q: Vec3, s = 1): Vec3 => [p[0] + q[0] * s, p[1] + q[1] * 
 /** Un ATTDEF suelto se dibuja (y se mide) como un texto con su tag, como el CAD clásico. */
 export function attdefText(p: AttdefProps): TextProps {
   // `kind`: los ATTDEF traídos de un DWG/DXF son texto de un renglón (el punto, sobre la línea base) como sus ATTRIB.
-  const { font, bold, italic, widthFactor, stroke, kind } = p
-  return { position: p.position, text: p.tag, height: p.height, rotation: p.rotation, justify: p.justify, normal: p.normal, ...defined({ font, bold, italic, widthFactor, stroke, kind }) }
+  const { font, bold, italic, widthFactor, stroke, kind, fitWidth } = p
+  return { position: p.position, text: p.tag, height: p.height, rotation: p.rotation, justify: p.justify, normal: p.normal, ...defined({ font, bold, italic, widthFactor, stroke, kind, fitWidth }) }
+}
+
+/** Factor de ancho mínimo al encajar un texto en su celda: por debajo se achica también el alto (sigue legible). */
+const MIN_FIT_FACTOR = 0.6
+
+/**
+ * Texto encajado en su celda (`fitWidth`, ver TextProps): el texto final (con los campos ya evaluados) que no entra
+ * se comprime, como el ajuste de ancho del CAD clásico; si no alcanza con el factor mínimo, también baja el alto.
+ */
+export function fitToWidth(t: TextProps): TextProps {
+  if (!t.fitWidth || !(t.fitWidth > 0)) return t
+  const w = textSize(t).width
+  if (!(w > t.fitWidth)) return t
+  const k = t.fitWidth / w
+  const wf = t.widthFactor ?? 1
+  if (k >= MIN_FIT_FACTOR) return { ...t, widthFactor: wf * k }
+  return { ...t, widthFactor: wf * MIN_FIT_FACTOR, height: (t.height * k) / MIN_FIT_FACTOR }
 }
 
 export function textLines(t: TextProps): string[] {

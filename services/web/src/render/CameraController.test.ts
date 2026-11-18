@@ -68,3 +68,20 @@ describe('órbita alrededor de lo seleccionado', () => {
   })
 })
 
+
+describe('sensibilidad de la órbita (R36)', () => {
+  it('60 px en una vista de 1400 px giran unos 12°, no 35° por eje; todo el ancho, 270°', () => {
+    const c = new CameraController()
+    c.setSize(1400, 800)
+    c.setView('ISO')
+    const dir0 = c.viewDirection()
+    c.orbit(60, 0)
+    const deg = (c.viewDirection().angleTo(dir0) * 180) / Math.PI
+    // En la isométrica (elevación ~35°) el giro en planta se ve por cos(el).
+    expect(deg).toBeGreaterThan(8)
+    expect(deg).toBeLessThan(13)
+    expect(c.orbitRate() * 1400).toBeCloseTo(1.5 * Math.PI, 9)
+    c.setSize(375, 700) // teléfono: como antes (~0,01 rad/px)
+    expect(c.orbitRate()).toBeCloseTo((1.5 * Math.PI) / 400, 9)
+  })
+})

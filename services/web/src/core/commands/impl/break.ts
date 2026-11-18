@@ -18,6 +18,9 @@ function applyBreak(ctx: CommandContext, pk: CurvePick, p1: Pt, p2: Pt): void {
   for (const inp of inputs) ctx.doc.addEntity({ ...inp, layer: pk.entity.layer, ...commonOf(pk.entity) } as EntityInput)
   ctx.doc.removeEntity(pk.entity.id)
   ctx.doc.touch()
+  // Confirmación en la línea de comandos (R04): en cuántas piezas quedó.
+  const kind = pk.entity.type.toLowerCase()
+  ctx.print(inputs.length === 1 ? `The ${kind} was broken: 1 piece left.` : `The ${kind} was broken into ${inputs.length} pieces.`)
 }
 
 async function selectObject(ctx: CommandContext): Promise<{ pk: CurvePick; point: Pt } | null> {

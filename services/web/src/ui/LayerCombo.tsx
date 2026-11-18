@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { shownLayer } from '../core/layers/selectionLayer'
+import { isViewLayerName } from '../core/layers/visibility'
 import { useStore } from '../store/store'
 import { LockIcon } from './LockIcon'
 import { UiIcon } from './uiIcons'
@@ -33,7 +34,8 @@ export function LayerCombo({ className, testId, onPicked }: { className: string;
   const shown = shownLayer(currentLayerId, engine.busy ? [] : selection.map((id) => doc.getEntity(id)))
   const layer = layerSvc.get(shown.id)
   const label = `${layer?.name ?? ''}${shown.others > 0 ? ` (+${shown.others})` : ''}`
-  const layers = layerSvc.list()
+  // Las capas internas de las vistas de dibujo no se listan (salvo la actual).
+  const layers = layerSvc.list().filter((l) => !isViewLayerName(l.name) || l.id === shown.id)
 
   const close = (): void => {
     setOpen(false)

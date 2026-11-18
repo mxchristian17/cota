@@ -91,7 +91,8 @@ their lengths are not true size, and Cota reports how many it skipped.
 **Steps**
 
 1. In the model: `Select objects to dimension:` the 2D geometry of the part, seen in plan.
-   On a layout: `Select drawing views to dimension or [All] <All>:`.
+   On a layout: `Select drawing views to dimension or [All] <All>:` pick a line of a view, a point on it or a window
+   or crossing around the views; <kbd>Enter</kbd> or `All` takes every view. A pick that finds nothing asks again.
 2. `Type [Baseline/Chain] <Baseline>:` baseline dimensions from one edge, or chains.
 3. `Features [All/Overall] <All>:` every feature, or only the overall sizes.
 
@@ -110,6 +111,11 @@ AUTODIM ALL "" B A
 
 - It works on lines, circles and arcs in plan view. Check the result and adjust it with the editing commands
   below; delete the dimensions you do not want.
+- On a layout the dimensions stay in the free space around each view, up to the next view, the title block or the
+  printable area: if the rows do not fit below (or to the left) they go above (or to the right); if they still do
+  not fit, Cota uses a chain and, as a last resort, only the overall size, and says how many positions it left out.
+  In a chain, texts that would overlap are staggered.
+- The outlines of cylinders seen from the side take their exact radius (a Ø42 measures 42, not 41.99).
 
 ## DIMLINEAR
 
@@ -376,7 +382,7 @@ numbers and callouts.
 | --- | --- |
 | `leader Landing first` | Asks for the landing first, then the arrowhead. |
 | `Content first` | Asks for the text first. |
-| `Options` | `Enter an option [Content type/Maxpoints/eXit options]`: `Content type` chooses `[Block/Mtext/None]` (a block asks `Enter block name`); `Maxpoints` sets the points of the leader line, so `Specify next leader point or <landing>:` lets you bend it. |
+| `Options` | `Enter an option [Content type/Maxpoints/eXit options]`: `Content type` chooses `[Block/Mtext/None]` (a block asks `Enter block name`; after the landing it asks the block's attribute values, as INSERT does, and the block rests on the end of the landing, centered on it: a balloon with a `MC` number attribute); `Maxpoints` sets the points of the leader line, so `Specify next leader point or <landing>:` lets you bend it. |
 
 The look (arrow, landing, text style) comes from the multileader style (`MLEADERSTYLE`).
 
@@ -493,6 +499,9 @@ standard size is proposed.
 **Notes**
 
 - Selecting an existing thread without a dimension offers to add it.
+- The face can be clicked or typed as a point on it (`x,y,z`). Its diameter comes from the solid's cylinder, not from
+  the mesh, and the command line shows numbers with a decimal point (the comma separates coordinates there); the
+  designation and the dimension text use the comma of the IRAM dimension styles.
 - Add a tolerance by editing the text of the dimension in **Properties**, for example `M20-6g`.
 
 ## DIMINSPECT

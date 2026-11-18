@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import '../../../render/csg'
 import { makeEngine } from '../../../test/engineHarness'
 import { THREADS, closestIndex, nearestThreads } from '../../thread/tables'
-import { cylinderOfFace, solidThreads, threadViewItems } from '../../thread/geometry'
+import { cylinderOfFace, exactCylinder, solidThreads, threadViewItems } from '../../thread/geometry'
 import { solidTopology } from '../../editing/topology'
 import { transformEntity } from '../../editing/rigid'
 import type { ArcEntity, DimensionEntity, SolidEntity, SolidProps } from '../../document/types'
@@ -118,5 +118,44 @@ describe('THREAD 3D', () => {
     expect(end).toHaveLength(1)
     expect(end[0]).toMatchObject({ kind: 'arc', a0: Math.PI / 2, a1: 0, hidden: false })
     expect(end[0].kind === 'arc' && end[0].r).toBeCloseTo(4.08, 2)
+  })
+})
+
+describe('THREAD con un punto tipeado sobre la cara cilíndrica (R05)', () => {
+  it('toma la cara del eje aunque desde la vista la tape otra pieza', async () => {
+    const h = makeEngine()
+    const s = h.add('SOLID3D', shaft) as SolidEntity
+    // Una placa por encima del eje: desde arriba, el rayo de la vista la toca a ella primero.
+    h.add('SOLID3D', { op: 'BOX', origin: [0, -10, 10], width: 20, depth: 20, height: 5 })
+    await h.run('THREAD', '10,0,5', '', 'No')
+    expect(h.prints.join('\n')).not.toContain('The face must be cylindrical.')
+    const th = solidThreads((h.doc.getEntity(s.id) as SolidEntity).props)
+    expect(th).toHaveLength(1)
+    expect(th[0].info).toMatchObject({ designation: 'M10', internal: false })
+  })
+})
+
+describe('THREAD: números con punto y medidas exactas (R03)', () => {
+  it('informa el diámetro con punto decimal (la coma separa coordenadas) y el designativo con la de IRAM', async () => {
+    const h = makeEngine()
+    h.add('SOLID3D', { op: 'SUBTRACT', operands: [{ op: 'BOX', origin: [-30, -30, 0], width: 60, depth: 60, height: 40 }, { op: 'CYLINDER', base: [0, 0, -1], radius: 15.25, height: 42, segments: 64 }] })
+    await h.run('THREAD', '15.25,0,20')
+    const text = h.prints.join('\n')
+    expect(text).toContain('Cylindrical face Ø30.5, length 40 (hole).')
+    expect(text).toContain('Nearest standard threads for Ø30.5 (hole: minor diameter):')
+    expect(text).not.toMatch(/Ø\d+,\d/)
+    expect(text).toMatch(/D1=\d+(\.\d+)?, P=\d+(\.\d+)?/)
+  })
+
+  it('el radio y el eje salen del cilindro del árbol, no del ajuste de la malla', () => {
+    const props: SolidProps = { op: 'SUBTRACT', operands: [{ op: 'BOX', origin: [-30, -30, 0], width: 60, depth: 60, height: 40 }, { op: 'CYLINDER', base: [0, 0, -1], radius: 15.25, height: 42, segments: 48 }] }
+    // Lo que daba la malla en el radiador: Ø30,514 con el eje corrido una centésima.
+    const fitted = { a: [0.01, 0, 0] as [number, number, number], b: [0.01, 0, 40] as [number, number, number], radius: 15.257, shaft: false }
+    const c = exactCylinder(props, fitted)
+    expect(c.radius).toBe(15.25)
+    expect(c.a).toEqual([0, 0, 0])
+    expect(c.b).toEqual([0, 0, 40])
+    // Un cilindro de otro radio (más del 1 %) no la toma.
+    expect(exactCylinder(props, { ...fitted, radius: 16 }).radius).toBe(16)
   })
 })

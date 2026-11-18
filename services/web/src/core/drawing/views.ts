@@ -1,5 +1,5 @@
 import type { Entity, InsertProps, ShadeProps } from '../document/types'
-import { mapShade } from '../projection/shade'
+import { compactShade, mapShade } from '../projection/shade'
 import type { Vec3 } from '../math'
 import { ISO_AZ, type ViewName } from '../view'
 import type { ProjBasis, ProjItem } from '../projection/orthographic'
@@ -38,7 +38,19 @@ export interface DrawingViewData {
   inheritScale?: boolean
   /** Firma del modelo con la que se calculó (para VIEWUPDATE). */
   sig?: string
+  /**
+   * Punto 3D del modelo que va en el punto de inserción de la vista (el centro de lo documentado al crearla; todas
+   * las vistas de una pieza comparten el mismo). Al actualizar la vista se conserva: si el modelo crece, la vista
+   * sólo cambia su contenido y no se recentra (como el CAD clásico). Ausente en dibujos anteriores.
+   */
+  anchor?: Vec3
 }
+
+/** Origen 2D de una vista: su punto 3D `anchor` proyectado en la base de la vista. */
+export const anchorOrigin = (anchor: Vec3, basis: ProjBasis): [number, number] => [
+  anchor[0] * basis.right[0] + anchor[1] * basis.right[1] + anchor[2] * basis.right[2],
+  anchor[0] * basis.up[0] + anchor[1] * basis.up[1] + anchor[2] * basis.up[2],
+]
 
 const cross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
 const unit = (v: Vec3): Vec3 => {
@@ -96,19 +108,27 @@ export function viewBasis(v: ViewName): ProjBasis {
  * a los lados o arriba/abajo es ortogonal (primer diedro: se ve desde el lado opuesto, como el sistema
  * europeo/ISO E e IRAM; tercer diedro: desde el mismo lado), en diagonal es isométrica.
  */
-export function projectedBasis(parent: ProjBasis, dx: number, dy: number, projection: Projection): { basis: ProjBasis; align: 'h' | 'v' | 'free' } {
+export function projectedBasis(
+  parent: ProjBasis,
+  dx: number,
+  dy: number,
+  projection: Projection,
+  taken: Vec3[] = [],
+): { basis: ProjBasis; align: 'h' | 'v' | 'free'; duplicate?: boolean } {
   const { right: R, up: U, out: O } = parent
   const s = projection === 'first' ? -1 : 1
   const ax = Math.abs(dx)
   const ay = Math.abs(dy)
+  // Una dirección que ya tiene otra vista de la misma madre no se repite: el punto fuera del eje pide otra cosa
+  // (la isométrica de ese cuadrante); antes salía una lateral idéntica sin aviso (R14, B14).
+  const used = (out: Vec3) => taken.some((t) => t[0] * out[0] + t[1] * out[1] + t[2] * out[2] > 0.999)
   if (ax > 2 * ay) {
     // A la derecha (tercer diedro): se mira desde la derecha de la madre; su derecha es −O y su arriba U.
     const out = s * Math.sign(dx) > 0 ? R : neg(R)
-    return { basis: { right: cross(U, out), up: U, out }, align: 'h' }
-  }
-  if (ay > 2 * ax) {
+    if (!used(out) || ay === 0) return { basis: { right: cross(U, out), up: U, out }, align: 'h', ...(used(out) ? { duplicate: true } : {}) }
+  } else if (ay > 2 * ax) {
     const out = s * Math.sign(dy) > 0 ? U : neg(U)
-    return { basis: { right: R, up: cross(out, R), out }, align: 'v' }
+    if (!used(out) || ax === 0) return { basis: { right: R, up: cross(out, R), out }, align: 'v', ...(used(out) ? { duplicate: true } : {}) }
   }
   // Isométrica: desde la esquina de la madre que corresponde al cuadrante.
   const sx = s * Math.sign(dx || 1)
@@ -191,7 +211,7 @@ export function viewBlockEntities(
     return { id, type: 'ARC', layer, props: { center: at(it.c), radius: it.r, startAngle: it.a0, endAngle: it.a1, normal: [0, 0, 1], ...(it.thread ? { thread: it.thread } : {}) }, ...thin }
   })
   // El sombreado va primero (se pinta debajo de las líneas), corrido al mismo centro.
-  const entities: Entity[] = shade && shade.tris.length ? [{ id: 'shade', type: 'SHADE', layer: layers.visible, props: mapShade(shade, (v) => [v[0] - cx, v[1] - cy, v[2]]) }, ...lines] : lines
+  const entities: Entity[] = shade && shade.tris.length ? [{ id: 'shade', type: 'SHADE', layer: layers.visible, props: compactShade(mapShade(shade, (v) => [v[0] - cx, v[1] - cy, v[2]])) }, ...lines] : lines
   // Con un origen común el bloque no queda centrado: el ancho y el alto cubren lo dibujado a ambos lados.
   const w = origin ? 2 * Math.max(Math.abs(x0 - cx), Math.abs(x1 - cx)) : x1 - x0
   const h = origin ? 2 * Math.max(Math.abs(y0 - cy), Math.abs(y1 - cy)) : y1 - y0

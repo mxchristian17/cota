@@ -7,7 +7,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | Command | Aliases | What it does |
 | --- | --- | --- |
 | [`NEW`](reference/file.md#new) | — | Start a new empty drawing (asks to save the changes first) |
-| [`OPEN`](reference/file.md#open) | — | Open a drawing: from the working folder / cloud list, or from the device (.cota, .dxf, .dwg, .stl, .obj, .step, .iges) |
+| [`OPEN`](reference/file.md#open) | — | Open a drawing: from the working folder / cloud list, or from the device (.cota, .dxf, .dwg, .stl, .obj, .step, .iges); asks to save the changes first |
 | [`OPENFOLDER`](reference/file.md#openfolder) | `FOLDER`, `WORKSPACE` | Choose a system folder to open and save drawings as files |
 | [`SAVE`](reference/file.md#save) | `QSAVE`, `SAVEAS` | Save the current drawing: working folder, your account, or a downloaded .cota file |
 | [`CLOUD`](reference/file.md#cloud) | `CLOUDSTORAGE` | Store drawings in your account again (detach the local folder) |

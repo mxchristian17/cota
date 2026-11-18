@@ -20,6 +20,8 @@ linetype, lineweight, whether it is on, frozen, locked and plotted, and which la
   but cannot be edited.
 - `-LAYER` does the same from the command line:
   `Enter an option [?/Make/Set/New/Rename/ON/OFF/Color/Ltype/LWeight/Plot/Freeze/Thaw/LOck/Unlock]:`.
+- The layers that drawing views use for their visible and hidden lines (`MD_Visible`, `MD_Hidden`) are not listed;
+  type `MD` in the manager's filter to change their color or line type.
 - The layer tools below change layers by picking objects.
 
 ## LAYMCUR

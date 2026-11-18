@@ -8,7 +8,7 @@ import { askAttributeValues } from './attribs'
 import { blockContains } from './bedit'
 import type { Entity, EntityInput, PolylineProps } from '../../document/types'
 import type { Vec3 } from '../../math'
-import type { Command } from '../types'
+import type { Command, CommandContext } from '../types'
 
 /** BLOCK: crea (o redefine) una definición de bloque a partir de la selección y coloca una referencia. */
 export const blockCommand: Command = {
@@ -67,7 +67,19 @@ export const blockCommand: Command = {
   },
 }
 
-/** INSERT: coloca una referencia a un bloque existente (punto de inserción, escala y rotación). */
+/** Factor de escala distinto de 0 (Enter = `def`); vuelve a pedirlo si no es un número. null = Esc. */
+async function askFactor(ctx: CommandContext, prompt: string, def: number): Promise<number | null> {
+  for (;;) {
+    const s = await ctx.getString(prompt, { default: '', word: true })
+    if (s === null) return null
+    if (!s.trim()) return def
+    const n = Number(s.trim().replace(',', '.'))
+    if (isFinite(n) && n !== 0) return n
+    ctx.print('Requires a nonzero number.')
+  }
+}
+
+/** INSERT: coloca una referencia a un bloque existente (punto de inserción, escalas X e Y y rotación). */
 export const insertCommand: Command = {
   name: 'INSERT',
   aliases: ['I', 'DDINSERT'],
@@ -107,11 +119,15 @@ export const insertCommand: Command = {
     }
     const ip = await ctx.getPoint('Specify insertion point: ')
     if (ip.kind !== 'point') return
-    const sxStr = await ctx.getString('X scale factor <1>: ', { default: '1' })
-    const sf = Number(sxStr)
-    const scale = isFinite(sf) && sf !== 0 ? sf : 1
-    const rotStr = await ctx.getString('Rotation angle <0>: ', { default: '0' })
-    const deg = Number(rotStr)
+    // Escala X, después Y (Enter = la de X) y la rotación, como el CAD clásico: un lote `INSERT B p 2 3 45` del CAD
+    // clásico ya no rota 3° (R11). Z toma la de X. Esc cancela.
+    const sx = await askFactor(ctx, 'Enter X scale factor <1>: ', 1)
+    if (sx === null) return
+    const sy = await askFactor(ctx, 'Enter Y scale factor <use X scale factor>: ', sx)
+    if (sy === null) return
+    const rotStr = await ctx.getString('Specify rotation angle <0>: ', { default: '0', word: true })
+    if (rotStr === null) return
+    const deg = Number(rotStr.trim().replace(',', '.') || '0')
     // Atributos del bloque: se piden antes de crear la referencia (ESC cancela la inserción).
     const attributes = await askAttributeValues(ctx, name)
     if (!attributes) return
@@ -121,7 +137,7 @@ export const insertCommand: Command = {
       props: {
         name,
         position: [ip.point.x, ip.point.y, ip.point.z],
-        scale: [scale, scale, scale],
+        scale: [sx, sy, sx],
         rotation: (isFinite(deg) ? deg : 0) * (Math.PI / 180),
         ...(attributes.length ? { attributes } : {}),
       },
@@ -168,6 +184,7 @@ export const explodeCommand: Command = {
     if (ids === null || ids.length === 0) return
     let n = 0
     let failed = 0
+    let made = 0
     for (const id of ids) {
       const e = ctx.doc.getEntity(id)
       if (!e) continue
@@ -178,6 +195,7 @@ export const explodeCommand: Command = {
           continue
         }
         for (const p of parts) ctx.doc.addEntity(p)
+        made += parts.length
         ctx.doc.removeEntity(id)
         n++
         continue
@@ -185,13 +203,17 @@ export const explodeCommand: Command = {
       // Como el CAD clásico: los atributos vuelven a ser ATTDEF (se ve el tag; los valores se pierden).
       for (const child of expandEntities([e], ctx.doc.blocks, { attdefs: true, keepLayers: true })) {
         ctx.doc.addEntity({ type: child.type, layer: child.layer, props: structuredClone(child.props), ...commonOf(child) })
+        made++
       }
       ctx.doc.removeEntity(id)
       n++
     }
     ctx.app.clearSelection()
     if (failed) ctx.print(`${failed} ${failed === 1 ? 'was' : 'were'} not able to be exploded.`)
-    if (n) ctx.doc.touch()
-    else if (!failed) ctx.print('No objects to explode.')
+    if (n) {
+      ctx.doc.touch()
+      // Confirmación en la línea de comandos (R04).
+      ctx.print(`${n} object(s) exploded into ${made} object(s).`)
+    } else if (!failed) ctx.print('No objects to explode.')
   },
 }

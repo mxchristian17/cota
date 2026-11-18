@@ -125,3 +125,19 @@ describe('Freeze de capas', () => {
     expect(parseColor('azul')).toBeNull()
   })
 })
+
+describe('el espacio confirma en las opciones de -LAYER (B13)', () => {
+  it('las opciones y los números se piden como palabra (el espacio es Enter); el nombre, como texto', async () => {
+    const h = makeEngine()
+    await h.run('-LAYER')
+    expect(h.engine.pendingKind()).toBe('word')
+    await h.run('M')
+    expect(h.engine.pendingKind()).toBe('string')
+    await h.run('PIEZA', '')
+    expect(h.doc.layers.map((l) => l.name)).toContain('PIEZA')
+    await h.run('FILLET')
+    expect(h.engine.pendingKind()).toBe('point')
+    await h.run('R')
+    expect(h.engine.pendingKind()).toBe('word')
+  })
+})

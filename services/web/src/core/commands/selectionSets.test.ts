@@ -64,3 +64,50 @@ describe('opciones de Select objects (CAD clásico)', () => {
     expect(h.prints).toContain('*Invalid selection*')
   })
 })
+
+describe('ventanas sobre sólidos con material quitado (R18)', () => {
+  const box = { op: 'BOX', origin: [147.5, 25, 0], width: 25, depth: 80, height: 10 }
+  /** Soporte 25×80×10 (Y 25..105) menos un cilindro que llega a Y = 110. */
+  const cut = () => {
+    const h = makeEngine()
+    h.add('SOLID3D', { op: 'SUBTRACT', operands: [box, { op: 'CYLINDER', base: [160, 104, -5], radius: 6, height: 20, segments: 32 }] })
+    return h
+  }
+
+  it('ERASE W toma el soporte con una ventana de su extensión real, no la del cilindro restado', async () => {
+    expect(await erasedAfter(cut(), 'W', '#147,24', '#173,106', '')).toBe(0)
+    // Y la ventana que no lo abarca entero sigue sin tomarlo.
+    expect(await erasedAfter(cut(), 'W', '#147,24', '#173,100', '')).toBe(1)
+  })
+
+  it('SLICE: la mitad que queda se toma con una ventana a su medida (el semiespacio del corte no cuenta)', async () => {
+    const h = makeEngine()
+    h.add('SOLID3D', { ...box })
+    await h.run('SLICE', 'ALL', '', 'ZX', '#0,65,0', '#160,30,0')
+    expect(h.ofType('SOLID3D')).toHaveLength(1)
+    expect(await erasedAfter(h, 'W', '#147,24', '#173,66', '')).toBe(0)
+  })
+
+  it('WPolygon, Crossing y Fence también miran la pieza resultante', async () => {
+    expect(await erasedAfter(cut(), 'WP', '#147,24', '#173,24', '#173,106', '#147,106', '', '')).toBe(0)
+    // Un cruce que sólo toca el cilindro restado (fuera de la pieza) no la toma.
+    expect(await erasedAfter(cut(), 'C', '#158,106', '#162,109', '')).toBe(1)
+    expect(await erasedAfter(cut(), 'F', '#150,107', '#170,107', '', '')).toBe(1)
+  })
+})
+
+describe('objeto en una capa bloqueada (R24)', () => {
+  it('un punto tipeado sobre él avisa que la capa está bloqueada (no «no object at that point»)', async () => {
+    const h = makeEngine()
+    const svc = new LayerService(h.doc)
+    const fija = svc.create('FIJA')
+    h.add('LINE', { start: [0, 0, 0], end: [10, 0, 0] }, fija.id)
+    svc.setLocked(fija.id, true)
+    await h.run('ERASE', '#5,0')
+    expect(h.prints.at(-1)).toBe('0 found: 1 was on a locked layer ("FIJA"). Unlock it with LAYULK or -LAYER U.')
+    await h.run('#50,50')
+    expect(h.prints.at(-1)).toBe('0 found: no object at that point.')
+    await h.run('')
+    expect(h.doc.entities).toHaveLength(1)
+  })
+})

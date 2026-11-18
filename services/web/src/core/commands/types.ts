@@ -192,6 +192,8 @@ export interface AppHooks {
   qselect?(): void
   /** Malla de un sólido o de una malla 3D (para LIST, AREA y MASSPROP). */
   solidMesh?(e: Entity): import('../document/types').MeshProps | null
+  /** Volumen exacto de un sólido (primitiva o resultado del núcleo exacto); null si sólo se conoce el de la malla. */
+  solidVolume?(e: Entity): number | null
   /** PLOT: diálogo con vista previa; 'window' = el usuario pidió marcar una ventana (se vuelve a abrir con ella). */
   plotDialog?(window?: import('../io/pdf').PlotArea | null): Promise<'plot' | 'window' | 'cancel'>
   /** PUBLISH: un PDF multipágina con los layouts indicados. */
@@ -226,8 +228,8 @@ export interface AppHooks {
   currentViewBasis?(): ProjBasis | null
   /** Proyección 2D con líneas ocultas de lo 3D visible del modelo (o de los objetos `ids`). */
   projectModel?(ids: string[] | null, basis: ProjBasis, opts: { showObscured: boolean; tangential: boolean }): ProjItem[]
-  /** Proyección, en coordenadas de la vista, del centro 3D de lo que se documenta (origen común de las vistas). */
-  viewOrigin?(ids: string[] | null, basis: ProjBasis): [number, number] | null
+  /** Centro 3D (caja envolvente) de lo que se documenta: el punto que las vistas de dibujo ponen en su inserción. */
+  viewAnchor?(ids: string[] | null): Vec3 | null
   /** Triángulos sombreados de lo 3D visible del modelo (o de `ids`) vistos en `basis`. */
   shadeModel?(ids: string[] | null, basis: ProjBasis): ShadeProps
   /** Tramos de la proyección con sus extremos 3D, sin unir (SOLPROF sin proyectar). */
@@ -324,10 +326,20 @@ export interface CommandContext {
    * selección: así se ve sobre qué se está trabajando. Se sueltan al terminar el comando.
    */
   markPicked(ids: string[]): void
-  /** Selección (sin tomar la pre-selección) que también acepta opciones tecleadas. null si se cancela. */
-  getSelectionOrKeyword(prompt: string, keywords: string[]): Promise<{ kind: 'selection'; ids: string[] } | { kind: 'keyword'; keyword: string } | null>
+  /**
+   * Selección (sin tomar la pre-selección) que también acepta opciones tecleadas. null si se cancela. `tried`: el
+   * usuario intentó elegir (punto, ventana…) aunque no encontró nada; así un Enter tras «0 found» no toma la opción
+   * por defecto como si no se hubiera elegido.
+   */
+  getSelectionOrKeyword(prompt: string, keywords: string[]): Promise<{ kind: 'selection'; ids: string[]; tried?: boolean } | { kind: 'keyword'; keyword: string } | null>
+  /**
+   * El comando terminó sin efecto (cancelado a mitad): lo que haya cambiado en el dibujo (pestaña activa, capas o
+   * bloques auxiliares) vuelve a como estaba al empezar y no queda un paso de UNDO.
+   */
+  discardChanges?(): void
   /** Solicita texto libre por la línea de comandos (p. ej. nombre de archivo). null si se cancela. */
-  getString(prompt: string, opts?: { default?: string }): Promise<string | null>
+  /** `word`: se espera una palabra (opción o número): la barra espaciadora confirma como Enter. */
+  getString(prompt: string, opts?: { default?: string; word?: boolean }): Promise<string | null>
   print(msg: string): void
   openHelp(): void
   /** Abre la documentación en otra pestaña (`path` relativo a `docs/`, p. ej. `commands/#fillet`). */

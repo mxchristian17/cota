@@ -16,6 +16,7 @@ import {
   scaleLabel,
   viewBasis,
   viewBlockEntities,
+  anchorOrigin,
   type DrawingViewData,
   type HiddenMode,
   isShaded,
@@ -67,15 +68,41 @@ function nextViewBlock(ctx: CommandContext): string {
   return `*VIEW${i}`
 }
 
-/** Calcula la geometría 2D de una vista y la deja en su bloque; devuelve su tamaño (unidades de modelo). */
-function buildView(ctx: CommandContext, block: string, source: string[] | null, basis: ProjBasis, hidden: HiddenMode): { width: number; height: number } | null {
+/**
+ * Calcula la geometría 2D de una vista y la deja en su bloque; devuelve su tamaño (unidades de modelo). `anchor`: el
+ * punto 3D que va en la inserción (el mismo para todas las vistas de una pieza: quedan alineadas como en Monge).
+ */
+function buildView(ctx: CommandContext, block: string, source: string[] | null, basis: ProjBasis, hidden: HiddenMode, anchor: Vec3 | null): { width: number; height: number } | null {
   const items = ctx.app.projectModel?.(source, basis, { showObscured: showsHidden(hidden), tangential: true }) ?? []
   if (items.length === 0) return null
   const layers = { visible: ctx.app.ensureLayer?.('MD_Visible', undefined, '#ffffff') ?? '0', hidden: ctx.app.ensureLayer?.('MD_Hidden', 'HIDDEN', '#ffffff') ?? '0' }
   const shade = isShaded(hidden) ? (ctx.app.shadeModel?.(source, basis) ?? null) : null
-  const { entities, width, height } = viewBlockEntities(items, layers, shade, ctx.app.viewOrigin?.(source, basis) ?? null)
+  const { entities, width, height } = viewBlockEntities(items, layers, shade, anchor ? anchorOrigin(anchor, basis) : null)
   ctx.doc.setBlock({ name: block, entities })
   return { width, height }
+}
+
+/**
+ * Qué objetos documenta la vista: los elegidos, o el modelo entero con Enter u `Entire`. Un intento de selección que
+ * no encontró nada («0 found») no cae en el modelo entero: se vuelve a pedir (R17). undefined = cancelado.
+ */
+async function askSource(ctx: CommandContext): Promise<string[] | null | undefined> {
+  for (;;) {
+    const sel = await ctx.getSelectionOrKeyword('Select objects or [Entire model] <Entire model>: ', ['Entire'])
+    if (sel === null) return undefined
+    if (sel.kind === 'keyword') return null
+    if (sel.ids.length) return sel.ids
+    if (!sel.tried) return null
+    ctx.print('Nothing selected. Select the objects to document, or press Enter for the entire model.')
+  }
+}
+
+/** Lo último elegido en VIEWBASE (tipo, líneas ocultas y escala tecleada), recordado en la sesión (R13). */
+const lastViewbase: { projected: boolean; hidden: HiddenMode; scale: number | null } = { projected: true, hidden: 'visibleHidden', scale: null }
+
+/** Vuelve VIEWBASE a sus valores iniciales (tests). */
+export function resetViewbaseMemory(): void {
+  Object.assign(lastViewbase, { projected: true, hidden: 'visibleHidden', scale: null })
 }
 
 /** Rectángulo de una vista centrada en `c` (previsualización al ubicarla). */
@@ -117,11 +144,17 @@ async function placeProjected(ctx: CommandContext, parent: Entity): Promise<numb
     if (r.kind !== 'point') continue
     const dx = r.point.x - P.x
     const dy = r.point.y - P.y
-    const { basis, align } = projectedBasis(pv.basis, dx, dy, projection)
+    // Direcciones que ya tienen la madre y sus otras proyectadas: no se repiten (R14, B14).
+    const taken = [pv.basis.out, ...ctx.doc.entities.filter((e) => isDrawingView(e) && e.props.view.parent === parent.id).map((e) => (e as typeof parent).props.view.basis.out)]
+    const { basis, align, duplicate } = projectedBasis(pv.basis, dx, dy, projection, taken)
+    if (duplicate) ctx.print('Note: a view in that direction already exists.')
+    else if (align === 'free' && (Math.abs(dx) > 2 * Math.abs(dy) || Math.abs(dy) > 2 * Math.abs(dx))) ctx.print('A view in that direction already exists: isometric view created.')
     // Como el CAD clásico: las isométricas proyectadas salen sombreadas (con las líneas visibles).
     const hidden: HiddenMode = align === 'free' && !isShaded(pv.hidden) ? 'shadedVisible' : pv.hidden
     const block = nextViewBlock(ctx)
-    if (!buildView(ctx, block, pv.source, basis, hidden)) {
+    // Dibujos anteriores: la madre sin punto fijo usa el centro actual (como antes), y la hija lo guarda.
+    const anchor = pv.anchor ?? ctx.app.viewAnchor?.(pv.source) ?? null
+    if (!buildView(ctx, block, pv.source, basis, hidden, anchor)) {
       ctx.print('Nothing to project in that direction.')
       continue
     }
@@ -136,6 +169,7 @@ async function placeProjected(ctx: CommandContext, parent: Entity): Promise<numb
       offset: [at.x - P.x, at.y - P.y],
       lastParent: [P.x, P.y],
       inheritScale: true,
+      ...(anchor ? { anchor } : {}),
     })
     made.push(e.id)
     ctx.doc.touch()
@@ -201,33 +235,37 @@ export const viewbaseCommand: Command = {
   description: 'Create a base view of the model in a layout, then its projected views',
   async run(ctx) {
     let source: string[] | null = null
-    const st: ViewState = { orientation: 'FRONT', basis: viewBasis('FRONT'), hidden: 'visibleHidden', scale: null, projected: true }
+    const st: ViewState = { orientation: 'FRONT', basis: viewBasis('FRONT'), hidden: lastViewbase.hidden, scale: lastViewbase.scale, projected: lastViewbase.projected }
     // "Current": la vista del viewport del modelo, tomada antes de pasar al layout.
     const modelBasis = ctx.doc.inPaperSpace ? null : (ctx.app.currentViewBasis?.() ?? null)
     const basisOf = (o: ViewName | 'CURRENT'): ProjBasis => (o === 'CURRENT' ? (modelBasis ?? viewBasis('FRONT')) : viewBasis(o))
+    const block = nextViewBlock(ctx)
+    /** Sin efecto (cancelado o sin sólidos): el dibujo vuelve a como estaba, sin paso de UNDO (R13). */
+    const abandon = (msg?: string) => {
+      if (msg) ctx.print(msg)
+      if (ctx.doc.getBlock(block)) ctx.doc.removeBlock(block)
+      ctx.discardChanges?.()
+    }
     if (!ctx.doc.inPaperSpace) {
       // Desde el modelo: qué objetos y en qué layout (como el CAD clásico).
-      const sel = await ctx.getSelectionOrKeyword('Select objects or [Entire model] <Entire model>: ', ['Entire'])
-      if (sel === null) return
-      if (sel.kind === 'selection' && sel.ids.length) source = sel.ids
-      if ((await toLayout(ctx)) !== 'layout') return
+      const picked = await askSource(ctx)
+      if (picked === undefined) return
+      source = picked
     }
+    // La vista base se calcula antes de pasar al layout: sin sólidos se avisa sin cambiar de pestaña (B20).
+    const anchor = ctx.app.viewAnchor?.(source) ?? null
+    let size = buildView(ctx, block, source, st.basis, st.hidden, anchor)
+    if (!size) return abandon('No 3D solids to document.')
+    if (!ctx.doc.inPaperSpace && (await toLayout(ctx)) !== 'layout') return abandon()
     const layout = ctx.doc.activeLayout
     if (!layout || ctx.doc.activeTab === MODEL_TAB) {
-      ctx.print('VIEWBASE places drawing views on a layout.')
-      return
+      return abandon('VIEWBASE places drawing views on a layout.')
     }
     const paper = paperSizeMm(layout.pageSetup)
     const pw = layout.pageSetup.orientation === 'landscape' ? Math.max(paper.width, paper.height) : Math.min(paper.width, paper.height)
     const ph = layout.pageSetup.orientation === 'landscape' ? Math.min(paper.width, paper.height) : Math.max(paper.width, paper.height)
 
     // La vista base: opciones hasta que se indica su ubicación.
-    const block = nextViewBlock(ctx)
-    let size = buildView(ctx, block, source, st.basis, st.hidden)
-    if (!size) {
-      ctx.print('No 3D solids to document.')
-      return
-    }
     let scale = st.scale ?? autoViewScale(size.width, size.height, pw, ph)
     let base: Entity | null
     for (;;) {
@@ -239,12 +277,16 @@ export const viewbaseCommand: Command = {
         enterKeyword: 'Type',
         preview: (c) => frame(c, sz.width * scale, sz.height * scale),
       })
-      if (r.kind === 'cancel') {
-        ctx.doc.removeBlock(block)
-        return
-      }
+      if (r.kind === 'cancel') return abandon()
       if (r.kind === 'point') {
-        base = addView(ctx, block, r.point, scale, { orientation: st.orientation === 'CURRENT' ? 'projected' : st.orientation, basis: st.basis, hidden: st.hidden, source })
+        base = addView(ctx, block, r.point, scale, {
+          orientation: st.orientation === 'CURRENT' ? 'projected' : st.orientation,
+          basis: st.basis,
+          hidden: st.hidden,
+          source,
+          ...(anchor ? { anchor } : {}),
+        })
+        Object.assign(lastViewbase, { projected: st.projected, hidden: st.hidden, scale: st.scale })
         ctx.doc.touch()
         break
       }
@@ -269,11 +311,8 @@ export const viewbaseCommand: Command = {
         continue
       }
       // Orientación u ocultas cambiaron: se recalcula la vista (y su escala automática).
-      size = buildView(ctx, block, source, st.basis, st.hidden)
-      if (!size) {
-        ctx.print('No 3D solids to document.')
-        return
-      }
+      size = buildView(ctx, block, source, st.basis, st.hidden, anchor)
+      if (!size) return abandon('No 3D solids to document.')
       if (st.scale === null) scale = autoViewScale(size.width, size.height, pw, ph)
     }
     const n = st.projected ? await placeProjected(ctx, base) : 0
@@ -321,7 +360,7 @@ export const vieweditCommand: Command = {
         const h = await askHidden(ctx, v.props.view.hidden)
         if (!h) continue
         v.props.view.hidden = h
-        buildView(ctx, v.props.name, v.props.view.source, v.props.view.basis, h)
+        buildView(ctx, v.props.name, v.props.view.source, v.props.view.basis, h, v.props.view.anchor ?? ctx.app.viewAnchor?.(v.props.view.source) ?? null)
       } else {
         const s = await askScale(ctx, v.props.scale[0])
         if (!s) continue
@@ -389,9 +428,8 @@ export const viewgenCommand: Command = {
   aliases: [],
   description: 'Generate the Monge views of a part at once (choose them on a diagram, ISO-E or ISO-A)',
   async run(ctx) {
-    const sel = await ctx.getSelectionOrKeyword('Select objects or [Entire model] <Entire model>: ', ['Entire'])
-    if (sel === null) return
-    const source = sel.kind === 'selection' && sel.ids.length ? sel.ids : null
+    const source = await askSource(ctx)
+    if (source === undefined) return
     const choice = await ctx.app.viewGenDialog?.({ ...DEFAULT_VIEWGEN, std: ctx.doc.vars.VIEWPROJECTION === 'third' ? 'A' : 'E' })
     if (!choice) return
     // Desde el modelo: a un layout (como VIEWBASE), o `Model` para dejar los bloques 2D en el modelo.
@@ -401,9 +439,10 @@ export const viewgenCommand: Command = {
     const hiddenOf = (v: GenView): HiddenMode => (ISO_VIEWS.includes(v) ? 'shadedVisible' : choice.hidden ? 'visibleHidden' : 'visible')
     // Cada vista, a escala 1, en su bloque (origen común: el centro de la pieza).
     const blocks = new Map<GenView, { block: string; w: number; h: number }>()
+    const anchor = ctx.app.viewAnchor?.(source) ?? null
     for (const v of views) {
       const block = nextViewBlock(ctx)
-      const size = buildView(ctx, block, source, viewBasis(v as ViewName), hiddenOf(v))
+      const size = buildView(ctx, block, source, viewBasis(v as ViewName), hiddenOf(v), anchor)
       if (!size) {
         if (v === 'FRONT') {
           ctx.print('No 3D solids to document.')
@@ -447,7 +486,8 @@ export const viewgenCommand: Command = {
         continue
       }
       const basis = viewBasis(p.view as ViewName)
-      if (!base) base = addView(ctx, b.block, pos, scale, { orientation: 'FRONT', basis, hidden: hiddenOf(p.view), source })
+      const pin = anchor ? { anchor } : {}
+      if (!base) base = addView(ctx, b.block, pos, scale, { orientation: 'FRONT', basis, hidden: hiddenOf(p.view), source, ...pin })
       else
         addView(ctx, b.block, pos, scale, {
           orientation: 'projected',
@@ -459,6 +499,7 @@ export const viewgenCommand: Command = {
           offset: [pos.x - F.x, pos.y - F.y],
           lastParent: [F.x, F.y],
           inheritScale: true,
+          ...pin,
         })
     }
     ctx.doc.touch()

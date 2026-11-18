@@ -4,6 +4,102 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.49.0] — 2026-11-18
+
+### Added
+- **ATTDEF Justify has Middle and the nine TL…BR options**: `Middle` (or `MC`) centers the attribute on the point,
+  for the number inside a balloon.
+
+### Fixed
+- **The title block did not take the drawing properties**: TITLE, DRAWN and COMPANY now start as the Title, Author
+  and custom `Company` fields of DWGPROPS (UPDATEFIELD fills them in title blocks from earlier versions); SCALE shows
+  the scale of the drawing views on sheets made with VIEWBASE instead of `----`; long texts are narrowed to their
+  cell instead of running over the next one; ATTEDIT selects the title block with a typed point or a click inside a
+  cell.
+- **Window, Crossing, Fence and typed points did not select blocks, title blocks or drawing views** on a sheet or in
+  the model (`0 found`): they now use the block's geometry.
+- **The internal layers of drawing views (MD_Visible, MD_Hidden) showed in the layer lists** (toolbar, Layer
+  Properties Manager and phone): they are hidden there; type `MD` in the manager's filter to edit them.
+- **HATCH with an internal point on a section view hatched the sheet around the view**: the hidden lines of drawing
+  views no longer act as boundaries, so the point fills the cut face (holes stay as islands).
+- **AUTODIM**: selecting views by window, crossing or a typed point now works, and a pick that finds nothing asks
+  again instead of dimensioning every view; the dimensions keep to the free space around each view (other views,
+  title block and printable area) instead of running over neighbors or off the sheet; overlapping texts in a chain
+  are staggered; the outlines of cylinders seen from the side measure their exact diameter.
+- **Drawing views moved on the sheet when the model changed**: a view of the entire model was centered again on the
+  new extents (copying a part far away shifted the whole sheet). Views now keep their model point, place and scale,
+  and only their content is updated.
+- **A dimension drawn by hand on a view at a scale other than 1:1 showed the sheet distance while placing it**
+  (preview, `Enter dimension text <…>` and `Dimension text =`): it now shows the model value it keeps, like the
+  dimensions made with AUTODIM.
+- **VIEWBASE documented the entire model after a pick that found nothing**: it now says `0 found` and asks again.
+- **VIEWBASE switched to the layout before saying there were no solids**; cancelling it left an empty step to undo.
+  It now checks first, stays in the model and leaves nothing to undo; it also remembers the type, hidden-line style
+  and scale of the last time.
+- **A projected view placed slightly off the axis repeated a side view that already existed**: it becomes the
+  isometric view of that corner.
+- **A block attribute appeared at twice its coordinate** when the block's base point was not `0,0`: BLOCK, MOVE,
+  COPY and SCALE now move attribute definitions like any text.
+- **MLEADER with Block content left the balloon empty**: it now asks the block's attribute values and rests the block
+  on the end of the landing.
+- **OPEN replaced a drawing with unsaved changes without asking**: OPEN (and dropping a drawing on Cota, opening one
+  from the folder or account list, or choosing a `.cota` in IMPORT) now asks `Save changes to …? [Yes/No] <Yes>` like
+  NEW; Esc keeps the current drawing. Closing or reloading the tab still asks the browser to confirm.
+- **Opening a STEP and copying it counted as a change**: NEW and OPEN no longer ask to save a drawing that was only
+  opened (the floating-point clean-up of the first command marked it as modified).
+- **Window selection after SUBTRACT or SLICE used the old extent**: windows, crossings, polygons and fences look at
+  the resulting solid, not at the subtracted tool or the half-space of the cut (also for ARRAY copies).
+- **SLICE could leave a strip of the discarded side** when the point typed on the plane was far from the part.
+- **A typed point on an object of a locked layer** said `no object at that point`: it now says the object is on a
+  locked layer and how to unlock it.
+- **LIST shows color, linetype and lineweight** (the object's own, or ByLayer with the layer's value).
+- **FILLET, CHAMFER, FILLETEDGE, CHAMFEREDGE, BREAK, EXPLODE and PEDIT confirm what they did** in the command line.
+- **THREAD accepts a typed point on the cylindrical face** (it only worked with a click when another face was in
+  front in the view), takes the diameter from the solid's cylinder instead of its mesh, and writes the numbers of the
+  command line with a decimal point.
+- **INSERT asks for the Y scale** after the X scale, as in classic CAD (Enter keeps X), and says in the command line
+  that the Edit Attributes dialog opens. A wrong factor is asked again; Esc cancels.
+- **SCRIPT: a quote inside a quoted text** (`"Plug G 1/2""`) no longer ends it and merges the next inputs.
+- **LIST and MASSPROP report the exact volume** of boxes, cylinders, cones, spheres, tori and of solids computed by the
+  exact kernel (a cylinder showed 0.3 % less, the volume of its mesh).
+- **ALIGN works in 3D**: pairs with vertical directions did nothing (`Alignment points coincide`) even for a plain
+  move; now equal offsets move, two pairs turn in 3D and a third turns about them. ALIGN prints how many objects it
+  aligned.
+- **VIEW and the view cube say when they change the UCS** (UCSORTHO), and an isometric view reminds that the UCS is
+  still the last one; the 3D guide now says that ROTATE turns about the Z axis of the UCS.
+- **Space confirms options and numbers** typed as text (`-LAYER`, FILLET Radius, INSERT scale…), as in classic CAD;
+  only free-text prompts take it as a character.
+- **3DORBIT was too sensitive**: a drag across the whole view now turns 270° (60 px turned about 35° per axis).
+- **EXPORT OBJ from a sheet downloaded nothing**: it looked for 3D objects on the paper. It now writes the 3D model
+  whatever tab is active (or the block being edited), and says "Writing OBJ…" while a large assembly is written.
+- **EXPORT DXF/DWG from a sheet** names the file after the sheet (`drawing-Sheet.dxf`), so exporting the next sheet no
+  longer overwrites it, and shaded views are much lighter: each face goes out as one fill (a SOLID, or a solid HATCH with
+  its holes) in the plane of the view, instead of one SOLID per triangle with the screen depth and 17-digit numbers (an
+  assembly sheet went from 7.0 MB to 1.6 MB).
+- **Drawing views no longer bloat the file**: shaded views are saved with shared vertices and 7 significant digits,
+  with no visible change (an assembly with a four-view sheet went from 6.5 MB to 2.8 MB). Drawings saved before are
+  compacted when opened.
+- **PDF**: shaded views had light streaks along the triangles of flat faces; each face is now filled as a whole and
+  edged with a hairline of its own color. Dimension text drawn with a stroke font can now be searched and copied (an
+  invisible text layer over the strokes, which still look as on screen).
+- **The in-place MTEXT editor could open outside the window** (with its OK button) when the text point was out of
+  view: it now moves inside the window. OK and Cancel show their shortcuts (Ctrl+Enter, Esc).
+- **HELP**: the Description column was cut on the right at 1600×900 (long option lists did not wrap); the dialog is
+  wider and option lists wrap at their slashes.
+- **Agent panel without a key**: the message typed is no longer erased; the settings open with the focus on the key
+  field and the notice says where to paste it (it pointed to an icon).
+- **With the agent panel open, the end of the status bar (LWT, UCS, scale) was hidden** when a drawing had several
+  sheets: the sheet tabs now shrink and scroll inside their strip (mouse wheel, the active one kept in view).
+- **Full editor on a phone**: the view cube took a quarter of the drawing; it is folded into a button with the current
+  view (tap to unfold, picking a view folds it). The drawing name is no longer cut: the folder and autosave buttons
+  show only their icons.
+- **PLOT preview**: the sheet covered part of the "Scale 1:1" caption, now below it.
+- **PAGESETUP**: the four margins had no labels; they now read Top, Right, Bottom and Left (and Width/Height for a
+  custom size).
+- **TRACEBACK** named the file after the internal drawing name (`traceback-drawing1-…`); it now uses the name of the
+  open drawing.
+- **Accessibility**: every dialog is announced as a modal dialog with its title as name.
+
 ## [2.48.1] — 2026-11-17
 
 ### Fixed

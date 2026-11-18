@@ -14,9 +14,9 @@ export function AttEditDialog() {
 
   return (
     <div className="modal-backdrop" onClick={() => close(null)} data-testid="att-dialog">
-      <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="att-edit-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>{dialog.title}</h2>
+          <h2 id="att-edit-title">{dialog.title}</h2>
           <button className="icon-btn" onClick={() => close(null)} aria-label="Close">
             <UiIcon name="close" />
           </button>

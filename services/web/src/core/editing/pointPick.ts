@@ -1,7 +1,8 @@
-import type { Entity, MeshProps } from '../document/types'
+import type { BlockDef, Entity, MeshProps } from '../document/types'
+import { expandEntities } from './block'
 import type { Vec3 } from '../math'
 import { curveOf } from '../geom/curve'
-import { entityBounds } from './bounds'
+import { entityBounds, type Bounds } from './bounds'
 
 /** Malla de triángulos de un sólido o de una malla (la da la app: `AppHooks.solidMesh`); el core no arma mallas. */
 export type MeshOf = (e: Entity) => MeshProps | null | undefined
@@ -11,18 +12,19 @@ export type MeshOf = (e: Entity) => MeshProps | null | undefined
  * la elige). Sólo curvas y puntos, a menos de `tol`; el más cercano gana. Así los multicomandos y el agente eligen
  * objetos sin clic.
  */
-export function entityAtPoint(entities: Entity[], p: Vec3, tol = 1e-3): string | null {
+export function entityAtPoint(entities: Entity[], p: Vec3, tol = 1e-3, blocks?: BlockDef[]): string | null {
   let best: string | null = null
   let bd = tol * Math.max(1, Math.hypot(p[0], p[1], p[2]) * 1e-3)
+  const distTo = (e: Entity): number => {
+    if (e.type === 'POINT') return Math.hypot(e.props.position[0] - p[0], e.props.position[1] - p[1], e.props.position[2] - p[2])
+    const c = curveOf(e)
+    if (!c) return Infinity
+    const q = c.pointAt(c.paramAt(p))
+    return Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2])
+  }
   for (const e of entities) {
-    let d: number
-    if (e.type === 'POINT') d = Math.hypot(e.props.position[0] - p[0], e.props.position[1] - p[1], e.props.position[2] - p[2])
-    else {
-      const c = curveOf(e)
-      if (!c) continue
-      const q = c.pointAt(c.paramAt(p))
-      d = Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2])
-    }
+    // Una inserción (bloque, rótulo, vista de dibujo) se elige por las curvas de su geometría de mundo.
+    const d = e.type === 'INSERT' && blocks ? Math.min(Infinity, ...expandEntities([e], blocks).map(distTo)) : distTo(e)
     if (d <= bd) {
       best = e.id
       bd = d
@@ -31,13 +33,28 @@ export function entityAtPoint(entities: Entity[], p: Vec3, tol = 1e-3): string |
   return best
 }
 
+/** Caja de una entidad en planta; la de una inserción, la de su geometría de mundo (con `blocks`). */
+function planBounds(e: Entity, blocks?: BlockDef[]): Bounds {
+  if (e.type !== 'INSERT' || !blocks) return entityBounds(e)
+  const out = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
+  for (const part of expandEntities([e], blocks)) {
+    const b = entityBounds(part)
+    out.minX = Math.min(out.minX, b.minX)
+    out.minY = Math.min(out.minY, b.minY)
+    out.maxX = Math.max(out.maxX, b.maxX)
+    out.maxY = Math.max(out.maxY, b.maxY)
+  }
+  return out
+}
+
 /**
  * Objeto elegido con un punto TECLEADO en "Select objects:": el que pasa por el punto (curvas y puntos); si no hay,
  * el sólido o la malla que está EN el punto, en 3D (`meshOf`, ver `bodyAtPoint`); si tampoco, el de caja más chica
- * (en planta) que lo contiene (textos, cotas, sombreados, regiones; sin `meshOf`, también sólidos y mallas).
+ * (en planta) que lo contiene (textos, cotas, sombreados, regiones, inserciones; sin `meshOf`, también sólidos y
+ * mallas). Con `blocks`, las inserciones cuentan por su geometría (sin ellos no tenían ni curvas ni caja).
  */
-export function selectAtPoint(entities: Entity[], p: Vec3, meshOf?: MeshOf): string | null {
-  const on = entityAtPoint(entities, p)
+export function selectAtPoint(entities: Entity[], p: Vec3, meshOf?: MeshOf, blocks?: BlockDef[]): string | null {
+  const on = entityAtPoint(entities, p, undefined, blocks)
   if (on) return on
   const body = meshOf ? bodyAtPoint(entities, p, meshOf) : null
   if (body) return body
@@ -46,7 +63,7 @@ export function selectAtPoint(entities: Entity[], p: Vec3, meshOf?: MeshOf): str
   for (const e of entities) {
     if (curveOf(e) || e.type === 'POINT') continue
     if (meshOf && (e.type === 'SOLID3D' || e.type === 'MESH3D')) continue // ya se miraron en 3D
-    const b = entityBounds(e)
+    const b = planBounds(e, blocks)
     if (p[0] < b.minX - 1e-9 || p[0] > b.maxX + 1e-9 || p[1] < b.minY - 1e-9 || p[1] > b.maxY + 1e-9) continue
     const a = (b.maxX - b.minX) * (b.maxY - b.minY)
     if (a < ba) {

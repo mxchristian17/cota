@@ -1,5 +1,5 @@
 import type { Command } from '../types'
-import { alignPlan, alignTransform, type AlignPair } from '../../editing/align'
+import { alignIsPlanar, alignPlan, alignRigid, alignRigidTransform, alignTransform, type AlignPair } from '../../editing/align'
 import { applyTransform } from '../../editing/transform'
 import { ptVec } from '../../editing/pickCurve'
 import { askKeyword } from '../ask'
@@ -34,12 +34,15 @@ export const alignCommand: Command = {
       if (!k) return
       scale = k === 'Yes'
     }
-    const plan = alignPlan(pairs, scale)
-    if (!plan) {
+    // En el plano XY (lo de siempre, con el espejo de 3 pares); con direcciones fuera de él, el movimiento en 3D (B10).
+    const plan = alignIsPlanar(pairs) ? alignPlan(pairs, scale) : null
+    const rigid = plan ? null : alignRigid(pairs, scale)
+    if (!plan && !rigid) {
       ctx.print('Alignment points coincide.')
       return
     }
-    applyTransform(ctx.doc, ids, alignTransform(plan))
+    const { ids: done } = applyTransform(ctx.doc, ids, plan ? alignTransform(plan) : alignRigidTransform(rigid!))
     ctx.app.clearSelection()
+    ctx.print(`${done.length} object(s) aligned.`)
   },
 }

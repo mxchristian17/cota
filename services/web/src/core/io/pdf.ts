@@ -17,6 +17,7 @@ import { entityDashes } from '../linetype/dash'
 import { hatchFrame, hatchRings, hatchStrokesCached, isSolidHatch, to3 } from '../hatch/geometry'
 import { isWide, polylineBand } from '../geom/plineWidth'
 import type { Vec3 } from '../math'
+import { shadeRegions } from '../projection/shade'
 import { zlibSync } from 'fflate'
 
 /** Puntos PDF por milímetro (1 pulgada = 72 pt = 25.4 mm). */
@@ -187,18 +188,23 @@ export const paintLayer = (e: Entity): PaintLayer => (e.type === 'TEXT' ? 'text'
 export const paintOrder = (b: Record<PaintLayer, string>): string => b.draw + b.text
 
 /**
- * Sombreado de una vista: cada triángulo relleno con su color, en el orden en que viene (de atrás
- * hacia adelante). En gris o monocromo se plotea su luminancia.
+ * Sombreado de una vista: cada zona de un color (una cara plana con todos sus triángulos, ver `shadeRegions`) se
+ * rellena entera, en el orden de pintado (de atrás hacia adelante), y se repasa con un trazo de un píxel del mismo
+ * color: sin vetas claras entre triángulos (el suavizado de cada borde dejaba ver el papel) ni entre zonas vecinas.
+ * En gris o monocromo se plotea su luminancia.
  */
 export function shadeOps(p: ShadeProps, map: (q: Vec3) => [number, number], plotStyle: PlotStyle): string {
   let s = ''
-  for (let i = 0, k = 0; i + 8 < p.tris.length; i += 9, k += 3) {
-    let [r, g, b] = [p.colors[k] ?? 0.7, p.colors[k + 1] ?? 0.7, p.colors[k + 2] ?? 0.7]
+  for (const z of shadeRegions(p)) {
+    let [r, g, b] = z.rgb
     if (plotStyle !== 'color') r = g = b = 0.3 * r + 0.59 * g + 0.11 * b
-    const pts = [0, 3, 6].map((o) => map([p.tris[i + o], p.tris[i + o + 1], p.tris[i + o + 2]]))
-    s += `${f(r)} ${f(g)} ${f(b)} rg\n` + pts.map(([x, y], j) => `${f(x)} ${f(y)} ${j === 0 ? 'm' : 'l'}\n`).join('') + 'h\nf\n'
+    const c = `${f(r)} ${f(g)} ${f(b)}`
+    s += `${c} rg\n${c} RG\n`
+    for (const loop of z.loops) s += loop.map((q, j) => { const [x, y] = map(q); return `${f(x)} ${f(y)} ${j === 0 ? 'm' : 'l'}\n` }).join('') + 'h\n'
+    s += 'B*\n'
   }
-  return s
+  // Ancho 0: el trazo más fino del dispositivo (un píxel en pantalla); el estado gráfico vuelve como estaba.
+  return s ? `q\n0 w\n${s}Q\n` : ''
 }
 
 /** Relleno par-impar de varios anillos (ya en puntos del PDF). */
@@ -313,6 +319,43 @@ function catmullRom(cps: [number, number][], perSeg = 12): [number, number][] {
 export function textTm(txt: string, o: [number, number], u: [number, number], v: [number, number], font = '/F1'): string {
   if (Math.abs(u[0] * v[1] - u[1] * v[0]) < 1e-6) return ''
   return `BT\n${font} 1 Tf\n${f(u[0])} ${f(u[1])} ${f(v[0])} ${f(v[1])} ${f(o[0])} ${f(o[1])} Tm\n(${pdfText(txt)}) Tj\nET\n`
+}
+
+/** Anchos de Helvetica (milésimas de em) de lo que lleva una cota; el resto, el de una cifra. */
+const HELV_W: Record<string, number> = { '.': 278, ',': 278, ' ': 278, '/': 278, '-': 333, '(': 333, ')': 333, '+': 584, '±': 584, '×': 584, '°': 400, Ø: 778, R: 722, M: 833, x: 500, '%': 889 }
+const helvWidth = (s: string): number => [...s].reduce((w, c) => w + (HELV_W[c] ?? 556), 0) / 1000
+
+/**
+ * Texto invisible (modo 3) sobre un texto trazado con la fuente de un trazo: en el PDF se busca, se selecciona y se
+ * copia, y se ve igual que en pantalla (los trazos). Ocupa la caja de los trazos: `c` es su centro, `dir`/`up` sus ejes
+ * y `map` lleva un punto del mundo a puntos del PDF.
+ */
+export function hiddenTextOps(value: string, strokes: Vec3[][], c: Vec3, dir: Vec3, up: Vec3, map: (q: Vec3) => [number, number]): string {
+  const txt = value.replace(/\s*\n\s*/g, ' ').trim()
+  if (!txt || !strokes.length) return ''
+  let [a0, a1, b0, b1] = [Infinity, -Infinity, Infinity, -Infinity]
+  for (const st of strokes) {
+    for (const q of st) {
+      const d: Vec3 = [q[0] - c[0], q[1] - c[1], q[2] - c[2]]
+      const a = d[0] * dir[0] + d[1] * dir[1] + d[2] * dir[2]
+      const b = d[0] * up[0] + d[1] * up[1] + d[2] * up[2]
+      a0 = Math.min(a0, a)
+      a1 = Math.max(a1, a)
+      b0 = Math.min(b0, b)
+      b1 = Math.max(b1, b)
+    }
+  }
+  if (!(a1 > a0) || !(b1 > b0)) return ''
+  const at = (a: number, b: number): Vec3 => [c[0] + dir[0] * a + up[0] * b, c[1] + dir[1] * a + up[1] * b, c[2] + dir[2] * a + up[2] * b]
+  const o = map(at(a0, b0))
+  const right = map(at(a1, b0))
+  const top = map(at(a0, b1))
+  const hw = helvWidth(txt)
+  const cap = fontMetrics('Helvetica').cap
+  const u: [number, number] = [(right[0] - o[0]) / hw, (right[1] - o[1]) / hw]
+  const v: [number, number] = [(top[0] - o[0]) / cap, (top[1] - o[1]) / cap]
+  const t = textTm(txt, o, u, v)
+  return t ? `q\n3 Tr\n${t}Q\n` : ''
 }
 
 /** Operadores PDF de una polilínea (en mundo), trazada. */
@@ -456,7 +499,11 @@ export function plotContentStream(entities: Entity[], layers: Layer[], t: PlotTr
           const [ux, uy] = [d.text.up[0], d.text.up[1]]
           const o = worldToPage(d.text.pos[0] - (dx * w) / 2 - (ux * h) / 2, d.text.pos[1] - (dy * w) / 2 - (uy * h) / 2, t)
           out += textTm(d.text.value, o, [dx * size, dy * size], [ux * size, uy * size])
-        } else for (const st of d.textStrokes) out += polyStroke(st.map((q) => [q[0], q[1]]), t)
+        } else {
+          for (const st of d.textStrokes) out += polyStroke(st.map((q) => [q[0], q[1]]), t)
+          // Los trazos se ven como en pantalla; el texto invisible encima hace que la medida se pueda buscar y copiar.
+          out += hiddenTextOps(d.text.value, d.textStrokes, d.text.pos, d.text.dir, d.text.up, toPage)
+        }
         for (const poly of d.fills) {
           const pts = poly.map((q) => worldToPage(q[0], q[1], t))
           out += pts.map(([x, y], i) => `${f(x)} ${f(y)} ${i === 0 ? 'm' : 'l'}\n`).join('') + 'h\nf\n'

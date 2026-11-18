@@ -4,7 +4,7 @@ import { askKeyword } from '../ask'
 import { rectPolygon } from '../selectionSets'
 import { matchKeyword } from '../keywords'
 import { sysvars } from '../sysvars'
-import { normalizeUcs, ucsToDef } from '../../ucs'
+import { ORTHO_UCS, isWorldUcs, normalizeUcs, sameUcs, ucsToDef, type Ucs } from '../../ucs'
 
 const STANDARD = ['Top', 'Bottom', 'Front', 'BAck', 'Left', 'Right', 'SWiso', 'SEiso', 'NEiso', 'NWiso']
 /** Opciones de -VIEW del CAD clásico (van primero: `R` es Restore, como en el CAD clásico; las vistas, con su nombre). */
@@ -45,6 +45,23 @@ async function askName(ctx: CommandContext, prompt: string): Promise<string | nu
 }
 
 /**
+ * Aviso de la UCS al cambiar de vista (R42, B11): con UCSORTHO = 1 una vista ortogonal pone su UCS y las coordenadas
+ * tipeadas pasan a ser de ella; una isométrica la deja como estaba. Sin aviso, las coordenadas «cambiaban de
+ * significado» sin explicación.
+ */
+export function viewUcsNote(before: Ucs | undefined, after: Ucs | undefined, name: string | null, ortho: boolean): string | null {
+  if (!after) return null
+  const label = name ?? 'unnamed'
+  if (before && !sameUcs(before, after)) {
+    return isWorldUcs(after)
+      ? 'UCS: World (UCSORTHO = 1: orthographic views set their UCS).'
+      : `UCS: ${label} (UCSORTHO = 1: orthographic views set their UCS). Typed coordinates and ROTATE now use it; UCS W returns to World.`
+  }
+  if (!ortho && !isWorldUcs(after)) return `UCS: still ${label} (isometric views keep the UCS); UCS W returns to World.`
+  return null
+}
+
+/**
  * VIEW / -VIEW: vistas estándar y vistas guardadas, como el `-VIEW` del CAD clásico
  * (`?/Delete/Orthographic/Restore/Save/Window`). Una vista guardada también se restaura tecleando su nombre.
  */
@@ -59,8 +76,11 @@ export const viewCommand: Command = {
     const k = matchKeyword(text, [...OPTIONS, ...STANDARD, 'Iso'])
     const std = k && !OPTIONS.includes(k) ? standardView(k) : null
     if (std) {
+      const before = ctx.app.getUcs?.()
       ctx.app.setView(std)
       ctx.print(`View: ${k}`)
+      const note = viewUcsNote(before, ctx.app.getUcs?.(), ctx.app.ucsName?.() ?? null, std in ORTHO_UCS)
+      if (note) ctx.print(note)
       return
     }
     if (!k) {

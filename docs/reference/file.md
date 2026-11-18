@@ -34,7 +34,17 @@ your drawings and has an **Open from device** button; otherwise the file picker 
 
 **Aliases** none · **Menu** File
 
+**Steps**
+
+1. Choose the drawing (in the list or in the file picker).
+2. If the current drawing has unsaved changes: `Save changes to drawing1? [Yes/No] <Yes>:`. **Yes** saves it first
+   (as `SAVE`), **No** discards the changes, and Esc keeps the current drawing open.
+
 **Notes**
+
+- The same question comes up when you drop a drawing on Cota or choose a `.cota` file in `IMPORT`; closing or
+  reloading the browser tab with unsaved changes asks the browser to confirm. In the job-site phone view, which has
+  no command line, the browser asks whether to discard the changes.
 
 - You can choose a DXF or DWG together with the pictures it uses: they are loaded with it.
 - `-OPEN` works from the command line: `Open drawing from [Device/List] <List>:`.
@@ -102,8 +112,8 @@ as a new drawing).
 IMPORT
 B
 NEMA17
-INSERT NEMA17 100,0,0 1 0
-INSERT NEMA17 200,0,0 1 0
+INSERT NEMA17 100,0,0 1 "" 0
+INSERT NEMA17 200,0,0 1 "" 0
 ```
 
 **Notes**

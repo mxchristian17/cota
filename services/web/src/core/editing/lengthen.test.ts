@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import type { Vec3 } from '../math'
-import type { ArcProps, Entity, LineProps, PolylineProps } from '../document/types'
+import type { ArcProps, Entity, LineProps, PolylineProps, SolidProps } from '../document/types'
+import { solidMesh } from '../../render/csg'
 import { Curve, curveOf } from '../geom/curve'
 import { lengthenTo, targetLength } from './lengthen'
 import { alignPlan, alignPoint } from './align'
@@ -97,5 +98,31 @@ describe('comandos LENGTHEN y ALIGN', () => {
     expect(p.start[0]).toBeCloseTo(5)
     expect(p.end[0]).toBeCloseTo(5)
     expect(p.end[1]).toBeCloseTo(9)
+  })
+})
+
+describe('ALIGN en 3D (B10)', () => {
+  const corners = (h: ReturnType<typeof makeEngine>) => {
+    const m = solidMesh(h.ofType('SOLID3D')[0].props as SolidProps)
+    return [0, 1, 2].map((k) => [Math.min(...m.vertices.map((v) => v[k])), Math.max(...m.vertices.map((v) => v[k]))].map((x) => Math.round(x * 1e6) / 1e6))
+  }
+  it('pares con dirección vertical: traslación pura (antes «Alignment points coincide»)', async () => {
+    const h = makeEngine()
+    await h.run('BOX', '#0,0,0', '#10,10,0', '40')
+    await h.run('ALIGN', 'L', '', '0,0,0', '100,0,0', '0,0,40', '100,0,40', '21,0,0', '121,0,0')
+    expect(h.prints).not.toContain('Alignment points coincide.')
+    expect(h.prints.at(-1)).toBe('1 object(s) aligned.')
+    expect(corners(h)).toEqual([[100, 110], [0, 10], [0, 40]])
+    await h.run('ALIGN', 'L', '', '100,0,0', '0,0,0', '100,0,40', '0,0,40', '', '')
+    expect(corners(h)).toEqual([[0, 10], [0, 10], [0, 40]])
+  })
+
+  it('2 pares que giran en 3D: la arista vertical queda acostada sobre X', async () => {
+    const h = makeEngine()
+    await h.run('BOX', '#0,0,0', '#10,10,0', '40')
+    await h.run('ALIGN', 'L', '', '0,0,0', '0,0,0', '0,0,40', '40,0,0', '', 'No')
+    const [x, , z] = corners(h)
+    expect(x).toEqual([0, 40])
+    expect(z[1] - z[0]).toBeCloseTo(10, 6)
   })
 })

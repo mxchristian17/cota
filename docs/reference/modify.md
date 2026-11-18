@@ -509,6 +509,14 @@ LINE 0,0 30,0 ""
 ALIGN L "" 0,0 0,0 30,0 30,40 "" Y
 ```
 
+**Notes**
+
+- Cota prints `n object(s) aligned.`
+- When the points lie in planes parallel to XY, ALIGN works in that plane (three pairs can mirror a 2D detail). Any
+  other points align in 3D: pairs with the same offset only move the objects, two pairs turn the source direction
+  onto the destination direction, and a third pair turns the objects about it until the third point lands on the
+  side of the third destination.
+
 ## UNION
 
 Combines two or more solids into one, or two or more coplanar regions into one region.

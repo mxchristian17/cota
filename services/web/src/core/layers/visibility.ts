@@ -22,3 +22,10 @@ export const frozenLayerIds = (layers: Layer[]): Set<string> => new Set(layers.f
 
 /** Ids de las capas apagadas o congeladas: sus objetos no se ven ni dan snaps. */
 export const hiddenLayerIds = (layers: Layer[]): Set<string> => new Set(layers.filter((l) => !layerVisible(l)).map((l) => l.id))
+
+/**
+ * Capas internas de las vistas de dibujo (`MD_Visible`, `MD_Hidden`): VIEWBASE las crea para las líneas visibles y
+ * ocultas de sus bloques. No son capas de trabajo: las listas de capas no las muestran (salvo que sea la actual o se
+ * las busque por nombre en el administrador), aunque siguen en el dibujo y en lo exportado (R32).
+ */
+export const isViewLayerName = (name: string): boolean => /^MD_(Visible|Hidden)$/i.test(name)

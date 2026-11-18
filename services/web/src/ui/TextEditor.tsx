@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useStore } from '../store/store'
 import type { TextRun } from '../core/document/types'
 import { mergeRuns, type TextEditState } from '../core/text/inplace'
+import { fitInView } from './fitInView'
 
 const SYMBOLS = ['Ø', '°', '±']
 const FONTS = ['Arial', 'Times New Roman', 'Courier New', 'Verdana']
@@ -96,6 +97,14 @@ export function TextEditor() {
   const ed = useRef<HTMLDivElement>(null)
   const range = useRef<Range | null>(null)
   const accept = useRef<() => void>(() => undefined)
+  // Corrimiento para que el editor no quede fuera de la ventana (el punto del texto puede estar fuera de la vista).
+  const [shift, setShift] = useState<[number, number]>([0, 0])
+  // Un editor nuevo arranca en su lugar (sin el corrimiento del anterior).
+  const [shiftFor, setShiftFor] = useState(edit)
+  if (shiftFor !== edit) {
+    setShiftFor(edit)
+    setShift([0, 0])
+  }
 
   const save = (): void => {
     const s = window.getSelection()
@@ -156,6 +165,25 @@ export function TextEditor() {
     return () => document.removeEventListener('mousedown', onDown, true)
   }, [edit])
 
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!edit || !el) return
+    // Se reacomoda al abrir y cada vez que cambia de tamaño (el contenido llega después; cada renglón nuevo lo agranda).
+    const fit = () => {
+      const rects = [el, ...Array.from(el.children)].map((c) => c.getBoundingClientRect())
+      const u = rects.reduce((a, r) => ({ left: Math.min(a.left, r.left), top: Math.min(a.top, r.top), right: Math.max(a.right, r.right), bottom: Math.max(a.bottom, r.bottom) }), { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity })
+      // Dentro de la zona del dibujo (sin tapar la línea de comandos); sin ella, dentro de la ventana.
+      const area = document.querySelector('.app .center')?.getBoundingClientRect() ?? { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }
+      const [dx, dy] = fitInView(u, area)
+      if (dx || dy) setShift(([x, y]) => [x + dx, y + dy])
+    }
+    fit()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(fit)
+    for (const c of [el, ...Array.from(el.children)]) ro.observe(c)
+    return () => ro.disconnect()
+  }, [edit])
+
   if (!edit) return null
   const font = edit.state.font
   accept.current = () => {
@@ -172,7 +200,7 @@ export function TextEditor() {
   const keep = (e: React.MouseEvent) => e.preventDefault() // la barra no le saca la selección al texto
   const btn = (on = false): React.CSSProperties => ({ minWidth: 24, padding: '2px 6px', border: '1px solid var(--border)', borderRadius: 3, background: on ? 'var(--accent)' : 'var(--panel-2)', color: on ? '#fff' : 'var(--text)', cursor: 'pointer', font: '12px sans-serif' })
   return (
-    <div ref={box} data-testid="text-editor" style={{ position: 'fixed', left: edit.left, top: edit.top, zIndex: 60, transform: `rotate(${edit.angle}deg)`, transformOrigin: '0 0' }}>
+    <div ref={box} data-testid="text-editor" style={{ position: 'fixed', left: edit.left + shift[0], top: edit.top + shift[1], zIndex: 60, transform: `rotate(${edit.angle}deg)`, transformOrigin: '0 0' }}>
       <div onMouseDown={keep} style={{ position: 'absolute', bottom: '100%', left: 0, marginBottom: 4, display: 'flex', gap: 3, alignItems: 'center', padding: 4, background: 'var(--panel)', border: '1px solid var(--accent)', borderRadius: 4, whiteSpace: 'nowrap', transform: `rotate(${-edit.angle}deg)`, transformOrigin: '0 100%' }}>
         <button title="Bold (selection)" style={{ ...btn(), fontWeight: 700 }} onClick={() => exec('bold')}>B</button>
         <button title="Italic (selection)" style={{ ...btn(), fontStyle: 'italic' }} onClick={() => exec('italic')}>I</button>
@@ -200,8 +228,8 @@ export function TextEditor() {
         {SYMBOLS.map((s) => (
           <button key={s} title={`Insert ${s}`} style={btn()} onClick={() => exec('insertText', s)}>{s}</button>
         ))}
-        <button data-testid="text-editor-ok" style={btn(true)} onClick={() => accept.current()}>OK</button>
-        <button style={btn()} onClick={() => close(null)}>Cancel</button>
+        <button data-testid="text-editor-ok" title="Accept (Ctrl+Enter)" style={btn(true)} onClick={() => accept.current()}>OK</button>
+        <button title="Cancel (Esc)" style={btn()} onClick={() => close(null)}>Cancel</button>
       </div>
       <div
         ref={ed}

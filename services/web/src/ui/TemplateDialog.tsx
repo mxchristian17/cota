@@ -53,9 +53,9 @@ function TemplateDialogBody({ dialog }: { dialog: Dialog }) {
 
   return (
     <div className="modal-backdrop" onClick={close} data-testid="template-dialog">
-      <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="template-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>{dialog.mode === 'save' ? 'Save Layout as Template' : 'New Layout from Template'}</h2>
+          <h2 id="template-title">{dialog.mode === 'save' ? 'Save Layout as Template' : 'New Layout from Template'}</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
             <UiIcon name="close" />
           </button>

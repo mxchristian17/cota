@@ -55,9 +55,9 @@ export function ViewGenDialog() {
   const toggle = (v: GenView) => v !== 'FRONT' && setC({ ...c, views: c.views.includes(v) ? c.views.filter((x) => x !== v) : [...c.views, v] })
   return (
     <div className="modal-backdrop" onClick={() => done(null)} data-testid="viewgen-dialog" translate="no">
-      <div className="modal modal-sm" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.key === 'Escape' && done(null)}>
+      <div className="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="view-gen-title" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.key === 'Escape' && done(null)}>
         <div className="modal-header">
-          <h2>Generate views</h2>
+          <h2 id="view-gen-title">Generate views</h2>
           <button className="icon-btn" onClick={() => done(null)} aria-label="Close">
             <UiIcon name="close" />
           </button>

@@ -28,9 +28,9 @@ export function PageSetupDialog() {
 
   return (
     <div className="modal-backdrop" onClick={close} data-testid="pagesetup-dialog">
-      <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="page-setup-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Page Setup — {layout.name}</h2>
+          <h2 id="page-setup-title">Page Setup — {layout.name}</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
             <UiIcon name="close" />
           </button>
@@ -48,23 +48,27 @@ export function PageSetupDialog() {
             </select>
           </label>
           {ps.paper === 'CUSTOM' && (
-            <div className="custom-prop-row">
-              {(['Width', 'Height'] as const).map((label, i) => (
-                <input
-                  key={label}
-                  className="field"
-                  type="number"
-                  min={10}
-                  title={`${label} (mm)`}
-                  value={custom[i]}
-                  onChange={(e) => {
-                    const next: [number, number] = [...custom]
-                    next[i] = Math.max(10, Number(e.target.value) || 10)
-                    patch({ customSize: next })
-                  }}
-                  data-testid={`pagesetup-custom-${label.toLowerCase()}`}
-                />
-              ))}
+            <div className="field-group" role="group" aria-labelledby="page-setup-custom">
+              <span id="page-setup-custom">Custom size (mm)</span>
+              <div className="custom-prop-row">
+                {(['Width', 'Height'] as const).map((label, i) => (
+                  <label key={label}>
+                    <span>{label}</span>
+                    <input
+                      className="field"
+                      type="number"
+                      min={10}
+                      value={custom[i]}
+                      onChange={(e) => {
+                        const next: [number, number] = [...custom]
+                        next[i] = Math.max(10, Number(e.target.value) || 10)
+                        patch({ customSize: next })
+                      }}
+                      data-testid={`pagesetup-custom-${label.toLowerCase()}`}
+                    />
+                  </label>
+                ))}
+              </div>
             </div>
           )}
           <label>
@@ -82,23 +86,28 @@ export function PageSetupDialog() {
           <span className="muted">
             Sheet: {size.width} × {size.height} mm (changing the paper does not move objects)
           </span>
-          <div className="custom-prop-row">
-            {MARGINS.map((m, i) => (
-              <input
-                key={m}
-                className="field"
-                type="number"
-                min={0}
-                title={`${m} margin (mm)`}
-                value={ps.marginsMm[i]}
-                onChange={(e) => {
-                  const next = [...ps.marginsMm] as PageSetup['marginsMm']
-                  next[i] = Math.max(0, Number(e.target.value) || 0)
-                  patch({ marginsMm: next })
-                }}
-                data-testid={`pagesetup-margin-${m.toLowerCase()}`}
-              />
-            ))}
+          {/* Cada margen con su nombre a la vista (antes cuatro casillas sin etiqueta: no se sabía cuál era cuál). */}
+          <div className="field-group" role="group" aria-labelledby="page-setup-margins">
+            <span id="page-setup-margins">Margins (mm)</span>
+            <div className="custom-prop-row">
+              {MARGINS.map((m, i) => (
+                <label key={m}>
+                  <span>{m}</span>
+                  <input
+                    className="field"
+                    type="number"
+                    min={0}
+                    value={ps.marginsMm[i]}
+                    onChange={(e) => {
+                      const next = [...ps.marginsMm] as PageSetup['marginsMm']
+                      next[i] = Math.max(0, Number(e.target.value) || 0)
+                      patch({ marginsMm: next })
+                    }}
+                    data-testid={`pagesetup-margin-${m.toLowerCase()}`}
+                  />
+                </label>
+              ))}
+            </div>
           </div>
           <label>
             <span>Plot style</span>

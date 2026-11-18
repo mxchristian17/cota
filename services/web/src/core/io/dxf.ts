@@ -2,7 +2,8 @@ import { BASELINE_DROP, attdefText, lineSpacingOf, textAxes, textSize } from '..
 import { loopPolyline } from '../region/region'
 import { decodeTextCodes, encodeTextCodes } from '../text/codes'
 import type { Vec3 } from '../math'
-import type { AttdefProps, AttributeValue, DimensionProps, DrawingVars, Entity, EntityProps, EntityType, ImageProps, InsertProps, Layer, TextRun, LineType, LinetypeDefData, RectangleProps, TextProps } from '../document/types'
+import { shadeRegions } from '../projection/shade'
+import type { AttdefProps, AttributeValue, DimensionProps, DrawingVars, Entity, EntityProps, EntityType, ImageProps, InsertProps, Layer, TextRun, LineType, LinetypeDefData, RectangleProps, ShadeProps, TextProps } from '../document/types'
 import { pointMap, transformEntity as transformInsertEntity } from '../editing/block'
 import { BYBLOCK, BYLAYER, CONTINUOUS, linetypeLabel, patternLength } from '../linetype/linetypes'
 import { hatchDxf, parseHatch } from './dxfHatch'
@@ -228,18 +229,59 @@ function entityDxf(e: Entity, layerName: string): string | null {
       return null
     case 'NOTE': // las notas rápidas son sólo de Cota: no van al DXF/DWG
       return null
-    case 'SHADE': {
-      // Sombreado de una vista: un SOLID 2D por triángulo, con su color verdadero (420).
-      const t = e.props.tris
-      let out = ''
-      for (let i = 0, k = 0; i + 8 < t.length; i += 9, k += 3) {
-        const [r, g, b] = [0, 1, 2].map((j) => Math.round(Math.max(0, Math.min(1, e.props.colors[k + j] ?? 0.7)) * 255))
-        const corner = (c: number, o: number) => p(10 + c, t[i + o]) + p(20 + c, t[i + o + 1]) + p(30 + c, t[i + o + 2])
-        out += p(0, 'SOLID') + h + p(420, r * 65536 + g * 256 + b) + corner(0, 0) + corner(1, 3) + corner(2, 6) + corner(3, 6)
-      }
-      return out || null
+    case 'SHADE':
+      return shadeDxf(e.props, h)
+  }
+}
+
+/**
+ * Sombreado de una vista: cada zona de un color (una cara con todos sus triángulos, `shadeRegions`) sale como un solo
+ * relleno con su color verdadero (420), en el orden de pintado: un SOLID si es un triángulo o un cuadrilátero convexo,
+ * si no un HATCH sólido con su contorno y sus agujeros. Antes era un SOLID por triángulo con la profundidad de pantalla
+ * en z y números de 17 cifras: la isométrica de un ensamble daba 22 500 SOLID (6,8 MB). En el plano de la vista
+ * (sin la profundidad, que sólo ordena el dibujo en pantalla) y con 7 cifras significativas.
+ */
+function shadeDxf(props: ShadeProps, h: string): string | null {
+  const regions = shadeRegions(props)
+  if (!regions.length) return null
+  let ext = 0
+  let z = -Infinity
+  for (const r of regions) for (const l of r.loops) for (const v of l) {
+    ext = Math.max(ext, Math.abs(v[0]), Math.abs(v[1]))
+    z = Math.max(z, v[2])
+  }
+  const dec = Math.max(0, Math.min(12, 7 - Math.ceil(Math.log10(Math.max(ext, 1e-9)))))
+  const n = (x: number): number => Number(x.toFixed(dec))
+  // El de adelante queda apenas debajo del papel (`shadeViewTriangles`): ese es el plano de la vista.
+  const plane = Math.abs(z) < 0.1 ? 0 : n(z)
+  const flat = (v: Vec3): Vec3 => [n(v[0]), n(v[1]), plane]
+  let out = ''
+  for (const r of regions) {
+    const [cr, cg, cb] = r.rgb.map((c) => Math.round(Math.max(0, Math.min(1, c)) * 255))
+    const head = h + p(420, cr * 65536 + cg * 256 + cb)
+    const loop = r.loops.length === 1 ? r.loops[0].map(flat) : null
+    if (loop && (loop.length === 3 || (loop.length === 4 && convexQuad(loop)))) {
+      // SOLID: el cuarto vértice va en el lugar del tercero (el CAD clásico los recorre 1-2-4-3).
+      const c = loop.length === 3 ? [loop[0], loop[1], loop[2], loop[2]] : [loop[0], loop[1], loop[3], loop[2]]
+      out += p(0, 'SOLID') + head + c.map((q, i) => p(10 + i, q[0]) + p(20 + i, q[1]) + p(30 + i, q[2])).join('')
+    } else {
+      out += hatchDxf({ loops: r.loops.map((l) => ({ vertices: l.map(flat) })), pattern: 'SOLID', scale: 1, angle: 0, origin: [0, 0, plane], island: 'normal' }, head)
     }
   }
+  return out
+}
+
+/** ¿El cuadrilátero (en orden) es convexo? Un SOLID sólo rellena bien uno convexo. */
+function convexQuad(q: Vec3[]): boolean {
+  let sign = 0
+  for (let i = 0; i < 4; i++) {
+    const [a, b, c] = [q[i], q[(i + 1) % 4], q[(i + 2) % 4]]
+    const cr = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+    if (Math.abs(cr) < 1e-12) continue
+    if (sign && Math.sign(cr) !== sign) return false
+    sign = Math.sign(cr)
+  }
+  return sign !== 0
 }
 
 /** Grupos 210/220/230 de la extrusión, sólo si no es la del mundo (+Z). */

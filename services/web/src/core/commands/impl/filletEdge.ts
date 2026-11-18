@@ -220,7 +220,11 @@ export async function runEdgeBlend(ctx: CommandContext, tool: EdgeTool, first?: 
       keywords: [tool.setting],
       enterKeyword: 'Accept',
     })
-    if (r.kind === 'keyword' && r.keyword === 'Accept') return
+    if (r.kind === 'keyword' && r.keyword === 'Accept') {
+      // Confirmación en la línea de comandos, como BOX o UNION (R04).
+      ctx.print(`${picked.size} edge(s) ${tool.noun === 'fillet' ? 'filleted' : 'chamfered'} (${tool.status()}).`)
+      return
+    }
     if (r.kind === 'cancel' || (r.kind === 'keyword' && !(await tool.ask(ctx)))) {
       apply(original)
       return

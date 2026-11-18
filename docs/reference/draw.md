@@ -492,7 +492,9 @@ number or a drawing title. Include the attribute in the selection when you creat
 3. `Enter attribute prompt <TAG>:` the question asked on insert.
 4. `Enter default attribute value:` the value offered by default.
 5. `Specify start point of text or [Justify]:`, `Specify text height` and `Specify rotation angle of text`, as in
-   TEXT.
+   TEXT: the point is on the baseline. `Justify` offers `Left/Center/Right/Middle/TL/TC/TR/ML/MC/MR/BL/BC/BR`:
+   `Middle` (or `MC`) centers the text on the point, handy for the number inside a balloon; the `T…` options hang
+   the text from the point and the `M…` ones center it vertically.
 
 **Modes**
 
@@ -506,7 +508,10 @@ number or a drawing title. Include the attribute in the selection when you creat
 
 ```text
 ATTDEF "" PARTNO "Part number" "P-000" 0,-5 2.5 0
+ATTDEF "" NUM "Item number" 1 J MC 0,0 3 0
 ```
+
+The second line defines the number of a balloon, centered on the circle's center `0,0`.
 
 **Notes**
 
@@ -550,6 +555,8 @@ The hatch fills the rectangle and leaves the circle empty (island detection).
 - Island detection (`HPISLANDDETECTION`): Normal alternates filled and empty areas inside each other, Outer fills
   only the outermost area, Ignore fills everything inside the outer boundary.
 - Small gaps in the boundary are closed up to `HPGAPTOL`.
+- On a drawing view, the hidden lines (`MD_Hidden`) are not boundaries: a point inside a cut face fills the whole
+  section, with its holes as islands.
 - Associative hatches (`HPASSOC`) follow their boundary when it is moved or stretched.
 - Edit a hatch with a double click or `HATCHEDIT`. `-HATCH` does the same from the command line (Properties,
   Select objects, Advanced, Origin).

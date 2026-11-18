@@ -281,7 +281,14 @@ test.describe('Mobile view for the job site', () => {
       expect(await fc.element().evaluate((e) => e.isConnected)).toBe(true)
       await fc.setFiles({ name, mimeType, buffer })
     }
+    // El dibujo quedó modificado: sin línea de comandos, el navegador pregunta si descartarlo (R28).
+    let asked = ''
+    page.once('dialog', (d) => {
+      asked = d.message()
+      void d.accept()
+    })
     await pick('obra.cota', 'application/octet-stream', Buffer.from(data))
+    await expect.poll(() => asked).toBe('"drawing1" has unsaved changes. Discard them and open the other drawing?')
     await expect(page.getByTestId('m-name')).toHaveText('obra')
     await expect(page.getByTestId('m-toast')).toContainText('Opened "obra.cota" from the device.')
     expect(await st<string[]>(page, 'return s.doc.entities.map((e) => e.type)')).toEqual(['CIRCLE', 'LINE'])

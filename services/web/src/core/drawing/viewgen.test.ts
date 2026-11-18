@@ -21,3 +21,24 @@ describe('mongeLayout', () => {
     expect(at('ISO').x).toBe(at('RIGHT').x)
   })
 })
+
+describe('silueta exacta de cilindros vistos de costado (R19)', () => {
+  it('las líneas de contorno del teselado (a r·cos δ del eje) se corren al radio; las demás no se tocan', async () => {
+    const { snapSilhouettes } = await import('../projection/orthographic')
+    const { viewBasis } = await import('./views')
+    const r = 21
+    const k = r * Math.cos(Math.PI / 64) // vértice a medio lado de un 32-ágono: 41,99 de diámetro
+    const items = [
+      { kind: 'line' as const, a: [-k, 0] as [number, number], b: [-k, 50] as [number, number], hidden: false },
+      { kind: 'line' as const, a: [k, 0] as [number, number], b: [k, 50] as [number, number], hidden: false },
+      { kind: 'line' as const, a: [-15, 0] as [number, number], b: [-15, 50] as [number, number], hidden: false }, // otra arista
+      { kind: 'line' as const, a: [-k, 0] as [number, number], b: [k, 0] as [number, number], hidden: false }, // base
+    ]
+    // Cilindro de eje Z visto de frente: la vista frontal mira por −Y (derecha = X, arriba = Z).
+    const out = snapSilhouettes(items, [{ c: [0, 0, 0], n: [0, 0, 1], r }], viewBasis('FRONT'))
+    const xs = out.map((it) => (it.kind === 'line' ? it.a[0] : NaN))
+    expect(xs[1] - xs[0]).toBeCloseTo(42, 12)
+    expect(xs[2]).toBe(-15)
+    expect(out[3]).toEqual(items[3])
+  })
+})

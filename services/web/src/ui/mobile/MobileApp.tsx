@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../../store/store'
+import { isViewLayerName } from '../../core/layers/visibility'
 import { ViewportView } from '../ViewportView'
 import { OpenDialog } from '../OpenDialog'
 import { LoginDialog } from '../LoginDialog'
@@ -344,7 +345,8 @@ export function MobileApp() {
               <>
                 <h3>Layers (only on this screen)</h3>
                 <div className="m-list">
-                  {[...doc.layers]
+                  {doc.layers
+                    .filter((l) => !isViewLayerName(l.name))
                     .sort((a, b) => a.name.localeCompare(b.name))
                     .map((l) => {
                       const offInDrawing = !l.visible || !!l.frozen

@@ -202,6 +202,11 @@ export interface TextProps {
   /** Interlineado en altos de texto; ausente = el de Cota (1.35). Un MTEXT importado trae el del CAD clásico (5/3). */
   lineSpacing?: number
   /**
+   * Ancho de su celda (rótulos): si el texto ya evaluado (campos incluidos) es más ancho, se comprime su ancho de
+   * letra (y, muy largo, también el alto) para no pisar la celda vecina. Ausente = sin límite.
+   */
+  fitWidth?: number
+  /**
    * Tramos con formato propio de un MTEXT importado (negrita, itálica, subrayado, fuente, alto relativo `h`, color):
    * su texto unido es `text`. Si el texto se edita y deja de coincidir, se ignoran.
    */
@@ -767,8 +772,13 @@ export interface HatchEntity extends EntityCommon {
  * adelante) y debajo de las líneas. Entidad interna de los bloques de las vistas sombreadas.
  */
 export interface ShadeProps {
-  /** Vértices: x, y, z de cada vértice, 9 números por triángulo. */
+  /**
+   * Vértices: x, y, z de cada uno. Sin `index`, tres seguidos por triángulo (9 números por triángulo, los dibujos de
+   * 2.48 y anteriores); con `index`, cada vértice una sola vez.
+   */
   tris: number[]
+  /** Triángulos como índices a los vértices de `tris` (3 por triángulo): los vértices compartidos no se repiten. */
+  index?: number[]
   /** Color de cada triángulo: r, g, b en 0..1 (3 números por triángulo). */
   colors: number[]
 }

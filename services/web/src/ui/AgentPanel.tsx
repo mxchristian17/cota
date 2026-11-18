@@ -31,6 +31,8 @@ export function AgentPanel() {
 function AgentBody() {
   const s = useAgentStore()
   const [showSettings, setShowSettings] = useState(!s.hasKey && !s.external.on)
+  /** Cada vez que falta la clave al mandar: los ajustes llevan el foco a su campo. */
+  const [focusKey, setFocusKey] = useState(0)
   const [text, setText] = useState('')
   const feedEnd = useRef<HTMLDivElement>(null)
   const conv = s.conversations.find((c) => c.id === s.currentId)
@@ -57,10 +59,14 @@ function AgentBody() {
     if (s.external.status === 'connected') setShowSettings(false)
   }, [s.external.status])
 
+  // El mensaje se borra sólo si se mandó: sin clave queda escrito y se muestran los ajustes con el foco en la clave.
   const send = () => {
     const t = text
-    setText('')
-    void s.send(t)
+    void s.send(t, () => setText((cur) => (cur === t ? '' : cur))).then((r) => {
+      if (r !== 'no-key') return
+      setShowSettings(true)
+      setFocusKey((n) => n + 1)
+    })
   }
 
   return (
@@ -91,7 +97,7 @@ function AgentBody() {
           <UiIcon name="close" />
         </button>
       </div>
-      {showSettings && <Settings onDone={() => setShowSettings(false)} />}
+      {showSettings && <Settings onDone={() => setShowSettings(false)} focusKey={focusKey} />}
       {s.external.on && (
         <div className={`agent-ext-bar agent-ext-${s.external.status}`} data-testid="agent-external-bar">
           <span>
@@ -225,7 +231,11 @@ function ExternalAgent() {
 }
 
 /** Proveedor, modelo y key. La primera key pregunta si se guarda en el navegador (una sola vez). */
-function Settings({ onDone }: { onDone: () => void }) {
+function Settings({ onDone, focusKey = 0 }: { onDone: () => void; focusKey?: number }) {
+  const keyInput = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (focusKey) keyInput.current?.focus()
+  }, [focusKey])
   const s = useAgentStore()
   const [key, setKey] = useState('')
   const p = PROVIDERS[s.settings.provider]
@@ -254,7 +264,7 @@ function Settings({ onDone }: { onDone: () => void }) {
       )}
       <label>
         API key {s.hasKey && <span className="muted">(set)</span>}
-        <input className="field" type="password" autoComplete="off" value={key} placeholder={s.hasKey ? '••••••••' : 'Paste your key'} onChange={(e) => setKey(e.target.value)} data-testid="agent-key" />
+        <input ref={keyInput} className="field" type="password" autoComplete="off" value={key} placeholder={s.hasKey ? '••••••••' : 'Paste your key'} onChange={(e) => setKey(e.target.value)} data-testid="agent-key" />
       </label>
       <p className="muted agent-small" data-testid="agent-key-note">
         {server

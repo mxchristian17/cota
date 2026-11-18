@@ -42,3 +42,16 @@ describe('Multicomandos', () => {
     expect(h.engine.isBusy()).toBe(false)
   })
 })
+
+describe('comillas dentro de un texto (R12)', () => {
+  it('`1/2"` al final de un texto entre comillas no corta el lote ni fusiona las entradas siguientes', () => {
+    const lote = 'TEXT 300,97.9 2.2 0 "Válvula G 1/2""\nTEXT 334,97.9 2.2 0 "Tapón"\nTEXT 0,0 2 0 1/2"\nTEXT 0,5 2 0 "dice \\"hola\\" y sigue"\n"" ""'
+    expect(parseScript(lote)).toEqual([
+      'TEXT', '300,97.9', '2.2', '0', 'Válvula G 1/2"',
+      'TEXT', '334,97.9', '2.2', '0', 'Tapón',
+      'TEXT', '0,0', '2', '0', '1/2"',
+      'TEXT', '0,5', '2', '0', 'dice "hola" y sigue',
+      '', '',
+    ])
+  })
+})

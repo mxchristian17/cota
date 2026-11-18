@@ -5,6 +5,9 @@ import type { PreviewShape } from '../../preview'
 import { askKeyword } from '../ask'
 import type { Command, CommandContext } from '../types'
 import { dimNormal } from './dim'
+import { askAttributeValues } from './attribs'
+import { expandEntities } from '../../editing/block'
+import { entityBounds } from '../../editing/bounds'
 
 /**
  * Multileaders: `MLEADER` (flecha o apoyo primero, contenido texto —con campos—, bloque o
@@ -117,16 +120,39 @@ export const mleaderCommand: Command = {
       if (t === null) return
       text = t
     }
+    // Contenido de bloque: los atributos variables se piden como en INSERT (antes el globo quedaba vacío, R07).
+    const attributes = opts.content === 'Block' && opts.block ? await askAttributeValues(ctx, opts.block) : []
+    if (attributes === null) return
     const props: DimensionProps = { ...base, points: leader, leaderSizes: [leader.length], textPos: landing, textOverride: text || null }
     if (opts.content === 'Block' && opts.block) props.blockName = opts.block
     ctx.doc.addEntity({ type: 'DIMENSION', layer: ctx.currentLayerId(), props })
     if (opts.content === 'Block' && opts.block) {
-      // Contenido de bloque: una inserción junto al apoyo (lado del texto).
       const side = landing[0] >= leader[leader.length - 1][0] ? 1 : -1
-      const asz = base.style.DIMASZ
-      ctx.doc.addEntity({ type: 'INSERT', layer: ctx.currentLayerId(), props: { name: opts.block, position: [landing[0] + side * asz * 2, landing[1], landing[2]], scale: [1, 1, 1], rotation: 0 } })
+      ctx.doc.addEntity({
+        type: 'INSERT',
+        layer: ctx.currentLayerId(),
+        props: { name: opts.block, position: blockContentPosition(ctx, opts.block, landing, side, base.style.DIMASZ), scale: [1, 1, 1], rotation: 0, ...(attributes.length ? { attributes } : {}) },
+      })
     }
   },
+}
+
+/**
+ * Punto de inserción del bloque de un multileader: el bloque se apoya en el extremo del aterrizaje por el borde de
+ * su extensión y queda centrado en altura (la conexión «centro de la extensión» del CAD clásico): el líder toca el
+ * globo en vez de entrar en él. Sin geometría medible, al costado del apoyo como antes.
+ */
+export function blockContentPosition(ctx: CommandContext, name: string, landing: Vec3, side: 1 | -1, asz: number): Vec3 {
+  const probe: Entity = { id: '__mleader_block', type: 'INSERT', layer: '0', props: { name, position: [0, 0, 0], scale: [1, 1, 1], rotation: 0 } }
+  let box: { minX: number; minY: number; maxX: number; maxY: number } | null = null
+  for (const e of expandEntities([probe], ctx.doc.blocks, { attdisp: 'off' })) {
+    const b = entityBounds(e)
+    if (![b.minX, b.minY, b.maxX, b.maxY].every(Number.isFinite)) continue
+    box = box ? { minX: Math.min(box.minX, b.minX), minY: Math.min(box.minY, b.minY), maxX: Math.max(box.maxX, b.maxX), maxY: Math.max(box.maxY, b.maxY) } : b
+  }
+  if (!box) return [landing[0] + side * asz * 2, landing[1], landing[2]]
+  const x = side > 0 ? landing[0] - box.minX : landing[0] - box.maxX
+  return [x, landing[1] - (box.minY + box.maxY) / 2, landing[2]]
 }
 
 /** Elige un multileader (o líder) con un clic. */

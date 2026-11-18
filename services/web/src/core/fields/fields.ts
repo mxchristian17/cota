@@ -75,7 +75,12 @@ const orNone = (v: string | undefined): string => (v && v.trim() ? v : NONE)
 /** Valor de un campo. `format` sólo aplica a fechas y a `Filename` (`noext` = sin extensión). */
 export function fieldValue(name: string, format: string | undefined, ctx: FieldContext): string {
   const n = name.toLowerCase()
-  if (n.startsWith('customdp.')) return orNone(ctx.meta.custom?.[name.slice(9)])
+  if (n.startsWith('customdp.')) {
+    // La propiedad personalizada por su nombre, sin distinguir mayúsculas (Company = COMPANY = company).
+    const key = name.slice(9).toLowerCase()
+    const custom = ctx.meta.custom ?? {}
+    return orNone(custom[name.slice(9)] ?? Object.entries(custom).find(([k]) => k.toLowerCase() === key)?.[1])
+  }
   switch (n) {
     case 'filename': {
       if (!ctx.fileName) return NONE

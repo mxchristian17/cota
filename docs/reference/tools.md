@@ -73,14 +73,19 @@ AREA A O 0,30 "" S O 60,30 "" X
 
 ## LIST
 
-Lists the properties of the selected objects in the command line: type, layer, points, lengths, radii, areas and
-volumes.
+Lists the properties of the selected objects in the command line: type, layer, color, linetype, lineweight, points,
+lengths, radii, areas and volumes.
 
 **Aliases** `LI`, `LS` · **Menu** Tools › Inquiry
 
 **Steps**
 
 1. `Select objects:` and <kbd>Enter</kbd>.
+
+**Notes**
+
+- Color, linetype and lineweight show the object's own value, or `ByLayer` with the value it takes from its layer in
+  brackets: `Color: ByLayer (Red)  Linetype: ByLayer (CONTINUOUS)  Lineweight: ByLayer (Default)`.
 
 ## MASSPROP
 
@@ -113,6 +118,9 @@ Centroid:        X = 10.0000  Y = 15.0000  Z = 10.0000
 BOX 0,0,0 @20,30 20
 MASSPROP L ""
 ```
+
+The volume is exact for boxes, cylinders, cones, spheres and tori, and for solids the exact kernel has computed;
+otherwise (and for the surface area and centroid) it comes from the solid's mesh. `LIST` shows the same volume.
 
 For each region, in the current UCS (a 100 × 50 rectangle):
 
@@ -348,6 +356,8 @@ that shares the script.
 - The inputs answer the prompts in order, as if typed: separate them with spaces or new lines, write `""` for an
   empty <kbd>Enter</kbd> and put text with spaces in double quotes. When a command ends, the next input starts
   another one. Every example on these reference pages is a script.
+- A quote inside a quoted text is kept when it is not followed by a space: `"Plug G 1/2""` is `Plug G 1/2"`. Write
+  `\"` for a quote followed by a space: `"1/2\" pipe"`.
 - If an input is rejected, the script stops there and says which one. A shared link only shows the script; it
   runs when you press Run.
 - Pasting a script in the command line (<kbd>Ctrl</kbd>+<kbd>V</kbd> with nothing copied) runs it directly.

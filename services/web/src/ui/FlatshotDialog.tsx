@@ -47,9 +47,9 @@ export function FlatshotDialog() {
 
   return (
     <div className="modal-backdrop" onClick={() => done(null)} data-testid="flatshot-dialog">
-      <div className="modal modal-sm flatshot-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-sm flatshot-modal" role="dialog" aria-modal="true" aria-labelledby="flatshot-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Flatshot</h2>
+          <h2 id="flatshot-title">Flatshot</h2>
           <button className="icon-btn" onClick={() => done(null)} aria-label="Close">
             <UiIcon name="close" />
           </button>

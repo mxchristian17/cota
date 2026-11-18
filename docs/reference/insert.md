@@ -12,9 +12,11 @@ Places a reference to a block defined in the drawing.
 
 1. `Block name [BOLT, NUT…] <BOLT>:` the blocks of the drawing are listed.
 2. `Specify insertion point:`
-3. `X scale factor <1>:` the same factor applies to X, Y and Z.
-4. `Rotation angle <0>:`
-5. If the block has attributes, `Enter attribute values` and one prompt per attribute.
+3. `Enter X scale factor <1>:` (also used for Z).
+4. `Enter Y scale factor <use X scale factor>:` <kbd>Enter</kbd> keeps the X factor.
+5. `Specify rotation angle <0>:`
+6. If the block has attributes: with `ATTDIA` = 1 (the default) the command line says so and the **Edit
+   Attributes** dialog opens; with `ATTDIA` = 0, `Enter attribute values` and one prompt per attribute.
 
 Cota prints `Inserted "NAME".`
 
@@ -23,7 +25,7 @@ Cota prints `Inserted "NAME".`
 ```text
 RECTANGLE 0,0 @10,10
 BLOCK L "" SQUARE 0,0
-INSERT SQUARE 50,50 2 45
+INSERT SQUARE 50,50 2 "" 45
 ```
 
 **Notes**
@@ -34,7 +36,7 @@ INSERT SQUARE 50,50 2 45
 - Block names are not case-sensitive: `INSERT nema17` places `NEMA17`.
 - A name the drawing does not define prints `Block "NAME" not found.` and nothing is inserted (a reference without
   its definition would draw nothing). The name is asked even when the drawing has no blocks, so a script such as
-  `INSERT NEMA17 100,0 1 0` stops there instead of reading the point as a command.
+  `INSERT NEMA17 100,0 1 "" 0` stops there instead of reading the point as a command.
 - Opening a drawing whose references point to blocks it does not define prints a warning with their names.
 
 ## BEDIT
@@ -126,11 +128,17 @@ isometric). The views stay linked to the model: when the model changes, `VIEWUPD
 
 **Steps**
 
-1. `Select objects or [Entire model] <Entire model>:` the solids to document.
-2. From the model tab: `Enter new or existing layout name to make current` (where the views go).
+1. Only from the model tab: `Select objects or [Entire model] <Entire model>:` the solids to document;
+   <kbd>Enter</kbd> or `Entire` documents the whole model. A pick that finds nothing (`0 found`) does not fall back
+   to the whole model: Cota asks again. Run from a layout, VIEWBASE skips this step and always documents the entire
+   model; to document some objects, start it from the model tab.
+2. From the model tab: `Enter new or existing layout name to make current` (where the views go). If there is nothing
+   3D to document, Cota says `No 3D solids to document.` and stays in the model.
 3. `Specify location of base view or [Type/Orientation/Hidden lines/Scale] <Type>:` click on the sheet.
 4. With `Type` = Base and Projected, move the cursor around the base view and click to place each projected view;
-   <kbd>Enter</kbd> ends.
+   <kbd>Enter</kbd> ends. To the sides or above/below it is an orthographic view; on a diagonal, an isometric one.
+   A direction that already has a view is not repeated: a point off the axis on that side gives the isometric view
+   of that corner.
 
 **Options**
 
@@ -144,7 +152,12 @@ isometric). The views stay linked to the model: when the model changes, `VIEWUPD
 **Notes**
 
 - Projection is first-angle (ISO-E) or third-angle (ISO-A), as set with [VIEWSTD](#viewstd).
-- Dimension the views with [AUTODIM](dimension.md#autodim) or by hand; dimensions attach to the view geometry.
+- Dimension the views with [AUTODIM](dimension.md#autodim) or by hand; dimensions attach to the view geometry and
+  measure in model units, whatever the scale of the view.
+- VIEWBASE remembers the type, the hidden-line style and a typed scale for the next time in the session.
+- Cancelling VIEWBASE before placing the base view leaves the drawing as it was (nothing to undo).
+- When the model changes, each view keeps its place and scale on the sheet and only its content is updated: the
+  model point at the center of the view stays put, so balloons and dimensions keep pointing at the same features.
 
 ## VIEWPROJ
 
@@ -246,7 +259,10 @@ the layout name, the sheet number or the scale of a viewport. Title blocks use t
 
 **Notes**
 
-- Drawing properties (title, author…) are set in [DWGPROPS](file.md#dwgprops).
+- Drawing properties (title, author…) are set in [DWGPROPS](file.md#dwgprops). Custom property names are not
+  case-sensitive (`Company` = `company`).
+- `ViewportScale` is the scale of the first viewport of the layout; on a sheet made with VIEWBASE (no viewport) it is
+  the scale of its base drawing view.
 - Fields show `----` when they have no value yet and `####` when they cannot be evaluated.
 
 ## UPDATEFIELD
@@ -258,6 +274,11 @@ Updates the fields of the selected objects now.
 **Steps**
 
 1. `Select objects:` Cota prints how many fields it found and updated.
+
+**Notes**
+
+- An empty attribute whose default value is a field takes that field: this fills TITLE, DRAWN and COMPANY in title
+  blocks made with an earlier version of Cota.
 
 ## IMAGE
 

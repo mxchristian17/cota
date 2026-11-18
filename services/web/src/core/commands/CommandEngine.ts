@@ -1,6 +1,6 @@
 import { entityAtPoint, selectAtPoint } from '../editing/pointPick'
 import { byFence, inPolygon, rectPolygon, selectableEntities, type WindowPlane } from './selectionSets'
-import type { Entity } from '../document/types'
+import type { Entity, MeshProps } from '../document/types'
 import type { Deferred } from '../geom/tangency'
 import { angleDeg, type Pt } from '../math'
 import type { DocumentModel } from '../document/DocumentModel'
@@ -142,6 +142,8 @@ type Pending =
       remove?: boolean
       /** Pasos para `Undo` (lo agregado o quitado en cada uno). */
       steps: Array<{ ids: string[]; removed: boolean }>
+      /** Se intentó elegir algo (punto, ventana, opción), aunque no se haya encontrado nada. */
+      tried?: boolean
       /** Ventana, cruce, polígonos o borde en curso: sus puntos. */
       /** `clicked`: algún punto vino del mouse (la ventana se ve en pantalla); si no, va en el plano de la UCS. */
       sub?: { kind: SelArea; pts: Pt[]; clicked?: boolean }
@@ -149,6 +151,8 @@ type Pending =
   | {
       type: 'string'
       def: string | null
+      /** Una palabra (opción o número): el espacio confirma como Enter (ver `pendingKind`). */
+      word?: boolean
       resolve: (r: string | null) => void
     }
 
@@ -191,6 +195,8 @@ export class CommandEngine {
    */
   private runSteps: Step[] = []
   private backRun: { name: string; replay: Step[] } | null = null
+  /** El comando en curso pidió descartar lo que cambió (`ctx.discardChanges`). */
+  private discardRun = false
   /** Hubo Esc en el comando en curso: un prompt más lo termina (ver `CommandCancelled`). */
   private escaped = false
 
@@ -216,17 +222,21 @@ export class CommandEngine {
       getSelectionOrKeyword: (prompt, keywords) =>
         this.ask(() => new Promise((resolve) => {
           this.selectionUsed = true
-          this.pending = {
+          const sel: Extract<Pending, { type: 'selection' }> = {
             type: 'selection',
             ids: new Set(),
             prompt,
             steps: [],
             keywords,
-            resolve: (ids) => resolve(ids ? { kind: 'selection', ids } : null),
+            resolve: (ids) => resolve(ids ? { kind: 'selection', ids, tried: !!sel.tried } : null),
             onKeyword: (keyword) => resolve({ kind: 'keyword', keyword }),
           }
+          this.pending = sel
           this.setPrompt(prompt)
         })),
+      discardChanges: () => {
+        this.discardRun = true
+      },
       getString: (prompt, opts) => this.ask(() => this.requestString(prompt, opts)),
       print: (msg) => this.deps.onPrint(msg),
       openHelp: () => this.deps.onOpenHelp(),
@@ -542,6 +552,7 @@ export class CommandEngine {
         return this.addSelPoint(sel, world)
       }
       if (pickedId) this.applySel(sel, [pickedId], subtract || !!sel.remove, true, this.currentPrompt)
+      else sel.tried = true
       return
     }
     this.submitPoint(world, snapped, { id: pickedId, raw: raw ?? world, shift: subtract, ...(deferred ? { deferred } : {}) })
@@ -568,8 +579,9 @@ export class CommandEngine {
 
   /** Tipo del prompt pendiente (`null` si no hay ninguno). La UI lo usa, p. ej., para saber si el
    *  espacio confirma (como Enter) o es un carácter literal del texto que se está tecleando. */
-  pendingKind(): 'point' | 'distance' | 'angle' | 'selection' | 'string' | null {
-    return this.pending?.type ?? null
+  pendingKind(): 'point' | 'distance' | 'angle' | 'selection' | 'string' | 'word' | null {
+    // `word`: una opción o un número pedidos como texto (`-LAYER`, FILLET Radius…): el espacio confirma (B13).
+    return this.pending?.type === 'string' && this.pending.word ? 'word' : (this.pending?.type ?? null)
   }
 
   /** Cancelación (ESC); `quiet` = sin `*Cancel*` (el reinicio de la UCS dinámica). */
@@ -664,7 +676,8 @@ export class CommandEngine {
         this.deps.onPicked?.([])
       }
       // Ctrl+Z a mitad del comando: lo hecho se descarta (el comando se rehace hasta la etapa anterior).
-      this.deps.onAfterCommand(cmd.name, !!this.backRun)
+      this.deps.onAfterCommand(cmd.name, !!this.backRun || this.discardRun)
+      this.discardRun = false
       this.setPrompt('')
       this.deps.onChange()
     }
@@ -712,6 +725,16 @@ export class CommandEngine {
     const r = await this.requestPoint(prompt, { base, preview, ...opts })
     this.setPrompt('')
     return r
+  }
+
+  /**
+   * Pregunta una opción FUERA de un comando (guardar los cambios antes de abrir otro dibujo): sin punto base ni
+   * rubber-band; un clic o Esc la cancelan (null).
+   */
+  async requestKeyword(prompt: string, keywords: string[], enterKeyword: string): Promise<string | null> {
+    const r = await this.requestPoint(prompt, { base: null, keywords, enterKeyword, noSnap: true })
+    this.setPrompt('')
+    return r.kind === 'keyword' ? r.keyword : null
   }
 
   /** Como `requestGripPoint`, para un ángulo (ROTATE de los grips) o un factor/distancia (SCALE). */
@@ -867,6 +890,7 @@ export class CommandEngine {
 
   /** Agrega (o quita) ids a la selección en curso, como un paso deshacible; informa "N found". */
   private applySel(sel: Extract<Pending, { type: 'selection' }>, picked: string[], remove: boolean, report = true, prefix = ''): void {
+    sel.tried = true
     const ids = this.withGroups(picked)
     const changed = ids.filter((id) => (remove ? sel.ids.has(id) : !sel.ids.has(id)))
     for (const id of changed) {
@@ -879,12 +903,17 @@ export class CommandEngine {
   }
 
   /** Como el CAD clásico: cuántos de los que tomaría la ventana o el borde quedaron afuera por estar bloqueados. */
-  private reportLocked(pick: (ents: Entity[]) => string[]): void {
+  /** Objetos a la vista en capas bloqueadas (no se pueden elegir, pero se avisa que están). */
+  private lockedEntities(): Entity[] {
     const layers = new Map(this.deps.doc.layers.map((l) => [l.id, l]))
-    const locked = this.deps.doc.entities.filter((e) => {
+    return this.deps.doc.entities.filter((e) => {
       const l = layers.get(e.layer)
       return !!l && l.locked && l.visible && !l.frozen
     })
+  }
+
+  private reportLocked(pick: (ents: Entity[]) => string[]): void {
+    const locked = this.lockedEntities()
     const n = locked.length ? pick(locked).length : 0
     if (n) this.deps.onPrint(`${n} ${n === 1 ? 'was' : 'were'} on a locked layer.`)
   }
@@ -892,6 +921,12 @@ export class CommandEngine {
   private ucsPlane(): WindowPlane {
     const u = this.deps.currentUcs()
     return { u: u.x, v: u.y }
+  }
+
+  /** Malla evaluada de los sólidos (la da la app) para las ventanas, los cruces y los bordes. */
+  private solidMeshOf(): ((e: Entity) => MeshProps | null | undefined) | undefined {
+    const app = this.ctx.app
+    return app.solidMesh ? (e) => app.solidMesh?.(e) : undefined
   }
 
   /** Plano de una ventana o un borde: el de la pantalla si se marcó con el mouse; con coordenadas, el XY de la UCS. */
@@ -907,7 +942,7 @@ export class CommandEngine {
     if ((sub.kind === 'Window' || sub.kind === 'Crossing') && sub.pts.length === 2) {
       sel.sub = undefined
       const plane = this.selPlane(sub)
-      const pick = (list: Entity[]) => inPolygon(list, rectPolygon(sub.pts[0], sub.pts[1], plane), sub.kind === 'Crossing', plane)
+      const pick = (list: Entity[]) => inPolygon(list, rectPolygon(sub.pts[0], sub.pts[1], plane), sub.kind === 'Crossing', plane, this.deps.doc.blocks, this.solidMeshOf())
       this.applySel(sel, pick(ents), !!sel.remove)
       this.reportLocked(pick)
       this.setPrompt(sel.prompt)
@@ -927,9 +962,9 @@ export class CommandEngine {
         const plane = this.selPlane(sub)
         const pick =
           sub.kind === 'Fence' && sub.pts.length >= 2
-            ? (list: Entity[]) => byFence(list, sub.pts, plane)
+            ? (list: Entity[]) => byFence(list, sub.pts, plane, this.deps.doc.blocks, this.solidMeshOf())
             : (sub.kind === 'WPolygon' || sub.kind === 'CPolygon') && sub.pts.length >= 3
-              ? (list: Entity[]) => inPolygon(list, sub.pts, sub.kind === 'CPolygon', plane)
+              ? (list: Entity[]) => inPolygon(list, sub.pts, sub.kind === 'CPolygon', plane, this.deps.doc.blocks, this.solidMeshOf())
               : null
         if (pick) {
           this.applySel(sel, pick(ents), !!sel.remove)
@@ -966,8 +1001,16 @@ export class CommandEngine {
     const at = opt ? null : parseCoordinate(trimmed, this.lastPoint, this.deps.currentUcs(), false)
     if (at) {
       const app = this.deps.app
-      const id = selectAtPoint(ents(), [at.x, at.y, at.z], app.solidMesh ? (e) => app.solidMesh?.(e) : undefined)
-      if (!id) return this.reject('0 found: no object at that point.')
+      const meshOf = app.solidMesh ? (e: Entity) => app.solidMesh?.(e) : undefined
+      const id = selectAtPoint(ents(), [at.x, at.y, at.z], meshOf, this.deps.doc.blocks)
+      if (!id) {
+        sel.tried = true
+        // Como el CAD clásico: si lo que está en ese punto es de una capa bloqueada, se dice (R24).
+        const locked = this.lockedEntities()
+        const hit = locked.length ? selectAtPoint(locked, [at.x, at.y, at.z], meshOf, this.deps.doc.blocks) : null
+        const layer = hit ? this.deps.doc.layers.find((l) => l.id === this.deps.doc.getEntity(hit)?.layer) : undefined
+        return this.reject(layer ? `0 found: 1 was on a locked layer ("${layer.name}"). Unlock it with LAYULK or -LAYER U.` : '0 found: no object at that point.')
+      }
       return this.applySel(sel, [id], !!sel.remove)
     }
     switch (opt) {
@@ -1017,9 +1060,9 @@ export class CommandEngine {
     }
   }
 
-  private requestString(prompt: string, opts?: { default?: string }): Promise<string | null> {
+  private requestString(prompt: string, opts?: { default?: string; word?: boolean }): Promise<string | null> {
     return new Promise<string | null>((resolve) => {
-      this.pending = { type: 'string', def: opts?.default ?? null, resolve }
+      this.pending = { type: 'string', def: opts?.default ?? null, word: opts?.word, resolve }
       this.setPrompt(prompt)
     })
   }

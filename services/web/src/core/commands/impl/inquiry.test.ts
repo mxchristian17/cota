@@ -44,3 +44,34 @@ describe('ID, AREA, LIST y MASSPROP', () => {
     expect(out(h)).toContain('Centroid:        X = 5.0000  Y = 10.0000  Z = 15.0000')
   })
 })
+
+describe('LIST muestra color, tipo de línea y grosor (R25)', () => {
+  it('ByLayer con lo que toma de la capa, y los propios del objeto', async () => {
+    const h = makeEngine()
+    const { LayerService } = await import('../../layers/LayerService')
+    const svc = new LayerService(h.doc)
+    const rojo = svc.create('ROJO', { color: '#ff0000', lineType: 'DASHED', lineWeight: 0.5 })
+    h.add('LINE', { start: [0, 0, 0], end: [10, 0, 0] }, rojo.id)
+    const own = h.add('CIRCLE', { center: [0, 0, 0], radius: 5, normal: [0, 0, 1] })
+    Object.assign(own, { color: '#0000ff', lineType: 'CENTER', ltScale: 2, lineWeight: 0.35 })
+    await h.run('LIST', 'ALL', '')
+    const text = out(h)
+    expect(text).toContain('  Color: ByLayer (Red)  Linetype: ByLayer (DASHED)  Lineweight: ByLayer (0.50 mm)')
+    expect(text).toContain('  Color: Blue  Linetype: CENTER  Linetype scale: 2.0000  Lineweight: 0.35 mm')
+  })
+})
+
+describe('LIST y MASSPROP con el volumen exacto (R43)', () => {
+  it('un cilindro r=10 h=20 da 6283.1853 (no el del prisma inscripto de la malla)', async () => {
+    const h = makeEngine()
+    h.add('SOLID3D', { op: 'CYLINDER', base: [0, 0, 0], radius: 10, height: 20, segments: 48 })
+    await h.run('LIST', 'ALL', '')
+    expect(out(h)).toContain('Volume = 6283.1853')
+    await h.run('MASSPROP', 'ALL', '')
+    expect(out(h)).toContain('Volume:          6283.1853')
+    h.add('SOLID3D', { op: 'CYLINDER', base: [100, 0, 0], radius: 15, height: 20, segments: 48 })
+    h.prints.length = 0
+    await h.run('MASSPROP', 'ALL', '')
+    expect(out(h)).toContain(`Volume:          ${(Math.PI * 100 * 20 + Math.PI * 225 * 20).toFixed(4)}`)
+  })
+})

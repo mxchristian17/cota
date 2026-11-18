@@ -164,7 +164,10 @@ test.describe('Cota carpeta local del sistema', () => {
     expect(JSON.parse((await readMem(page, 'drawing1.sv$')) as string).entities).toHaveLength(3)
     expect(JSON.parse((await readMem(page, 'drawing1.cota')) as string).entities).toHaveLength(2)
     // Abrir el .bak: es el dibujo sin guardar; SAVE lo vuelve a escribir como drawing1.cota.
-    await page.evaluate(() => (window as unknown as { __cotaStore: { getState: () => { openLocalDrawing: (p: string) => Promise<void> } } }).__cotaStore.getState().openLocalDrawing('drawing1.bak'))
+    await page.evaluate(() => void (window as unknown as { __cotaStore: { getState: () => { openLocalDrawing: (p: string) => Promise<void> } } }).__cotaStore.getState().openLocalDrawing('drawing1.bak'))
+    // El círculo nuevo no se guardó: antes de abrir, pregunta (R28).
+    await expect(page.locator('.cmd-prompt')).toHaveText('Save changes to drawing1? [Yes/No] <Yes>:')
+    await typeCmd(page, 'N')
     await expect(page.locator('.cmd-output')).toContainText('SAVE writes it as "drawing1.cota"')
     await typeCmd(page, 'SAVE', '')
     expect(JSON.parse((await readMem(page, 'drawing1.cota')) as string).entities).toHaveLength(1)

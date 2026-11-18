@@ -65,7 +65,7 @@ test.describe('IMPORT de modelos 3D al dibujo abierto (B04)', () => {
     await expect(prompt(page)).toHaveText('Import "LM8uu.stl" as [Objects/Block] <Objects>:')
     await cmd(page, 'B', 'LM8UU')
     await expect(out(page)).toContainText('Block "LM8UU" defined with 1 mesh(es) from STL and inserted at 0,0,0. Use INSERT LM8UU to place more.')
-    await cmd(page, 'INSERT', 'LM8UU', '#200,0,0', '1', '0')
+    await cmd(page, 'INSERT', 'LM8UU', '#200,0,0', '1', '', '0')
     await expect(out(page)).toContainText('Inserted "LM8UU".')
     expect(await st(page, `return s.doc.entities.filter((e) => e.type === 'INSERT').map((e) => e.props.position)`)).toEqual([
       [0, 0, 0],
@@ -100,11 +100,14 @@ test.describe('Copiar y pegar bloques entre dibujos (B27)', () => {
     await cmd(page, 'COPYBASE', 'ALL', '', '0,0,0')
     await expect(out(page)).toContainText('1 object(s) copied to the clipboard.')
     await choose(page, 'OPEN', 'ensamble.cota', assembly)
+    // El STEP quedó con el bloque definido (modificado): OPEN pregunta si guardarlo (R28).
+    await expect(prompt(page)).toHaveText('Save changes to NEMA17.step? [Yes/No] <Yes>:')
+    await cmd(page, 'N')
     await expect(out(page)).toContainText('Opened "ensamble.cota" from the device.')
     await cmd(page, 'PASTECLIP', '1000,1000,0')
     await expect(out(page)).toContainText('1 block definition(s) added: NEMA17.')
-    await cmd(page, 'INSERT', 'NEMA17', '1100,1000,0', '1', '0')
-    await cmd(page, 'INSERT', 'NEMA17', '1200,1000,0', '1', '0')
+    await cmd(page, 'INSERT', 'NEMA17', '1100,1000,0', '1', '', '0')
+    await cmd(page, 'INSERT', 'NEMA17', '1200,1000,0', '1', '', '0')
     await expect(out(page)).toContainText('Inserted "NEMA17".')
 
     const input = page.getByTestId('command-input')

@@ -2,6 +2,15 @@ import { useStore } from '../store/store'
 import { ABOUT } from '../core/about'
 import { UiIcon } from './uiIcons'
 
+/**
+ * Descripción con cortes posibles después de cada barra: las listas de opciones («[Continuous/Staggered/Baseline/…]»)
+ * eran una sola palabra larguísima que ensanchaba la tabla y cortaba la columna a la derecha.
+ */
+function breakable(text: string): React.ReactNode {
+  const parts = text.split('/')
+  return parts.map((p, i) => (i < parts.length - 1 ? [p, '/', <wbr key={i} />] : p))
+}
+
 export function HelpDialog() {
   const open = useStore((s) => s.helpOpen)
   const close = useStore((s) => s.closeHelp)
@@ -12,9 +21,9 @@ export function HelpDialog() {
 
   return (
     <div className="modal-backdrop" onClick={close} data-testid="help-dialog">
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="help-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Available commands</h2>
+          <h2 id="help-title">Available commands</h2>
           <button className="icon-btn" onClick={close} aria-label="Close">
             <UiIcon name="close" />
           </button>
@@ -42,7 +51,7 @@ export function HelpDialog() {
               <tr key={c.name}>
                 <td className="mono">{c.name}</td>
                 <td className="mono muted">{c.aliases.join(', ') || '—'}</td>
-                <td>{c.description}</td>
+                <td className="help-desc">{breakable(c.description)}</td>
               </tr>
             ))}
           </tbody>

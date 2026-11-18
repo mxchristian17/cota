@@ -399,9 +399,9 @@ export function ToolbarDialog() {
   }
   return (
     <div className="modal-backdrop" onClick={done} data-testid="toolbar-dialog">
-      <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="toolbar-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Toolbars</h2>
+          <h2 id="toolbar-title">Toolbars</h2>
           <button className="icon-btn" onClick={done} aria-label="Close">
             <UiIcon name="close" />
           </button>

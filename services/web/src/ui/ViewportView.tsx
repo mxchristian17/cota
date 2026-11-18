@@ -5,12 +5,14 @@ import { useStore } from '../store/store'
 import { sysvars } from '../core/commands/sysvars'
 import { VPORT_VIEWS, type CameraMode, type ViewName } from '../core/view'
 import { isWorldUcs, normalizeUcs, WORLD_UCS } from '../core/ucs'
+import { viewUcsNote } from '../core/commands/impl/view'
 import { pickPreviewColor } from '../core/preview'
 import { MODEL_TAB } from '../core/document/DocumentModel'
 import { fieldContextFor } from '../core/fields/context'
 import { DRAWING_EXT } from '../core/io/paths'
 import { focusCommandLine } from './focus'
 import { ViewNet } from './ViewNet'
+import { isPhone } from './appWindow'
 import { LayoutView } from './LayoutView'
 import { paneKeyOf, paneState } from '../render/viewMemory'
 import { isolation, viewLayers } from '../core/editing/isolation'
@@ -51,6 +53,8 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
 
   const setCursor = useStore((s) => s.setCursor)
   const viewCubeOn = useStore((s) => s.viewCubeOn)
+  // Celular (vista completa): el cubo de vistas plegado, para no tapar el dibujo.
+  const phone = isPhone()
   const viewNetStd = useStore((s) => s.viewNetStd)
   const viewportClick = useStore((s) => s.viewportClick)
   const beginGripEdit = useStore((s) => s.beginGripEdit)
@@ -135,7 +139,13 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
       },
       // VIEW/cubo de vistas con UCSORTHO cambia la UCS del viewport: el store espeja la del activo.
       onUcsChange: (u, name) => {
-        if (isActive()) useStore.getState().setUcs(u, name)
+        if (!isActive()) return
+        const s = useStore.getState()
+        const before = s.ucs
+        s.setUcs(u, name)
+        // Desde el cubo de vistas (VIEW avisa por su cuenta): la línea de comandos dice que cambió la UCS (R42).
+        const note = s.engine.busy ? null : viewUcsNote(before, u, name ?? null, true)
+        if (note) s.notify(note)
       },
     })
     vpRef.current = vp
@@ -239,6 +249,7 @@ function ViewportPane({ paneKey, view, style }: { paneKey: string; view?: ViewNa
         onViewDir={(az, el) => vpRef.current?.setViewDir(az, el)}
         onToggleMode={() => vpRef.current?.setMode(cam.mode === 'persp' ? 'ortho' : 'persp')}
         onToggleStd={() => useStore.getState().setScreen({ viewNetStd: viewNetStd === 'E' ? 'A' : 'E' })}
+        compact={phone}
         ucs={{
           current: !active ? paneUcsLabel(vpRef.current) : ucsName === 'World' ? 'WCS' : (ucsName ?? 'Unnamed'),
           named: namedUcs,

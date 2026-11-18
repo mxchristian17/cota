@@ -70,9 +70,9 @@ export function PlotDialog() {
 
   return (
     <div className="modal-backdrop" onClick={() => done('cancel')} data-testid="plot-dialog">
-      <div className="modal plot-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal plot-modal" role="dialog" aria-modal="true" aria-labelledby="plot-title" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Plot — {isLayout ? r.layout : 'Model'}</h2>
+          <h2 id="plot-title">Plot — {isLayout ? r.layout : 'Model'}</h2>
           <button className="icon-btn" onClick={() => done('cancel')} aria-label="Close">
             <UiIcon name="close" />
           </button>
@@ -184,7 +184,10 @@ export function PlotDialog() {
             )}
           </div>
           <div className="plot-preview">
-            <canvas ref={canvas} data-testid="plot-preview" />
+            {/* La hoja ocupa su caja y el rótulo va abajo, fuera de ella (antes la hoja le pasaba por encima). */}
+            <div className="plot-page">
+              <canvas ref={canvas} data-testid="plot-preview" />
+            </div>
             <span className="plot-caption muted" data-testid="plot-caption">
               {r.empty ? 'Nothing to plot in this area.' : `Scale ${r.scale ? ratio(r.scale) : '—'}`}
             </span>

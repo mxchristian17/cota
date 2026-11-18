@@ -223,7 +223,7 @@ describe('Bloques en 3D', () => {
     const h = makeEngine()
     defineBlock(h)
     h.setUcs(orthoUcs('FRONT'))
-    await h.run('INSERT', 'B', '#0,0', '', '')
+    await h.run('INSERT', 'B', '#0,0', '', '', '')
     const ins = h.ofType('INSERT')[0]
     for (const p of blockPts(h, ins.id).filter((_, i) => i < 30)) expect(Math.abs(p[1])).toBeLessThan(3.0001) // la extrusión sale hacia −Y/+Y hasta 3
     const line = expandEntities([ins], h.doc.blocks).find((e) => e.type === 'LINE')!
