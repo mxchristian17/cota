@@ -161,9 +161,14 @@ test.describe('Copiar en una pestaña del navegador y pegar en otra (B05)', () =
 
     // Pestaña A: Ctrl+V pega lo copiado en B (con su bloque), y PASTECLIP también.
     await a.bringToFront()
-    await a.getByTestId('command-input').focus()
-    await a.keyboard.press('Control+V')
-    await expect(prompt(a)).toHaveText('Specify insertion point:')
+    // El aviso de la copia llega a A por un canal entre pestañas (asíncrono): con la máquina cargada (CI con 2 workers)
+    // el primer Ctrl+V podía llegar antes que el aviso. Se reintenta hasta que A lo recibió.
+    await expect(async () => {
+      await a.getByTestId('command-input').fill('')
+      await a.getByTestId('command-input').focus()
+      await a.keyboard.press('Control+V')
+      await expect(prompt(a)).toHaveText('Specify insertion point:', { timeout: 1000 })
+    }).toPass({ timeout: 15_000 })
     await cmd(a, '50,50,0')
     await expect(out(a)).toContainText('1 block definition(s) added: LM8UU.')
     await expect(out(a)).toContainText('1 object(s) pasted.')
