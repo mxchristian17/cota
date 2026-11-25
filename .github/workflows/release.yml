@@ -1,0 +1,54 @@
+name: Release
+
+# Creates the tag vX.Y.Z and the GitHub release "Cota X.Y.Z" for the version in services/web/package.json, with that
+# version's section of CHANGELOG.md as its notes. It runs on every push to main (nothing to do when the release
+# already exists) and can be started by hand from the Actions tab.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Tag and release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Create the release if it is missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          version=$(jq -r .version services/web/package.json)
+          tag="v$version"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists: nothing to do."
+            exit 0
+          fi
+          awk -v v="$version" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > section.md
+          if ! grep -q '[^[:space:]]' section.md; then
+            echo "::error::CHANGELOG.md has no section for $version."
+            exit 1
+          fi
+          printf '%s\n' "$(cat section.md)" > notes.md
+          # The commit that set this version (the "Cota X.Y.Z" commit), not a later one.
+          target=$(git log --reverse --format=%H -S"\"version\": \"$version\"" -- services/web/package.json)
+          target=${target%%$'\n'*}
+          gh release create "$tag" --target "${target:-$GITHUB_SHA}" --title "Cota $version" --notes-file notes.md
