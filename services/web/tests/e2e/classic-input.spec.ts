@@ -145,8 +145,15 @@ test.describe('Cota: command line like classic CAD', () => {
       const p = await st<number[]>(page, `return s.activeViewport.project({ x: ${x}, y: ${y}, z: 0 })`)
       return [box.x + p[0], box.y + p[1]] as const
     }
+    // Los grips se arman al dibujar el cuadro siguiente: un clic antes no encuentra el grip y cuenta como otro clic de
+    // selección (el CI lento fallaba así). Se espera la vista dibujada, la selección y el grip en su lugar.
+    const gripAt = (x: number, y: number) =>
+      expect.poll(() => st(page, `return s.activeViewport.grips.some((g) => Math.abs(g.grip.point[0] - ${x}) < 1e-9 && Math.abs(g.grip.point[1] - ${y}) < 1e-9)`)).toBe(true)
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
     const [mx, my] = await scr(20, 0)
     await page.mouse.click(mx, my) // selecciona la línea: aparecen sus grips
+    await expect.poll(() => st(page, 'return s.selection.length')).toBe(1)
+    await gripAt(40, 0)
     const [gx, gy] = await scr(40, 0)
     await page.mouse.click(gx, gy) // grip del extremo: STRETCH
     await expect(page.getByText('** STRETCH **')).toHaveCount(1)
@@ -155,6 +162,7 @@ test.describe('Cota: command line like classic CAD', () => {
     await cmd('@0,10')
     // Se espera cada paso (el CI lento apretaba Espacio antes de que el grip quedara activo).
     await expect.poll(() => st(page, "const l = s.doc.entities[0].props; return [l.start, l.end]")).toEqual([[0, 10, 0], [40, 10, 0]])
+    await gripAt(0, 10)
     const [g2x, g2y] = await scr(0, 10)
     await page.mouse.click(g2x, g2y)
     await expect(page.getByText('** STRETCH **')).toHaveCount(2) // el historial guarda también el del primer ciclo
