@@ -816,6 +816,40 @@ describe('entidades de DWG/DXF que Cota dibuja con piezas simples', () => {
     expect(r.entities.map((e) => (e.props as { textFont?: string }).textFont)).toEqual(['Arial', 'Times New Roman'])
   })
 
+  it('cotas: un estilo de texto de altura fija manda sobre DIMTXT × DIMSCALE; las flechas siguen DIMSCALE', () => {
+    // Estilo de texto FIX con altura fija 20, LIBRE sin altura fija. Estilo de cota K: DIMSCALE 10, DIMTXT 20, DIMASZ 2,5.
+    const tables = (dimStyle: string) =>
+      '0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nSTYLE\n' +
+      '0\nSTYLE\n5\nB1\n2\nFIX\n70\n0\n40\n20\n41\n1\n3\narial.ttf\n' +
+      '0\nSTYLE\n5\nB2\n2\nLIBRE\n70\n0\n40\n0\n41\n1\n3\narial.ttf\n0\nENDTAB\n' +
+      `0\nTABLE\n2\nDIMSTYLE\n0\nDIMSTYLE\n2\nK\n70\n0\n40\n10\n41\n2.5\n140\n20\n${dimStyle}0\nENDTAB\n0\nENDSEC\n`
+    const dim = (...xd: Array<[number, string | number]>) =>
+      rec('DIMENSION', [3, 'K'], [70, 32], [10, 100], [20, 5], [30, 0], [13, 0], [23, 0], [33, 0], [14, 100], [24, 0], [34, 0], [42, 100], ...xd)
+    const size = (e: { props: unknown }) => {
+      const s = (e.props as DimensionProps).style
+      return [s.DIMTXT * s.DIMSCALE, s.DIMASZ * s.DIMSCALE]
+    }
+    const r = importDxf(
+      tables('340\nB1\n') +
+        dxf(
+          dim(),
+          // DIMSCALE propio 5: el texto sigue en 20, las flechas pasan a 12,5.
+          dim([1001, 'ACAD'], [1000, 'DSTYLE'], [1002, '{'], [1070, 40], [1040, 5], [1002, '}']),
+          // DIMTXT propio: el estilo de texto de altura fija lo ignora, como el CAD clásico.
+          dim([1001, 'ACAD'], [1000, 'DSTYLE'], [1002, '{'], [1070, 140], [1040, 3], [1002, '}']),
+          // Su propio estilo de texto sin altura fija: vuelve a DIMTXT × DIMSCALE.
+          dim([1001, 'ACAD'], [1000, 'DSTYLE'], [1002, '{'], [1070, 340], [1005, 'B2'], [1002, '}']),
+          // Texto propio con alto relativo (\H0.7x): 0,7 de la altura fija.
+          dim([1, '{\\H0.7x;\\S1/4;}"']),
+        ),
+    )
+    expect(r.dimStyles.find((s) => s.name === 'K')?.vars.DIMTXT).toBe(2)
+    expect(r.entities.map(size)).toEqual([[20, 25], [20, 12.5], [20, 25], [200, 25], [14, 25]].map(([t, a]) => [expect.closeTo(t, 9), expect.closeTo(a, 9)]))
+    // Sin altura fija en el estilo de texto, nada cambia; tampoco con estilo de cota anotativo o DIMSCALE 0.
+    expect(size(importDxf(tables('340\nB2\n') + dxf(dim())).entities[0])).toEqual([200, 25])
+    expect(importDxf(tables('340\nB1\n') + dxf(dim([1001, 'ACAD'], [1000, 'DSTYLE'], [1002, '{'], [1070, 40], [1040, 0], [1002, '}']))).entities[0].props).toMatchObject({ style: { DIMTXT: 2 } })
+  })
+
   it('cotas: su color propio (420/62), grosor y transparencia se leen y vuelven al exportar', () => {
     const dim = (...own: Array<[number, string | number]>) =>
       rec('DIMENSION', [8, 'A'], ...own, [3, 'Standard'], [70, 32], [10, 10], [20, 5], [30, 0], [13, 0], [23, 0], [33, 0], [14, 10], [24, 0], [34, 0], [42, 10])
@@ -850,6 +884,44 @@ describe('entidades de DWG/DXF que Cota dibuja con piezas simples', () => {
   it('SPLINE definida sólo por los puntos por donde pasa (11/21/31): se dibuja por ellos', () => {
     const r = importDxf(dxf(rec('SPLINE', [70, 0], [71, 3], [74, 3], [12, 1], [22, 0], [32, 0], [11, 0], [21, 0], [31, 0], [11, 5], [21, 2], [31, 0], [11, 10], [21, 0], [31, 0])))
     expect(r.entities[0].props).toEqual({ controlPoints: [[0, 0, 0], [5, 2, 0], [10, 0, 0]], degree: 3 })
+  })
+
+  describe('SPLINE por puntos de control', () => {
+    const cp = (pts: number[][]): Array<[number, number]> => pts.flatMap(([x, y]) => [[10, x], [20, y], [30, 0]] as Array<[number, number]>)
+    const knots = (ks: number[]): Array<[number, number]> => ks.map((k) => [40, k] as [number, number])
+    const U = [[0, 0], [20, 0], [20, 20], [0, 20]]
+    const pointsOf = (text: string) => (importDxf(text).entities[0].props as { controlPoints: number[][] }).controlPoints
+
+    it('con nudos: se guarda la curva real (no pasa por los puntos de control interiores)', () => {
+      const pts = pointsOf(dxf(rec('SPLINE', [70, 8], [71, 3], [72, 8], [73, 4], [74, 0], ...knots([0.93, 0.93, 0.93, 0.93, 1, 1, 1, 1]), ...cp(U))))
+      expect(pts.length).toBeGreaterThan(8)
+      expect(pts[0]).toEqual([0, 0, 0])
+      expect(pts[pts.length - 1]).toEqual([0, 20, 0])
+      // El punto medio de la Bézier es (15, 10): la curva llega a x = 15, nunca a 20.
+      expect(Math.max(...pts.map((q) => q[0]))).toBeCloseTo(15, 6)
+    })
+
+    it('grado 1 → polilínea por sus puntos de control; sin nudos → como antes (puntos de paso)', () => {
+      const poly = importDxf(dxf(rec('SPLINE', [70, 8], [71, 1], [72, 6], [73, 4], ...knots([0, 0, 1, 2, 3, 3]), ...cp(U)))).entities[0]
+      expect(poly.type).toBe('POLYLINE')
+      expect((poly.props as { vertices: number[][] }).vertices).toEqual(U.map(([x, y]) => [x, y, 0]))
+      expect(pointsOf(dxf(rec('SPLINE', [70, 8], [71, 3], [72, 0], [73, 4], ...cp(U))))).toEqual(U.map(([x, y]) => [x, y, 0]))
+    })
+
+    it('exportar escribe una B-spline válida (nudos y Béziers) y al reabrir vuelven los mismos puntos', () => {
+      const through = [[0, 0, 0], [10, 5, 0], [12, 30, 0], [40, 31, 0]]
+      const out = exportDxf([{ id: 's', type: 'SPLINE', layer: 'A', props: { controlPoints: through, degree: 3 } } as unknown as Entity], [lineLayer])
+      // Los grupos del record SPLINE (hasta el próximo grupo 0).
+      const lines = out.split('\n')
+      const at = lines.findIndex((l, i) => l === 'SPLINE' && lines[i - 1] === '0' && i % 2 === 1)
+      const codes: Array<[number, number]> = []
+      for (let i = at + 1; i + 1 < lines.length && lines[i] !== '0'; i += 2) codes.push([Number(lines[i]), Number(lines[i + 1])])
+      const one = (k: number) => codes.find(([c]) => c === k)?.[1]
+      expect([one(71), one(72), one(73)]).toEqual([3, 14, 10])
+      expect(codes.filter(([c]) => c === 40)).toHaveLength(14)
+      expect(codes.filter(([c]) => c === 10)).toHaveLength(10)
+      expect(pointsOf(out)).toEqual(through)
+    })
   })
 
   it('IMAGE: la imagen con su lugar, su tamaño y el archivo; vuelve igual al exportar', () => {

@@ -13,6 +13,7 @@ import { DxfDimWriter, dimGeometryDxf, parseDimension, parseDimStyle } from './d
 import { resolveDimVars, type DimStyleDef } from '../dimension/style'
 import { angleFromOcs, angleToOcs, fromOcs, isWorldExtrusion, toOcs } from './dxfOcs'
 import { normAngle } from '../geom/arc'
+import { catmullRomBezierSpline, dxfSplineThroughPoints } from '../geom/nurbs'
 import { acisEdges, sabFromHex, satFromDxf } from './acis'
 import { acisMesh, SOLID_MESH_REF } from './acisMesh'
 import { packedOf, reversePackedFaces, type PackedMesh } from './meshTransfer'
@@ -191,8 +192,12 @@ function entityDxf(e: Entity, layerName: string): string | null {
       )
     }
     case 'SPLINE': {
-      const cps = e.props.controlPoints
-      let out = p(0, 'SPLINE') + h + p(70, 8) + p(71, e.props.degree) + p(72, 0) + p(73, cps.length) + p(74, 0)
+      // Cada tramo de la Catmull-Rom de Cota es una cúbica: se escribe como Béziers encadenadas con sus nudos, la
+      // misma curva en el CAD clásico (antes iban los puntos de paso como de control y sin nudos).
+      if (e.props.controlPoints.length < 2) return null
+      const { controlPoints: cps, knots } = catmullRomBezierSpline(e.props.controlPoints)
+      let out = p(0, 'SPLINE') + h + p(70, 8) + p(71, 3) + p(72, knots.length) + p(73, cps.length) + p(74, 0)
+      for (const k of knots) out += p(40, k)
       for (const v of cps) out += p(10, v[0]) + p(20, v[1]) + p(30, v[2])
       return out
     }
@@ -673,8 +678,11 @@ export function shownDecimals(shown: string, measured: number): number | null {
   return Math.abs(v - Number(measured.toFixed(n))) < 1e-9 ? n : null
 }
 
-/** Estilos de texto del archivo que se está leyendo (tabla STYLE, por nombre en mayúsculas): fuente y ancho. */
-let textStyles = new Map<string, { look: FontLook; widthFactor: number }>()
+/**
+ * Estilos de texto del archivo que se está leyendo (tabla STYLE, por nombre en mayúsculas): fuente, ancho y altura fija
+ * (0 = sin altura fija; la usan las cotas).
+ */
+let textStyles = new Map<string, { look: FontLook; widthFactor: number; height?: number }>()
 /** Handle → nombre de cada estilo de texto (las cotas lo nombran por handle: DIMTXSTY). */
 let styleHandles = new Map<string, string>()
 
@@ -856,7 +864,7 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
         // Es una spline con datos extra: sus puntos de control vienen antes de los del eje.
         const cut = c.findIndex(([k, v]) => k === 100 && v.trim() === 'AcDbHelix')
         const s = parseEntity({ type: 'SPLINE', codes: cut > 0 ? c.slice(0, cut) : c })
-        return s && (s.props as { controlPoints: Vec3[] }).controlPoints.length >= 2 ? [s] : null
+        return s && ((s.props as { controlPoints?: Vec3[] }).controlPoints?.length ?? 2) >= 2 ? [s] : null
       }
       case 'IMAGE':
         return image(c, externalFiles)
@@ -1022,7 +1030,7 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
       const look = fontLook(str(rec.codes, 3) || family)
       if (flags & 0x2000000) look.bold = true
       if (flags & 0x1000000) look.italic = true
-      if (name) textStyles.set(name, { look, widthFactor: num(rec.codes, 41, 1) || 1 })
+      if (name) textStyles.set(name, { look, widthFactor: num(rec.codes, 41, 1) || 1, height: num(rec.codes, 40, 0) })
       const h = str(rec.codes, 5)
       if (name && h) styleHandles.set(h.toUpperCase(), name)
       continue
@@ -1160,6 +1168,20 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
   for (const r of dimStyleRecs) dimStyles.push(parseDimStyle(r.codes, blockNames))
   /** Estilo de cota → handle de su estilo de texto (DIMTXSTY, 340). */
   const dimTextStyles = new Map(dimStyleRecs.map((r) => [str(r.codes, 2) ?? '', (str(r.codes, 340) ?? '').toUpperCase()]))
+  // Estilo de texto de altura fija (STYLE 40 ≠ 0): el CAD clásico dibuja el texto de la cota con esa altura, sin DIMTXT ni
+  // DIMSCALE (las flechas sí siguen DIMSCALE). En Cota el texto mide DIMTXT × DIMSCALE: DIMTXT = altura / DIMSCALE.
+  // Va en el estilo, así las cotas nuevas de ese estilo también la respetan.
+  const fixedHeight = (styleName: string | undefined): number => (styleName ? (textStyles.get(styleName.toUpperCase())?.height ?? 0) : 0)
+  const fixedDimtxt = (h: number, scale: number | undefined, annotative: boolean | undefined): number | null =>
+    h > 0 && !annotative && scale !== undefined && scale > 0 ? h / scale : null
+  /** Estilos de cota cuyo DIMTXT se ajustó a la altura fija → su DIMTXT del archivo. */
+  const fileDimtxt = new Map<string, number>()
+  dimStyles.forEach((s, i) => {
+    const t = fixedDimtxt(fixedHeight(styleHandles.get((str(dimStyleRecs[i].codes, 340) ?? '').toUpperCase())), s.vars.DIMSCALE, s.vars.ANNOTATIVE)
+    if (t === null) return
+    fileDimtxt.set(s.name, s.vars.DIMTXT)
+    s.vars.DIMTXT = t
+  })
   // Cada cota con las variables de su estilo (el documento las vuelve a resolver al agregar los estilos).
   const styled = (e: DxfEntitySpec) => {
     if (e.type !== 'DIMENSION') return
@@ -1173,6 +1195,13 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
     delete dp.textStyle
     const font = ts ? textStyles.get(ts.toUpperCase())?.look.font : undefined
     if (font) dp.textFont = font
+    // Altura fija de su estilo de texto: si su estilo de texto o su DIMSCALE propios cambian el resultado del estilo de
+    // cota, el DIMTXT va como override (el CAD clásico ignora el DIMTXT propio en ese caso).
+    const fixed = fixedDimtxt(fixedHeight(ts), dp.overrides?.DIMSCALE ?? vars?.DIMSCALE, dp.overrides?.ANNOTATIVE ?? vars?.ANNOTATIVE)
+    const fileTxt = fileDimtxt.get(dp.styleName ?? '')
+    if (fixed !== null && Math.abs(fixed - (dp.overrides?.DIMTXT ?? vars?.DIMTXT ?? 2.5)) > 1e-9 * fixed) dp.overrides = { ...dp.overrides, DIMTXT: fixed }
+    // Su propio estilo de texto no tiene altura fija: vale el DIMTXT del archivo, no el ajustado del estilo de cota.
+    else if (fileTxt !== undefined && fixedHeight(ts) <= 0 && dp.overrides?.DIMTXT === undefined) dp.overrides = { ...dp.overrides, DIMTXT: fileTxt }
     // Texto propio con formato de MTEXT (p. ej. `{\H22.2x;90.00}`): el texto plano, y su alto pasa a la cota.
     if (dp.textOverride && /[\\{}]/.test(dp.textOverride)) {
       const lead = mtextLead(dp.textOverride)
@@ -1903,7 +1932,12 @@ function parseEntity(rec: Rec): { type: EntityType; props: EntityProps } | null 
         return out
       }
       const cps = points(10)
-      return { type: 'SPLINE', props: { controlPoints: cps.length >= 2 ? cps : points(11), degree: num(c, 71, 3) } }
+      const degree = num(c, 71, 3)
+      // Con nudos, los 10/20/30 son de control: la curva real se evalúa y se guardan sus puntos de paso.
+      const values = (code: number) => c.filter(([k]) => k === code).map(([, v]) => Number(v))
+      const real = cps.length >= 2 ? dxfSplineThroughPoints(degree, cps, values(40), values(41)) : null
+      if (real === 'polyline') return { type: 'POLYLINE', props: { vertices: cps, closed: false } as EntityProps }
+      return { type: 'SPLINE', props: { controlPoints: real ?? (cps.length >= 2 ? cps : points(11)), degree } }
     }
     default:
       return null

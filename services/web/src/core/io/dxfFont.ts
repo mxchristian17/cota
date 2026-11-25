@@ -61,9 +61,12 @@ export interface MtextLead {
 
 export function mtextLead(raw: string): MtextLead {
   const out: MtextLead = {}
+  /** Dentro de un grupo `{…}` que se cierra antes del final: su formato no vale para todo el texto. */
+  let local = false
   let i = 0
   while (i < raw.length) {
     if (raw[i] === '{') {
+      if (groupEnd(raw, i) < raw.trimEnd().length - 1) local = true
       i++
       continue
     }
@@ -82,12 +85,25 @@ export function mtextLead(raw: string): MtextLead {
         else out.height = v
       }
     } else if (code === 'W') {
+      // Un `{\W3.7; }` que sólo ensancha un espacio (así el CAD clásico sangra un renglón) no estira todo el texto.
       const v = parseFloat(arg)
-      if (v > 0) out.width = v
+      if (v > 0 && !local) out.width = v
     }
     i += m[0].length
   }
   return out
+}
+
+/** Índice de la `}` que cierra el grupo abierto en `start` (los `\{`, `\}` y `\\` no cuentan); sin cierre, el final. */
+function groupEnd(raw: string, start: number): number {
+  let depth = 0
+  for (let i = start; i < raw.length; i++) {
+    const ch = raw[i]
+    if (ch === '\\') i++
+    else if (ch === '{') depth++
+    else if (ch === '}' && --depth === 0) return i
+  }
+  return raw.length
 }
 
 /** Un tramo de un MTEXT con su formato (lo que no difiere del texto entero, ausente). */

@@ -19,6 +19,10 @@ describe('fuentes de los textos de DXF/DWG', () => {
     expect(mtextLead('{\\fArial Narrow|b1|i0|c0|p34;\\H0.75x;\\W0.9;Texto \\fArial|b0;resto}')).toEqual({ font: 'Arial Narrow', bold: true, heightScale: 0.75, width: 0.9 })
     expect(mtextLead('\\pxt0;{\\H2.5;\\C7;Hola}')).toEqual({ height: 2.5 })
     expect(mtextLead('Hola \\fArial;mundo')).toEqual({}) // lo que viene después del primer carácter no vale para todo
+    // Un factor de ancho dentro de un grupo que se cierra antes (un espacio ensanchado) no estira todo el texto.
+    expect(mtextLead('{\\W3.68; }TITULO \\P{\\W7.5; }SEGUNDO')).toEqual({})
+    expect(mtextLead('{\\W0.8;Todo el texto}')).toEqual({ width: 0.8 })
+    expect(mtextLead('{\\W0.8;Todo \\{literal\\} el texto} ')).toEqual({ width: 0.8 })
   })
 
   it('tramos de un MTEXT: negrita y alto dentro del texto, grupos {…} que vuelven al formato de afuera', () => {

@@ -4,6 +4,22 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.49.4] — 2026-11-25
+
+### Fixed
+- **Dimension text ten times too large in some DXF and DWG files**: when the dimension's text style has a fixed
+  height, the classic CAD draws the text at that height and ignores DIMTXT and DIMSCALE (arrows still follow
+  DIMSCALE). Cota multiplied DIMTXT by DIMSCALE. Imported dimensions now use the fixed height, and new dimensions in
+  that style keep it.
+- **Splines from DXF and DWG files came out distorted** (a curve with four control points looked wavy, millimeters
+  off): a Cota spline passes through its points, but a DXF spline stores control points with knots and weights, which
+  Cota read as points on the curve. The real curve is now evaluated (rational ones included) and kept as points the
+  spline passes through; degree-1 splines open as polylines.
+- **Splines exported to DXF had no knots**, so the classic CAD drew a different curve or rejected them. Each span is
+  now written as its exact Bézier with valid knots, and opening the file again in Cota gives back the same points.
+- **A multiline text came out stretched**: a width factor that applies only to a space inside braces (how the classic
+  CAD indents a line) was taken as the width of the whole text.
+
 ## [2.49.3] — 2026-11-18
 
 ### Fixed

@@ -567,6 +567,20 @@ export const SPLINE_SEGMENTS = 16
  * con lo que se ve.
  */
 export function catmullRomPoint(pts: Vec3[], i: number, w: number): Vec3 {
+  const { p1, p2, t1, t2 } = catmullRomHermite(pts, i)
+  const out: Vec3 = [0, 0, 0]
+  for (let k = 0; k < 3; k++) {
+    const x1 = p1[k]
+    const x2 = p2[k]
+    const c2 = -3 * x1 + 3 * x2 - 2 * t1[k] - t2[k]
+    const c3 = 2 * x1 - 2 * x2 + t1[k] + t2[k]
+    out[k] = x1 + t1[k] * w + c2 * w * w + c3 * w * w * w
+  }
+  return out
+}
+
+/** Extremos y tangentes (en el parámetro local 0..1) del tramo `i` de la Catmull-Rom centrípeta de Cota. */
+function catmullRomHermite(pts: Vec3[], i: number): { p1: Vec3; p2: Vec3; t1: Vec3; t2: Vec3 } {
   const l = pts.length
   const ext = (a: Vec3, b: Vec3): Vec3 => [2 * a[0] - b[0], 2 * a[1] - b[1], 2 * a[2] - b[2]]
   const p0 = i > 0 ? pts[i - 1] : ext(pts[0], pts[1])
@@ -580,19 +594,28 @@ export function catmullRomPoint(pts: Vec3[], i: number, w: number): Vec3 {
   if (dt1 < 1e-4) dt1 = 1
   if (dt0 < 1e-4) dt0 = dt1
   if (dt2 < 1e-4) dt2 = dt1
-  const out: Vec3 = [0, 0, 0]
+  const t1: Vec3 = [0, 0, 0]
+  const t2: Vec3 = [0, 0, 0]
   for (let k = 0; k < 3; k++) {
     const x0 = p0[k]
     const x1 = p1[k]
     const x2 = p2[k]
     const x3 = p3[k]
-    const t1 = ((x1 - x0) / dt0 - (x2 - x0) / (dt0 + dt1) + (x2 - x1) / dt1) * dt1
-    const t2 = ((x2 - x1) / dt1 - (x3 - x1) / (dt1 + dt2) + (x3 - x2) / dt2) * dt1
-    const c2 = -3 * x1 + 3 * x2 - 2 * t1 - t2
-    const c3 = 2 * x1 - 2 * x2 + t1 + t2
-    out[k] = x1 + t1 * w + c2 * w * w + c3 * w * w * w
+    t1[k] = ((x1 - x0) / dt0 - (x2 - x0) / (dt0 + dt1) + (x2 - x1) / dt1) * dt1
+    t2[k] = ((x2 - x1) / dt1 - (x3 - x1) / (dt1 + dt2) + (x3 - x2) / dt2) * dt1
   }
-  return out
+  return { p1, p2, t1, t2 }
+}
+
+/**
+ * Puntos de control de la Bézier cúbica **exacta** del tramo `i` de la Catmull-Rom de Cota (cada tramo es una
+ * cúbica de Hermite): así un DXF dibuja la misma curva que el viewport.
+ */
+export function catmullRomBezier(pts: Vec3[], i: number): [Vec3, Vec3, Vec3, Vec3] {
+  const { p1, p2, t1, t2 } = catmullRomHermite(pts, i)
+  const b1: Vec3 = [p1[0] + t1[0] / 3, p1[1] + t1[1] / 3, p1[2] + t1[2] / 3]
+  const b2: Vec3 = [p2[0] - t2[0] / 3, p2[1] - t2[1] / 3, p2[2] - t2[2] / 3]
+  return [p1, b1, b2, p2]
 }
 
 /** Curva SPLINE que pasa por los puntos dados (tesselada en segmentos). */
