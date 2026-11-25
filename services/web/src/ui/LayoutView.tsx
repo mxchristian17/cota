@@ -2,7 +2,8 @@ import { paperSnapProxies } from '../core/layout/transspatial'
 import { isolation, viewLayers, viewLayersOff } from '../core/editing/isolation'
 import { annoScaleOf, paperPerModel } from '../core/layout/scale'
 import { openContextMenu } from './DimContextMenu'
-import { useEffect, useRef, useState, type MutableRefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
+import { SCREEN_MARGIN, clipToScreen, frameOf, type ScreenFrame } from '../core/layout/screenClip'
 import { PAPER_COLOR, Viewport, type CameraState, type ViewportData } from '../render/Viewport'
 import { useStore } from '../store/store'
 import { sysvars } from '../core/commands/sysvars'
@@ -123,6 +124,10 @@ interface FloatingProps {
   entity: ViewportEntity
   rect: Rect
   clipPath?: string
+  /** Parte de la vista entera que muestra `rect` cuando el viewport se sale de la pantalla; null = entera. */
+  frame: ScreenFrame | null
+  /** Fuera de la pantalla: el viewport sigue vivo (su vista, MSPACE) pero no se pinta. */
+  offscreen?: boolean
   active: boolean
   /** VPMAX: ocupa toda el área de dibujo; la navegación no se guarda en la entidad (VPMIN la restaura). */
   maximized: boolean
@@ -131,12 +136,15 @@ interface FloatingProps {
 }
 
 /** Viewport flotante: una instancia de `Viewport` sobre el modelo, ubicada y recortada sobre la hoja. */
-function FloatingViewport({ entity, rect, clipPath, active, maximized, paperRef, floats }: FloatingProps) {
+function FloatingViewport({ entity, rect, clipPath, frame, offscreen, active, maximized, paperRef, floats }: FloatingProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const vpRef = useRef<Viewport | null>(null)
   const ready = useRef(false)
   const maxRef = useRef(maximized)
   maxRef.current = maximized
+  const viewFrame = maximized ? null : frame
+  const frameRef = useRef(viewFrame)
+  frameRef.current = viewFrame
   /** Última cámara de la entidad ya aplicada (o escrita): sólo un cambio de la entidad mueve la cámara. */
   const applied = useRef<CameraState | null>(null)
   const lastStyle = useRef<VisualStyle | null>(null)
@@ -184,6 +192,7 @@ function FloatingViewport({ entity, rect, clipPath, active, maximized, paperRef,
       'floating',
     )
     vpRef.current = vp
+    vp.setViewFrame(frameRef.current)
     floats.current.set(id, vp)
     st().registerViewport(vp)
     // VP Freeze: las capas congeladas en este viewport no se dibujan ni dan snaps. Se recalcula sólo al
@@ -245,11 +254,17 @@ function FloatingViewport({ entity, rect, clipPath, active, maximized, paperRef,
     ready.current = true
   })
 
+  // El recorte va antes de pintar (y antes de que el ResizeObserver ajuste el canvas): la vista y la caja que la
+  // contiene cambian en el mismo cuadro.
+  useLayoutEffect(() => {
+    vpRef.current?.setViewFrame(frameRef.current)
+  })
+
   return (
     <div
       ref={hostRef}
       className={`layout-vp-host${active ? ' active' : ''}${maximized ? ' maximized' : ''}`}
-      style={maximized ? undefined : { ...rect, clipPath }}
+      style={maximized ? undefined : { ...rect, clipPath, ...(offscreen ? { visibility: 'hidden' as const } : {}) }}
       data-testid={`layout-vp-${id}`}
     />
   )
@@ -376,13 +391,18 @@ export function LayoutView({ layoutId }: { layoutId: string }) {
   const maxId = doc.maximizedViewportId
   let sheet: Rect | null = null
   let printable: Rect | null = null
-  const hosts: { entity: ViewportEntity; rect: Rect; clipPath?: string }[] = []
+  const hosts: { entity: ViewportEntity; rect: Rect; clipPath?: string; frame: ScreenFrame | null; offscreen?: boolean }[] = []
+  // Sólo se pinta lo que cae en el área de dibujo (más un margen): con mucho zoom la hoja y los viewports miden
+  // millones de px y el teléfono se quedaba sin memoria.
+  const area = paperHostRef.current
+  const [cw, ch] = [area?.clientWidth || 1, area?.clientHeight || 1]
+  const onScreen = (r: Rect | null) => (r ? clipToScreen(r, cw, ch) : null)
   if (paper && layout) {
     const { width, height } = paperSizeMm(layout.pageSetup)
     paper.setSheet(width, height)
-    sheet = rectOf(paper, 0, 0, width, height)
+    sheet = onScreen(rectOf(paper, 0, 0, width, height))
     const a = printableArea(layout.pageSetup)
-    printable = rectOf(paper, a.minX, a.minY, a.maxX, a.maxY)
+    printable = onScreen(rectOf(paper, a.minX, a.minY, a.maxX, a.maxY))
     // Vista viva para los viewports encendidos hasta MAXACTVP; el de MSPACE siempre la tiene.
     const on = layoutViewports(doc).filter((v) => v.props.on && (!maxId || v.id === maxId))
     const live = on.slice(0, MAX_ACTIVE_VP)
@@ -390,14 +410,18 @@ export function LayoutView({ layoutId }: { layoutId: string }) {
     if (msVp && !live.includes(msVp)) live[live.length - 1] = msVp
     for (const v of live) {
       const c = viewportCorners(v.props)
-      const rect = rectOf(paper, c[0][0], c[0][1], c[2][0], c[2][1])
-      if (!rect) continue
+      const full = rectOf(paper, c[0][0], c[0][1], c[2][0], c[2][1])
+      if (!full) continue
+      // Fuera de la pantalla, un viewport mínimo y oculto: sigue montado (su vista y MSPACE no se pierden).
+      const seen = clipToScreen(full, cw, ch)
+      const rect = seen ?? { left: -SCREEN_MARGIN, top: -SCREEN_MARGIN, width: 1, height: 1 }
       let clipPath: string | undefined
       if (v.props.clip && v.props.clip.length >= 3) {
         const pts = v.props.clip.map(([x, y]) => paper.project({ x, y, z: 0 }) ?? [0, 0])
         clipPath = `polygon(${pts.map(([x, y]) => `${x - rect.left}px ${y - rect.top}px`).join(', ')})`
       }
-      hosts.push({ entity: v, rect, clipPath })
+      const frame = seen ? frameOf(full, seen) : { fullWidth: full.width, fullHeight: full.height, offsetX: 0, offsetY: 0 }
+      hosts.push({ entity: v, rect, clipPath, frame, offscreen: !seen })
     }
   }
 
@@ -422,6 +446,8 @@ export function LayoutView({ layoutId }: { layoutId: string }) {
           entity={h.entity}
           rect={h.rect}
           clipPath={h.clipPath}
+          frame={h.frame}
+          offscreen={h.offscreen}
           active={h.entity.id === ms}
           maximized={h.entity.id === maxId}
           paperRef={paperRef}

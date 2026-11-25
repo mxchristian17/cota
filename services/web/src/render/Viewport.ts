@@ -24,7 +24,7 @@ import { isSmall, lodActive, sizeSignature, type SizeSig } from '../core/render/
 import { faceUcsAt, type FaceHit } from '../core/editing/faceUcs'
 import { rayFaces, solidPending, solidTopology } from '../core/editing/topology'
 import { DEFAULT_VISUAL_STYLE, type CameraMode, type ViewName, type VisualStyle } from '../core/view'
-import { CameraController } from './CameraController'
+import { CameraController, type ViewFrame } from './CameraController'
 import { displaySolidEdges, displaySolidGeometry, displaySolidTopology, previewSolidGeometry } from './csg'
 import { meshRender, type MeshRender } from './meshBuffers'
 import { pointMarkTexture } from './pointMarks'
@@ -205,6 +205,11 @@ const BG_COLOR = 0x1e1e1e
 const HIGHLIGHT = 0x00e5ff
 /** Textos más chicos que esto (en px de alto) no se dibujan; y no más que tantos a la vez (ver `updateTextLabels`). */
 const MIN_TEXT_PX = 3
+/**
+ * Ni más grandes que tantas veces el lado mayor de la vista: con mucho zoom una letra de cientos de miles de
+ * px no se lee y el navegador del teléfono se quedaba sin memoria al dibujarla.
+ */
+const MAX_TEXT_SCREENS = 2
 /** Desde cuántos objetos un cambio de selección se resalta encima en vez de rehacer los lotes. */
 const BIG_DRAWING = 5000
 /** Desde qué distancia al origen del dibujo se dibuja relativo a un origen propio (ver `Viewport.origin`). */
@@ -773,7 +778,7 @@ export class Viewport {
     const { right, up } = this.viewAxes()
     const h = this.controller.viewHeight
     const t = this.controller.target
-    return { center: [t.x, t.y, t.z], right, up, width: (h * this.controller.pxWidth) / this.controller.pxHeight, height: h }
+    return { center: [t.x, t.y, t.z], right, up, width: h * this.controller.viewAspect, height: h }
   }
 
   /** Caja de lo dibujado (la extensión), o null si no hay nada. */
@@ -1796,6 +1801,8 @@ export class Viewport {
     this.renderer.setSize(this.width, this.height, false)
     this.lineweightZoom = -1
     this.controller.setSize(this.width, this.height)
+    // Cambiar el tamaño borra el canvas: con recorte cambia seguido (pan del papel), así que se dibuja ya.
+    if (this.controller.frame) this.drawNow()
   }
 
   /** Marca la escena como "sucia" → se re-dibuja en el próximo tick. */
@@ -2393,11 +2400,14 @@ export class Viewport {
   private updateTextLabels(): void {
     const wpp = this.controller.worldPerPx()
     const [w, h] = [this.width || 1, this.height || 1]
+    const maxPx = MAX_TEXT_SCREENS * Math.max(w, h)
     let shown = 0
     for (const l of this.textLabels) {
       // Fuera de la pantalla (con un margen: el texto sigue a la derecha de su punto), o de menos de 3 px de alto, como
-      // en el CAD clásico no se lee: no se crea su elemento. Con muchísimos a la vista, los primeros 3000.
-      const px = l.height / wpp >= MIN_TEXT_PX && shown < MAX_TEXT_LABELS ? this.controller.project(l.pos) : null
+      // en el CAD clásico no se lee: no se crea su elemento. Con muchísimos a la vista, los primeros 3000. Tampoco uno
+      // más alto que dos pantallas.
+      const tall = l.height / wpp
+      const px = tall >= MIN_TEXT_PX && tall <= maxPx && l.em / wpp <= maxPx && shown < MAX_TEXT_LABELS ? this.controller.project(l.pos) : null
       if (!px || px[0] < -w || px[0] > 2 * w || px[1] < -h || px[1] > 2 * h) {
         if (l.el) {
           l.el.remove()
@@ -3813,9 +3823,11 @@ export class Viewport {
   /** Reposiciona las etiquetas de cota y ajusta su tamaño de fuente al zoom (texto en unidades de mundo). */
   private updateDimLabels(): void {
     const wpp = this.controller.worldPerPx()
+    const [w, h] = [this.width || 1, this.height || 1]
     for (const l of this.dimLabels) {
-      const px = this.controller.project(l.pos)
-      if (!px) {
+      // Como los textos: fuera de la pantalla, o más alto que dos pantallas, no se dibuja.
+      const px = l.height / wpp <= MAX_TEXT_SCREENS * Math.max(w, h) ? this.controller.project(l.pos) : null
+      if (!px || px[0] < -w || px[0] > 2 * w || px[1] < -h || px[1] > 2 * h) {
         l.el.style.display = 'none'
         continue
       }
@@ -3946,25 +3958,55 @@ export class Viewport {
       }
 
       // Render ON-DEMAND: solo cuando algo cambió (clave para modelos pesados en reposo).
-      if (this.dirty) {
-        this.updateSnapGlyph()
-        this.updateBox()
-        this.updatePreview()
-        this.updateGrips()
-        this.updateDimLabels()
-        this.updateTextLabels()
-        this.aimLights()
-        this.updateLineweights()
-        this.updateSilhouettes()
-        rankScale.value = this.drawOrderOn() ? 1 : 0
-        this.renderer.render(this.scene, this.controller.camera)
-        this.dirty = false
-      }
+      if (this.dirty) this.draw()
     } catch (err) {
       console.warn('Cota: render loop error (continuing).', err)
     } finally {
       this.raf = requestAnimationFrame(this.tick)
     }
+  }
+
+  /** Dibuja el cuadro: lo que sigue a la cámara (marcas, etiquetas, grosores) y la escena. */
+  private draw(): void {
+    this.updateSnapGlyph()
+    this.updateBox()
+    this.updatePreview()
+    this.updateGrips()
+    this.updateDimLabels()
+    this.updateTextLabels()
+    this.aimLights()
+    this.updateLineweights()
+    this.updateSilhouettes()
+    rankScale.value = this.drawOrderOn() ? 1 : 0
+    this.renderer.render(this.scene, this.controller.camera)
+    this.dirty = false
+  }
+
+  /**
+   * Dibuja ya, sin esperar al próximo cuadro: al cambiar el tamaño del canvas (que lo borra) o su recorte, el
+   * contenido acompaña en el mismo cuadro a lo que se movió alrededor (la hoja, al hacer pan del papel).
+   */
+  private drawNow(): void {
+    try {
+      this.draw()
+    } catch (err) {
+      console.warn('Cota: redraw error (continuing).', err)
+      this.invalidate()
+    }
+  }
+
+  /**
+   * Recorte de la vista: el canvas muestra sólo la parte `frame` de una vista más grande (un viewport de
+   * layout que se sale de la pantalla), con la misma cámara. `null` = el canvas es la vista entera.
+   */
+  setViewFrame(frame: ViewFrame | null): void {
+    const c = this.controller
+    const a = c.frame
+    if (a === frame || (a && frame && a.fullWidth === frame.fullWidth && a.fullHeight === frame.fullHeight && a.offsetX === frame.offsetX && a.offsetY === frame.offsetY)) return
+    c.frame = frame ? { ...frame } : null
+    c.update()
+    this.lineweightZoom = -1
+    this.drawNow()
   }
 
   dispose(): void {

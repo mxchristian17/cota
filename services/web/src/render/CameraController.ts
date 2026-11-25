@@ -7,6 +7,14 @@ const EL_LIMIT = 1.5533 // ~89° (evita el gimbal lock del top/bottom exacto)
 const ORBIT_SWEEP = 1.5 * Math.PI
 const ORBIT_MIN_WIDTH = 400
 
+/** Parte visible (el canvas) de una vista más grande: tamaño de la vista entera y dónde empieza el canvas, en px. */
+export interface ViewFrame {
+  fullWidth: number
+  fullHeight: number
+  offsetX: number
+  offsetY: number
+}
+
 /**
  * Controla dos cámaras (ortográfica y perspectiva) sobre un objetivo orbitable,
  * con vistas estándar (TOP/BOTTOM/FRONT/BACK/LEFT/RIGHT/ISO).
@@ -24,6 +32,12 @@ export class CameraController {
   el = Math.PI / 2
   private width = 1
   private height = 1
+  /**
+   * Recorte de una vista más grande que su canvas (viewport de layout que se sale de la pantalla): la vista
+   * mide `fullWidth × fullHeight` px y el canvas muestra la parte que empieza en `offsetX, offsetY`. La cámara (objetivo,
+   * alto visible, ángulos) sigue siendo la de la vista entera; sólo se dibuja el pedazo visible.
+   */
+  frame: ViewFrame | null = null
 
   get camera(): THREE.Camera {
     return this.mode === 'ortho' ? this.ortho : this.persp
@@ -33,9 +47,22 @@ export class CameraController {
     return this.radius
   }
 
+  /** Ancho y alto en px de la vista entera (con recorte, más que el canvas). */
+  private get viewWidth(): number {
+    return this.frame?.fullWidth ?? this.width
+  }
+  private get viewPxHeight(): number {
+    return this.frame?.fullHeight ?? this.height
+  }
+
+  /** Proporción ancho / alto de la vista entera. */
+  get viewAspect(): number {
+    return this.viewWidth / this.viewPxHeight
+  }
+
   worldPerPx(): number {
-    if (this.mode === 'ortho') return this.orthoHeight / this.height
-    return (2 * this.radius * Math.tan(((this.persp.fov * Math.PI) / 180) / 2)) / this.height
+    if (this.mode === 'ortho') return this.orthoHeight / this.viewPxHeight
+    return (2 * this.radius * Math.tan(((this.persp.fov * Math.PI) / 180) / 2)) / this.viewPxHeight
   }
 
   /** Mundo por píxel a la profundidad de `p` (en perspectiva lo lejano se ve más chico). */
@@ -79,7 +106,7 @@ export class CameraController {
     const size = new THREE.Vector3()
     box.getSize(size)
     const sphere = Math.max(size.length() / 2, 1) // radio de esfera envolvente
-    const aspect = this.width / this.height
+    const aspect = this.viewAspect
     if (this.mode === 'persp') {
       const halfFov = ((this.persp.fov * Math.PI) / 180) / 2
       const distV = (sphere * pad) / Math.tan(halfFov)
@@ -205,7 +232,7 @@ export class CameraController {
    * 60 px giraban ~35° por eje y la vista se escapaba (R36); el mínimo de ancho deja el teléfono como estaba.
    */
   orbitRate(): number {
-    return ORBIT_SWEEP / Math.max(ORBIT_MIN_WIDTH, this.width)
+    return ORBIT_SWEEP / Math.max(ORBIT_MIN_WIDTH, this.viewWidth)
   }
 
   orbit(dxPx: number, dyPx: number): void {
@@ -284,7 +311,7 @@ export class CameraController {
   }
 
   update(): void {
-    const aspect = this.width / this.height
+    const aspect = this.viewAspect
     const eye = this.eye()
     const up = this.upVector()
 
@@ -308,6 +335,12 @@ export class CameraController {
     this.ortho.up.copy(up)
     this.ortho.lookAt(this.target)
     this.ortho.updateProjectionMatrix()
+    // Con recorte, cada cámara dibuja sólo la parte de la vista que cae en el canvas (las dos recalculan su proyección).
+    const f = this.frame
+    for (const cam of [this.persp, this.ortho]) {
+      if (f) cam.setViewOffset(f.fullWidth, f.fullHeight, f.offsetX, f.offsetY, this.width, this.height)
+      else if (cam.view?.enabled) cam.clearViewOffset()
+    }
   }
 
   rayFromNdc(nx: number, ny: number): THREE.Ray {

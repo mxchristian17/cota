@@ -4,6 +4,17 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.49.5] — 2026-11-25
+
+### Fixed
+- **Zooming far into a layout closed the browser on phones** (on the sheet, or into the model through a viewport): the
+  sheet, its printable area and each viewport were sized to their full size on screen, so with a lot of zoom they grew
+  to millions of pixels, and so did the canvas of each viewport (texts inside it reached fonts of almost a million
+  pixels). Like the virtual screen of the classic CAD, only the part that falls on screen is painted now: a viewport
+  that runs off the screen draws just that part of its view, with the same camera, so zoom, pan and selection work as
+  before. A text taller than two screens is no longer drawn, and dimension labels off the screen are hidden. When a
+  viewport was larger than the browser's canvas limit it also came out distorted; it now shows the right drawing.
+
 ## [2.49.4] — 2026-11-25
 
 ### Fixed
