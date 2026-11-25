@@ -29,6 +29,14 @@ import {
 /** Listas de vértices de mallas ya limpias de ruido (un ensamble grande no se recorre entero tras cada comando). */
 const cleanMeshVerts = new WeakSet<object>()
 
+/**
+ * Las líneas de patrón propias de un sombreado (`custom`, las de un DXF/DWG) no se limpian: no son ruido, y cada
+ * línea se repite millones de veces desde el origen del patrón. En un plano en coordenadas de terreno (millones de
+ * metros) redondear un corrimiento de 24,468054023822 a 24,468054 movía los trazos centímetros o decímetros y las
+ * piedras de GRAVEL no cerraban.
+ */
+const HATCH_EXACT: ReadonlySet<string> = new Set(['custom'])
+
 export const SCHEMA_VERSION = 1
 
 /** Id de la pestaña del espacio modelo (los layouts usan su propio id). */
@@ -984,7 +992,7 @@ export class DocumentModel {
     let n = 0
     for (const list of lists)
       for (const e of list) {
-        if (e.type !== 'MESH3D') n += cleanNumbersDeep(e.props)
+        if (e.type !== 'MESH3D') n += cleanNumbersDeep(e.props, 0, e.type === 'HATCH' ? HATCH_EXACT : undefined)
         else if (e.props.vertices && !cleanMeshVerts.has(e.props.vertices)) {
           // Las caras son índices (enteros); los vértices, una vez: las ediciones reemplazan la lista entera.
           const k = cleanNumbersDeep(e.props.vertices)

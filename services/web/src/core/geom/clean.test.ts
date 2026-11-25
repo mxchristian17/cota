@@ -17,4 +17,10 @@ describe('limpieza del ruido de punto flotante', () => {
     expect(cleanNumbersDeep(p)).toBe(2)
     expect(p).toEqual({ start: [1, 2, 0], pts: [{ x: 3, y: 1 }], name: 'a' })
   })
+
+  it('no toca las claves pedidas del primer nivel', () => {
+    const p = { a: 0.9999999999995453, keep: [24.468054023822404], deep: { keep: 2.0000000000001 } }
+    expect(cleanNumbersDeep(p, 0, new Set(['keep']))).toBe(2)
+    expect(p).toEqual({ a: 1, keep: [24.468054023822404], deep: { keep: 2 } })
+  })
 })

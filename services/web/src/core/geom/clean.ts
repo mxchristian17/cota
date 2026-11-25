@@ -12,12 +12,16 @@ export function cleanNumber(v: number): number {
   return r !== v && Math.abs(r - v) <= TOL * Math.max(1, Math.abs(v)) ? r + 0 : v
 }
 
-/** Limpia en el lugar todos los números de un objeto o arreglo (sin entrar en arreglos tipados). Devuelve cuántos cambió. */
-export function cleanNumbersDeep(o: unknown, depth = 0): number {
+/**
+ * Limpia en el lugar todos los números de un objeto o arreglo (sin entrar en arreglos tipados). Devuelve cuántos cambió.
+ * `skip`: claves del primer nivel que no se tocan (datos que no son ruido y que un redondeo arruina).
+ */
+export function cleanNumbersDeep(o: unknown, depth = 0, skip?: ReadonlySet<string>): number {
   if (depth > 8 || o === null || typeof o !== 'object' || ArrayBuffer.isView(o)) return 0
   let n = 0
   const rec = o as Record<string, unknown>
   for (const k of Object.keys(rec)) {
+    if (skip?.has(k)) continue
     const v = rec[k]
     if (typeof v === 'number') {
       const c = cleanNumber(v)

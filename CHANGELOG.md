@@ -4,6 +4,16 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.49.7] — 2026-11-25
+
+### Fixed
+- **Gravel and other file-defined hatch patterns came out broken in drawings with survey coordinates** (millions of
+  units from the origin): when a drawing is opened, and after each command, Cota rounds away floating-point noise
+  (0.9999999999995 becomes 1). That cleanup also reached the pattern lines stored in a hatch, and a value such as
+  24.468054023822 became 24.468054. Each pattern line repeats millions of times from the pattern origin, so the tiny
+  change moved the strokes by centimeters or decimeters far away: gravel stones came out open, with stray segments. The
+  pattern lines of a hatch are now kept exactly as read.
+
 ## [2.49.6] — 2026-11-25
 
 ### Fixed

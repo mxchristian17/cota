@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { HatchProps } from '../document/types'
+import type { HatchProps, PatternLine } from '../document/types'
+import { DocumentModel } from '../document/DocumentModel'
 import { hatchStrokes } from '../hatch/geometry'
 import { hatchDxf, parseHatch } from './dxfHatch'
 
@@ -106,5 +107,34 @@ describe('HATCH de un patrón de la biblioteca: mandan las líneas del archivo',
     expect(p.angle).toBeCloseTo(Math.PI / 6, 12)
     expect(p.imperial).toBeUndefined()
     expect(p.custom).toBeUndefined()
+  })
+})
+
+describe('Sombreado de un DXF en coordenadas de terreno (millones de unidades)', () => {
+  it('la limpieza del ruido numérico no redondea sus líneas de patrón: los trazos no se corren', () => {
+    // Un corrimiento real que queda a menos de 1e-9 relativo de 24,468054 (lo tomaba como ruido y lo redondeaba).
+    const custom: PatternLine[] = [
+      { angle: 228.0127875, origin: [1.46304, 2.032], delta: [24.468054023822404, 0.15103737059599887], dashes: [0.273377152, -27.064386911652] },
+      { angle: 184.969741, origin: [1.28016, 1.8288], delta: [-24.468361883015998, 0.08801569017921107], dashes: [0.46912377599999994, -46.44323911481919] },
+    ]
+    const X = 5_000_000
+    const Y = 6_000_000
+    const props: HatchProps = {
+      loops: [{ vertices: [[X, Y, 0], [X + 8, Y, 0], [X + 8, Y + 3, 0], [X, Y + 3, 0]] }],
+      pattern: 'GRAVEL',
+      scale: 1,
+      angle: 0,
+      origin: [0, 0, 0],
+      island: 'outer',
+      custom: structuredClone(custom),
+    }
+    const before = hatchStrokes(props).segs
+    const doc = DocumentModel.createDefault('t')
+    const e = doc.addEntity({ type: 'HATCH', layer: '0', props: structuredClone(props) })
+    doc.cleanNumbers()
+    expect((e.props as HatchProps).custom).toEqual(custom)
+    const after = hatchStrokes(e.props as HatchProps).segs
+    expect(after.length).toBe(before.length)
+    after.forEach((s, i) => s.forEach((q, j) => expect(Math.hypot(q[0] - before[i][j][0], q[1] - before[i][j][1])).toBeLessThan(1e-6)))
   })
 })
