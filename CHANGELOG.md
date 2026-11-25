@@ -4,6 +4,18 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.49.6] — 2026-11-25
+
+### Fixed
+- **Hatches with a standard pattern came out rotated or at the wrong density in some DXF and DWG files**: the classic
+  CAD draws a hatch with the pattern lines stored in the hatch itself; its angle and scale fields are only informative.
+  Cota rebuilt standard patterns from its own library using those fields, so when they disagreed with the stored lines
+  the hatch looked wrong. Some DWG files store the pattern angle in degrees where radians belong, which turned a brick
+  pattern at 315° into one at about 48°; and patterns from the imperial `acad.pat` in metric drawings came out 25.4
+  times sparser. Cota now picks the angle, scale and units that reproduce the stored lines, and when a pattern only
+  shares its name with a library one, it uses the stored lines as they are. Hatches whose fields already match their
+  lines, the usual case, import exactly as before.
+
 ## [2.49.5] — 2026-11-25
 
 ### Fixed

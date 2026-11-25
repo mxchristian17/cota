@@ -4,6 +4,7 @@ import { hatchPattern, SOLID, USER } from '../hatch/patterns'
 import { patternLinesOf } from '../hatch/geometry'
 import { angleFromOcs, angleToOcs, fromOcs, isWorldExtrusion, toOcs } from './dxfOcs'
 import { angleBulge } from '../geom/polyline'
+import { isImperial } from '../linetype/linetypes'
 
 /**
  * Entidad `HATCH` de DXF. Los lazos van como bordes de polilínea (con bulges) en el OCS de la
@@ -149,15 +150,19 @@ export function parseHatch(codes: Array<[number, string]>, units = 'mm'): HatchP
       if (dbl) out.double = true
     } else {
       out.scale = scale > 0 ? scale : 1
-      const lib = hatchPattern(name, units)
-      if (lib && lines.length) {
+      const fit = lines.length ? fitLibraryPattern(name, lines, ang, out.scale, units) : null
+      if (fit) {
+        out.scale = fit.scale
+        out.angle = angleFromOcs(fit.angle, n)
+        if (fit.imperial) out.imperial = true
         // Origen del patrón: el punto base de la primera línea menos su origen de definición (girado y escalado).
-        const o = lib.lines[0].origin
-        const ox = (o[0] * Math.cos(ang) - o[1] * Math.sin(ang)) * out.scale
-        const oy = (o[0] * Math.sin(ang) + o[1] * Math.cos(ang)) * out.scale
+        const o = fit.lines[0].origin
+        const ox = (o[0] * Math.cos(fit.angle) - o[1] * Math.sin(fit.angle)) * out.scale
+        const oy = (o[0] * Math.sin(fit.angle) + o[1] * Math.cos(fit.angle)) * out.scale
         out.origin = W(lines[0].origin[0] - ox, lines[0].origin[1] - oy)
       } else if (lines.length) {
-        // Patrón desconocido: sus líneas tal cual (ya giradas y escaladas).
+        // Patrón desconocido (o con el nombre de uno de la biblioteca pero otra definición): sus líneas tal cual
+        // (ya giradas y escaladas), como las dibuja el CAD clásico.
         out.custom = lines
         out.scale = 1
         out.angle = 0
@@ -168,6 +173,74 @@ export function parseHatch(codes: Array<[number, string]>, units = 'mm'): HatchP
   // Los objetos del contorno vienen por handle (que no se conservan): queda como sombreado no asociativo.
   void assoc
   return out
+}
+
+/** Patrón de la biblioteca que dibuja las mismas líneas que trae el archivo, con su ángulo (rad, OCS) y escala. */
+export interface LibraryFit {
+  lines: PatternLine[]
+  angle: number
+  scale: number
+  imperial: boolean
+}
+
+const wrapDeg = (a: number): number => ((((a + 180) % 360) + 360) % 360) - 180
+
+/**
+ * ¿Las líneas del archivo (ya giradas y escaladas, con el corrimiento en los ejes de cada línea) son las del patrón
+ * `lib` girado `ang` (rad) y escalado `s`? Ángulos, corrimientos, trazos y puntos base (relativos a la primera línea).
+ */
+function sameLines(lib: PatternLine[], file: PatternLine[], ang: number, s: number): boolean {
+  if (lib.length !== file.length || !(s > 0)) return false
+  const c = Math.cos(ang)
+  const sn = Math.sin(ang)
+  const angDeg = ang * DEG
+  return lib.every((l, k) => {
+    const f = file[k]
+    if (Math.abs(wrapDeg(f.angle - l.angle - angDeg)) > 1e-3 || f.dashes.length !== l.dashes.length) return false
+    // Tolerancia relativa al tamaño de la línea del patrón (los archivos escriben los números redondeados).
+    const size = s * Math.max(Math.hypot(l.delta[0], l.delta[1]), ...l.dashes.map(Math.abs), 1e-9)
+    const tol = 1e-4 * size
+    const near = (a: number, b: number) => Math.abs(a - b) <= tol
+    if (!near(f.delta[0], l.delta[0] * s) || !near(f.delta[1], l.delta[1] * s)) return false
+    if (!l.dashes.every((d, j) => near(f.dashes[j], d * s))) return false
+    const bx = (l.origin[0] - lib[0].origin[0]) * s
+    const by = (l.origin[1] - lib[0].origin[1]) * s
+    return near(f.origin[0] - file[0].origin[0], bx * c - by * sn) && near(f.origin[1] - file[0].origin[1], bx * sn + by * c)
+  })
+}
+
+/** Escala con la que `lib` da las líneas del archivo (cociente de la primera medida no nula), o NaN. */
+function scaleFromLines(lib: PatternLine[], file: PatternLine[]): number {
+  for (let k = 0; k < Math.min(lib.length, file.length); k++) {
+    const pairs: Array<[number, number]> = [[Math.hypot(...lib[k].delta), Math.hypot(...file[k].delta)], ...lib[k].dashes.map((d, j): [number, number] => [Math.abs(d), Math.abs(file[k].dashes[j] ?? 0)])]
+    for (const [a, b] of pairs) if (a > 1e-12 && b > 0) return b / a
+  }
+  return NaN
+}
+
+/**
+ * Patrón de la biblioteca para un HATCH de DXF. El CAD clásico dibuja con las líneas que guarda el sombreado,
+ * no con el ángulo (52) ni la escala (41), que sólo informan. Algunos archivos los traen mal: un DWG con el ángulo en
+ * grados donde van radianes (al pasarlo a grados, 315° quedaba en 18.048°) o un patrón de `acad.pat` (pulgadas) en un
+ * dibujo en mm. En orden: el ángulo y la escala del archivo (lo habitual), el patrón en pulgadas, el ángulo sacado de
+ * las líneas y, por último, también la escala. null si las líneas no son las de ese patrón (entonces van tal cual).
+ */
+export function fitLibraryPattern(name: string, file: PatternLine[], ang: number, scale: number, units = 'mm'): LibraryFit | null {
+  const imp = isImperial(units)
+  const own = hatchPattern(name, imp ? 'in' : 'mm')
+  if (!own || !file.length) return null
+  const other = hatchPattern(name, imp ? 'mm' : 'in')!
+  const variants = [{ lines: own.lines, imperial: imp }, { lines: other.lines, imperial: !imp }]
+  // Ángulo que lleva la primera línea de la biblioteca a la del archivo (rad, en [0, 2π)).
+  const fromLines = (lib: PatternLine[]) => ((((file[0].angle - lib[0].angle) % 360) + 360) % 360) / DEG
+  for (const v of variants) if (sameLines(v.lines, file, ang, scale)) return { ...v, angle: ang, scale }
+  for (const v of variants) {
+    const a = fromLines(v.lines)
+    if (sameLines(v.lines, file, a, scale)) return { ...v, angle: a, scale }
+  }
+  const a = fromLines(own.lines)
+  const s = scaleFromLines(own.lines, file)
+  return sameLines(own.lines, file, a, s) ? { lines: own.lines, imperial: imp, angle: a, scale: s } : null
 }
 
 function polyLoop(r: Reader, W: (x: number, y: number) => Vec3): HatchLoop | null {
