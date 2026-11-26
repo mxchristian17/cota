@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Entity } from '../document/types'
-import { isSmall, lodActive, LOD_MIN_ENTITIES, sizeKey, sizeSignature } from './lod'
+import { classifyPieces, isSmall, lodActive, lodKey, LOD_MIN_ENTITIES, sizeKey, sizeSignature } from './lod'
 
 const box = (id: string, x = 0): Entity =>
   ({ id, type: 'SOLID3D', layer: '0', props: { op: 'BOX', origin: [x, 0, 0], width: 4, depth: 2, height: 2 } }) as Entity
@@ -38,5 +38,20 @@ describe('dibujo por tamaño en pantalla', () => {
     const fillet = { id: 'f', type: 'SOLID3D', layer: '0', props: { op: 'UNION', operands: [box('x').props, box('y', 2).props] } } as Entity
     expect(lodActive([fillet], 3)).toBe(true)
     expect(lodActive(many, 0)).toBe(false)
+  })
+
+  it('cada pieza de un bloque tiene su clase aunque compartan el id de la inserción', () => {
+    // Un ensamble insertado: todas sus piezas llevan el id de la inserción. Un tornillo chico no manda todo a puntos.
+    const mesh = (size: number, x: number): Entity =>
+      ({ id: 'ins', type: 'MESH3D', layer: '0', props: { vertices: [[x, 0, 0], [x + size, 0, 0], [x, size, 0]], faces: [[0, 1, 2]] } }) as Entity
+    const big = mesh(400, 0)
+    const screw = mesh(1, 500)
+    const px = (s: { r: number }) => 2 * s.r // 1 unidad = 1 px
+    const small = classifyPieces([big, screw], px, 3, new Map())
+    expect(small.get(lodKey(screw))).toBe(true)
+    expect(small.get(lodKey(big))).toBeUndefined()
+    // Histéresis por pieza: entre 3 y 4 px cada una sigue como estaba (el tornillo punto, el resto completo).
+    const band = classifyPieces([big, screw], () => 3.5, 3, small)
+    expect([...band.keys()]).toEqual([lodKey(screw)])
   })
 })

@@ -184,6 +184,25 @@ describe('mensajes de error de DWG', () => {
     const inBlock = lines.find((e) => (e.props as unknown as { start: number[] }).start[0] === 100)
     expect((inBlock?.props as unknown as { end: number[] }).end).toEqual([100, 0, 20])
   })
+
+  it('los sólidos vacíos se quitan y se cuentan; uno guardado aparte que no se pudo leer sigue avisándose', () => {
+    const doc = new CadDocument()
+    const solid = (set: (s: Solid3D) => void) => {
+      const s = new Solid3D()
+      set(s)
+      doc.modelSpace!.entities.add(s)
+      return s
+    }
+    // Un vértice suelto (así los exporta algunos programas) y uno con el bit de «ACIS vacío» (sin modelo ni aristas).
+    solid((s) => (s.acisData = new TextEncoder().encode('400 2 1 0\n9 Cota test 8 ASM 1.0 0\n1 1e-06 1e-10\nvertex $-1 $-1 $1 #\npoint $-1 0 0 0 #\nEnd-of-ACIS-data\n')))
+    solid((s) => (s.modelerFormatVersion = 48))
+    // De 2013 en adelante el modelo va aparte (versión 2): sin él no se sabe si está vacío.
+    solid((s) => (s.modelerFormatVersion = 2))
+    const empty: Record<string, number> = {}
+    expect(solidsAsWires(doc, [], false, empty)).toBe(0)
+    expect(empty).toEqual({ '3DSOLID': 2 })
+    expect([...doc.modelSpace!.entities].filter((e) => e instanceof Solid3D)).toHaveLength(1)
+  })
 })
 
 describe('entidades proxy de un DXF', () => {

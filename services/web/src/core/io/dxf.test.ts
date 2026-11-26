@@ -544,6 +544,24 @@ describe('importDxf ▸ SOLID, 3DFACE y LEADER', () => {
     expect(r.entities[0].type).toBe('POLYLINE')
     expect((r.entities[0].props as unknown as { vertices: number[][] }).vertices).toEqual([[0, 0, 0], [5, 5, 0], [12, 5, 0]])
   })
+  it('LEADER de un solo vértice: nada que dibujar; se cuenta como vacío, no como no soportado', () => {
+    const r = importDxf(dxf([[0, 'LEADER'], [8, '0'], [71, 1], [73, 3], [76, 1], [10, 4], [20, 2], [30, 0]]))
+    expect(r.entities).toHaveLength(0)
+    expect(r.unsupported).toEqual([])
+    expect(r.empty).toEqual({ LEADER: 1 })
+  })
+  it('3DSOLID con un cuerpo vacío (un vértice suelto): vacío; uno ilegible sigue avisándose', () => {
+    // SAT de un DXF: cada carácter invertido (159 - código), renglón a renglón en el grupo 1.
+    const enc = (s: string) => [...s].map((ch) => (ch === ' ' ? ' ' : String.fromCharCode(159 - ch.charCodeAt(0)))).join('')
+    const solid = (sat: string): Array<[number, string | number]> => [[0, '3DSOLID'], [8, '0'], [100, 'AcDbModelerGeometry'], [70, 1], ...sat.trim().split('\n').map((l): [number, string] => [1, enc(l)])]
+    const empty = importDxf(dxf(solid('400 2 1 0\n9 Cota test 8 ASM 1.0 0\n1 1e-06 1e-10\nvertex $-1 $-1 $1 #\npoint $-1 0 0 0 #\nEnd-of-ACIS-data')))
+    expect(empty.entities).toHaveLength(0)
+    expect(empty.unsupported).toEqual([])
+    expect(empty.empty).toEqual({ '3DSOLID': 1 })
+    const broken = importDxf(dxf(solid('basura')))
+    expect(broken.unsupported).toEqual(['3DSOLID'])
+    expect(broken.empty).toBeUndefined()
+  })
 })
 
 describe('importDxf ▸ orden de dibujo (como el CAD clásico)', () => {

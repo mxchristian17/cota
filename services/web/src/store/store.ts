@@ -828,6 +828,7 @@ export const useStore = create<AppState>((set, get) => {
     if (unsupported.length) print(`Unsupported entities skipped: ${unsupported.join(', ')}.`)
     if (r.meshedSolids) print(`${r.meshedSolids} 3D solid(s) read with their faces (as meshes).`)
     if (r.wireSolids) print(`${r.wireSolids} 3D solid(s) shown by their edges (wireframe): their faces could not be read.`)
+    if (r.empty) print(`Empty objects left out (nothing to draw): ${Object.entries(r.empty).map(([k, n]) => `${n} ${k}`).join(', ')}.`)
     const noFile = entities.filter((e) => e.type === 'IMAGE' && !(e.props as ImageProps).data)
     if (noFile.length) {
       const names = [...new Set(noFile.map((e) => imageFileName(e.props as ImageProps)).filter(Boolean))]

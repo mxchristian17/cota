@@ -14,7 +14,7 @@ import { resolveDimVars, type DimStyleDef } from '../dimension/style'
 import { angleFromOcs, angleToOcs, fromOcs, isWorldExtrusion, toOcs } from './dxfOcs'
 import { normAngle } from '../geom/arc'
 import { catmullRomBezierSpline, dxfSplineThroughPoints } from '../geom/nurbs'
-import { acisEdges, sabFromHex, satFromDxf } from './acis'
+import { acisEdges, acisIsEmpty, sabFromHex, satFromDxf } from './acis'
 import { acisMesh, SOLID_MESH_REF } from './acisMesh'
 import { packedOf, reversePackedFaces, type PackedMesh } from './meshTransfer'
 import { fontLook, mtextLead, mtextRuns, type FontLook } from './dxfFont'
@@ -485,6 +485,11 @@ export interface DxfImportResult {
   unsupported: string[]
   /** Entidades que entraron simplificadas o sin una parte (se avisa al abrir): tipo → cantidad. */
   simplified?: Record<string, number>
+  /**
+   * Objetos vacíos que se omitieron: sin nada que dibujar, tampoco en el CAD clásico (un sólido sin caras ni aristas,
+   * una directriz de un solo vértice). No son «no soportados»: tipo → cantidad.
+   */
+  empty?: Record<string, number>
   /** Espacio papel: las hojas con contenido, en mm del papel. */
   layouts?: DxfLayoutSpec[]
   /**
@@ -835,6 +840,12 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
     return r ? num(r.codes, 140, 2.5) * (num(r.codes, 40, 1) || 1) : 2.5
   }
   const noteSimplified = (type: string) => (simplified[type] = (simplified[type] ?? 0) + 1)
+  const empty: Record<string, number> = {}
+  /** Objeto vacío: no se dibuja ni se avisa como no soportado. */
+  const noteEmpty = (type: string): Piece[] => {
+    empty[type] = (empty[type] ?? 0) + 1
+    return []
+  }
   /** Entidades con varias piezas o que no son una sola entidad de Cota. */
   const piecesOf = (rec: Rec): Piece[] | null => {
     const c = rec.codes
@@ -887,6 +898,9 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
       case 'LIGHT':
       case 'SUN':
         return [] // no son dibujo
+      case 'LEADER':
+        // Llega acá sin dos vértices (ver `parseEntity`): no hay trazo que dibujar.
+        return noteEmpty('LEADER')
       case 'ACAD_PROXY_ENTITY': {
         // Su dibujo de reemplazo, ya interpretado (ver `dxfProxyShapes`).
         const shapes = opts.proxyShapes?.get((str(c, 5) ?? '').toUpperCase())
@@ -912,7 +926,7 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
           return [{ type: 'MESH3D', props: { vertices: mesh.vertices, faces: mesh.faces } as EntityProps }]
         }
         const edges = acisEdges(model)
-        if (!edges.length) return null
+        if (!edges.length) return acisIsEmpty(model) ? noteEmpty(rec.type) : null
         wireSolids++
         return edges.map((v): Piece => (v.length === 2 ? { type: 'LINE', props: { start: v[0], end: v[1] } } : { type: 'POLYLINE', props: { vertices: v, closed: false } }))
       }
@@ -1506,6 +1520,7 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
     ...(wireSolids ? { wireSolids } : {}),
     ...(meshedSolids ? { meshedSolids } : {}),
     ...(Object.keys(simplified).length ? { simplified } : {}),
+    ...(Object.keys(empty).length ? { empty } : {}),
     ...(layouts.length ? { layouts } : {}),
     ...(blockSpecs.length ? { blocks: blockSpecs } : {}),
   }

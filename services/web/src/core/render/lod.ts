@@ -93,3 +93,26 @@ export function isSmall(px: number, minPx: number, prev: boolean | undefined): b
   if (px > minPx * LOD_HYSTERESIS) return false
   return prev ?? false
 }
+
+/**
+ * Clave de la clase de cada pieza. No sirve el id: las piezas de un bloque llevan todas el de su inserción (así se
+ * seleccionan juntas), y una sola pieza chica (un tornillo) mandaba todo el ensamble a puntos. Va la lista de vértices
+ * de la malla (la misma de una expansión a la siguiente, ver `ExpandMemo`) o las props del sólido.
+ */
+export const lodKey = (e: Entity): object => (e.type === 'MESH3D' ? e.props.vertices : e.props)
+
+/**
+ * Piezas que se dibujan como punto (las claves de `lodKey`), con histéresis respecto de la clasificación anterior.
+ * `px`: tamaño en pantalla de una firma. Deja en cada pieza su firma (D3: viaja con el dibujo).
+ */
+export function classifyPieces(entities: Entity[], px: (s: SizeSig) => number, minPx: number, prev: ReadonlyMap<object, boolean>): Map<object, boolean> {
+  const small = new Map<object, boolean>()
+  for (const e of entities) {
+    const sig = sizeSignature(e)
+    if (!sig || !isFinite(sig.r)) continue
+    if ((e as { size?: SizeSig }).size?.k !== sig.k) (e as { size?: SizeSig }).size = sig
+    const k = lodKey(e)
+    if (isSmall(px(sig), minPx, prev.get(k))) small.set(k, true)
+  }
+  return small
+}

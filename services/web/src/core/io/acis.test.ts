@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { acisEdges, acisRecords, modelOf, satFromDxf } from './acis'
+import { acisEdges, acisIsEmpty, acisRecords, modelOf, satFromDxf } from './acis'
 
 /** Un cuerpo con una recta y un arco de 90° de radio 10 en el origen, trasladado por su `transform` a (100, 0, 0). */
 const SAT = `400 2 1 0
@@ -25,8 +25,25 @@ point $-1 55 0 0 #
 End-of-ACIS-data
 `
 
+/** Cuerpo vacío como los que exportan algunos programas: sólo un vértice suelto en el origen, sin caras ni aristas. */
+const EMPTY_SAT = `400 2 1 0
+9 Cota test 8 ASM 1.0 0
+1 1e-06 1e-10
+vertex $-1 $-1 $1 #
+point $-1 0 0 0 #
+End-of-ACIS-data
+`
+
 describe('ACIS', () => {
   const edges = acisEdges(SAT)
+
+  it('cuerpo vacío: se lee y no tiene nada que dibujar; uno con aristas o uno ilegible no es vacío', () => {
+    expect(acisIsEmpty(EMPTY_SAT)).toBe(true)
+    expect(acisIsEmpty(new TextEncoder().encode(EMPTY_SAT))).toBe(true)
+    expect(acisIsEmpty(SAT)).toBe(false)
+    expect(acisIsEmpty('')).toBe(false)
+    expect(acisIsEmpty(new Uint8Array([65, 83, 77, 32, 66, 105, 110, 97, 114, 121, 70, 105, 108, 101, 52, 0, 1, 2]))).toBe(false)
+  })
 
   it('malla liviana (teléfonos): arcos en menos tramos, con un tope de tramos por vuelta', () => {
     const recs = acisRecords(SAT)

@@ -10,5 +10,12 @@ export function readCad(kind: 'dwg' | 'dxf', data: ArrayBuffer, light = false): 
   const text = kind === 'dxf' && !isBinaryDxf(raw) ? new TextDecoder().decode(raw) : null
   const conv = kind === 'dwg' ? convertDwgToDxfBytes(data, light) : !text ? binaryDxfToDxfBytes(data, light) : null
   const result = importDxf(conv ? new TextDecoder().decode(conv.bytes) : text!, { light, solidMeshes: conv?.solidMeshes, proxyShapes: text && dxfHasProxies(text) ? dxfProxyShapes(text) : undefined })
-  return conv?.wireSolids ? { ...result, wireSolids: (result.wireSolids ?? 0) + conv.wireSolids } : result
+  if (!conv) return result
+  const empty = { ...result.empty }
+  for (const [k, n] of Object.entries(conv.empty)) empty[k] = (empty[k] ?? 0) + n
+  return {
+    ...result,
+    ...(conv.wireSolids ? { wireSolids: (result.wireSolids ?? 0) + conv.wireSolids } : {}),
+    ...(Object.keys(empty).length ? { empty } : {}),
+  }
 }

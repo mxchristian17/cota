@@ -4,6 +4,19 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.49.9] — 2026-11-26
+
+### Fixed
+- **A whole assembly could show up as scattered dots in a large 3D model** while still being selectable: with many
+  objects, parts smaller than `RENDERMINPX` on screen are drawn as a dot, but that size class was kept per object id,
+  and every part of an inserted block shares the id of its block reference. A single small part (a screw) turned all
+  the parts of its assembly into dots. Each part now gets its own class, so only the parts that are really small on
+  screen become dots.
+- **Empty solids and leaders are no longer reported as unsupported** when opening a DWG or DXF: 3D solids whose ACIS
+  model has no faces or edges (a lone vertex, or a solid the file marks as empty) and leaders with a single vertex
+  have nothing to draw, in Cota or in the classic CAD. They are left out and listed as empty objects. A model that
+  cannot be read is still reported as unsupported.
+
 ## [2.49.8] — 2026-11-26
 
 ### Fixed

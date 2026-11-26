@@ -20,7 +20,7 @@ import { segmentsOfEntity } from '../core/snap/segments'
 import { dimDisplay } from '../core/dimension/dimGeometry'
 import { isWorldUcs, ORTHO_UCS, orthoUcs, sameUcs, ucsZ, WORLD_UCS, type OrthoUcsName, type Ucs } from '../core/ucs'
 import { sysvars } from '../core/commands/sysvars'
-import { isSmall, lodActive, sizeSignature, type SizeSig } from '../core/render/lod'
+import { classifyPieces, lodActive, lodKey, sizeSignature } from '../core/render/lod'
 import { faceUcsAt, type FaceHit } from '../core/editing/faceUcs'
 import { rayFaces, solidPending, solidTopology } from '../core/editing/topology'
 import { DEFAULT_VISUAL_STYLE, type CameraMode, type ViewName, type VisualStyle } from '../core/view'
@@ -379,7 +379,8 @@ export class Viewport {
   private expanded: Entity[] | null = null
   /** Dibujo por tamaño en pantalla: activo, clase de cada pieza (true = punto) y balde de zoom. */
   private lodOn = false
-  private lodSmall = new Map<string, boolean>()
+  /** Piezas que se dibujan como punto, por `lodKey` (no por id: las de un bloque comparten el de su inserción). */
+  private lodSmall = new Map<object, boolean>()
   private lodBucket = ''
   /** Por entidad: orden de dibujo de su capa (mayor = más arriba) y su posición en la lista. */
   private pickOrder = new Map<string, { o: number; i: number }>()
@@ -2554,19 +2555,8 @@ export class Viewport {
       this.lodSmall.clear()
       return had
     }
-    let changed = false
-    const next = new Map<string, boolean>()
-    for (const e of entities) {
-      const sig = sizeSignature(e)
-      if (!sig || !isFinite(sig.r)) continue
-      // D3: la firma viaja con el dibujo (se guarda en el .cota con la clave de su contenido).
-      if ((e as { size?: SizeSig }).size?.k !== sig.k) (e as { size?: SizeSig }).size = sig
-      const prev = this.lodSmall.get(e.id)
-      const small = isSmall(this.sizePx(sig.c, sig.r), minPx, prev)
-      if (small) next.set(e.id, true)
-      if ((prev ?? false) !== small) changed = true
-    }
-    if (next.size !== this.lodSmall.size) changed = true
+    const next = classifyPieces(entities, (s) => this.sizePx(s.c, s.r), minPx, this.lodSmall)
+    const changed = next.size !== this.lodSmall.size || [...next.keys()].some((k) => !this.lodSmall.has(k))
     this.lodSmall = next
     return changed
   }
@@ -2695,7 +2685,7 @@ export class Viewport {
           b.ids.push(e.id)
           continue
         }
-        if ((e.type === 'SOLID3D' || e.type === 'MESH3D') && this.lodSmall.get(e.id)) {
+        if ((e.type === 'SOLID3D' || e.type === 'MESH3D') && this.lodSmall.get(lodKey(e))) {
           // Más chica que RENDERMINPX: un punto en su centro, sin evaluar su CSG.
           const sig = sizeSignature(e)!
           const k = `${ro}|${colorHex}`
@@ -3152,7 +3142,7 @@ export class Viewport {
     const byColor = new Map<string, number[]>()
     const toViewer = dir.clone().negate()
     for (const e of this.entities()) {
-      if (e.type !== 'SOLID3D' || this.lodSmall.get(e.id)) continue
+      if (e.type !== 'SOLID3D' || this.lodSmall.get(lodKey(e))) continue
       const layer = layers.get(e.layer)
       if (!layerVisible(layer) || solidPending(e.props)) continue // en boceto: sin siluetas hasta el resultado exacto
       const topo = solidTopology(e.props)

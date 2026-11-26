@@ -1,6 +1,6 @@
 import { CadDictionary, DimensionArc, DwgHeaderReader, DwgReader, Field, FieldList, Hatch, DxfReader, DxfWriter, GraphicsType, Insert, ProxyGeometryReader, Line, Mesh, ModelerGeometry, MText, MultiLeader, Polyline3D, ProxyEntity, Solid, UnknownEntity, XYZ, type CadDocument, type Entity, type IProxyGeometry, type ModelerGeometryWire } from '@node-projects/acad-ts'
 
-import { acisEdges } from './acis'
+import { acisEdges, acisIsEmpty } from './acis'
 import { acisMesh, SOLID_MESH_REF } from './acisMesh'
 import { packMesh, type PackedMesh } from './meshTransfer'
 
@@ -17,6 +17,8 @@ export interface CadConversion {
   wireSolids: number
   /** Mallas de los sólidos leídos con sus caras: el DXF las nombra por su posición acá (ver `SOLID_MESH_REF`). */
   solidMeshes: PackedMesh[]
+  /** Sólidos vacíos (sin nada que dibujar) que se omitieron: tipo → cantidad. */
+  empty: Record<string, number>
 }
 
 /**
@@ -56,11 +58,12 @@ export function convertDwgToDxfBytes(data: ArrayBuffer, light = false): CadConve
   readLwDisplayFlag()
   const doc = DwgReader.readFromStream(data, null)
   const solidMeshes: PackedMesh[] = []
-  const wireSolids = solidsAsWires(doc, solidMeshes, light)
+  const empty: Record<string, number> = {}
+  const wireSolids = solidsAsWires(doc, solidMeshes, light, empty)
   simplifyForDxf(doc)
   adoptOrphans(doc)
   hatchAnglesToDegrees(doc)
-  return { bytes: writeDxfBytes(doc), wireSolids, solidMeshes }
+  return { bytes: writeDxfBytes(doc), wireSolids, solidMeshes, empty }
 }
 
 /** ¿DXF binario? Empieza con "AutoCAD Binary DXF" (el importador lee el de texto). */
@@ -70,11 +73,12 @@ export const isBinaryDxf = (b: Uint8Array): boolean => b.length > 18 && new Text
 export function binaryDxfToDxfBytes(data: ArrayBuffer, light = false): CadConversion {
   const doc = DxfReader.readFromStream(new Uint8Array(data))
   const solidMeshes: PackedMesh[] = []
-  const wireSolids = solidsAsWires(doc, solidMeshes, light)
+  const empty: Record<string, number> = {}
+  const wireSolids = solidsAsWires(doc, solidMeshes, light, empty)
   simplifyForDxf(doc)
   adoptOrphans(doc)
   hatchAnglesToDegrees(doc)
-  return { bytes: writeDxfBytes(doc), wireSolids, solidMeshes }
+  return { bytes: writeDxfBytes(doc), wireSolids, solidMeshes, empty }
 }
 
 /**
@@ -162,8 +166,9 @@ function wirePoint(w: ModelerGeometryWire, p: XYZ): XYZ {
  * malla (en `meshes`; en el dibujo queda una MESH que la nombra, así también se ubica dentro de los bloques). Los que no
  * tienen caras legibles se reemplazan por sus aristas: las guardadas como puntos (lo que el CAD clásico dibuja en
  * alambre) o las del modelo. Todo en su capa, color y tipo de línea. Devuelve cuántos quedaron como aristas.
+ * Los vacíos (ver `solidIsEmpty`) se quitan y se cuentan en `empty` por tipo: no hay nada que dibujar.
  */
-export function solidsAsWires(doc: CadDocument, meshes: PackedMesh[] = [], light = false): number {
+export function solidsAsWires(doc: CadDocument, meshes: PackedMesh[] = [], light = false, empty: Record<string, number> = {}): number {
   let n = 0
   for (const br of doc.blockRecords ?? []) {
     for (const e of [...br.entities]) {
@@ -189,7 +194,14 @@ export function solidsAsWires(doc: CadDocument, meshes: PackedMesh[] = [], light
         : e.acisData?.length
           ? acisEdges(e.acisData).map((poly) => poly.map(([x, y, z]) => new XYZ(x, y, z)))
           : []
-      if (!wires.length) continue
+      if (!wires.length) {
+        if (solidIsEmpty(e)) {
+          br.entities.remove(e)
+          const type = e.objectName || '3DSOLID'
+          empty[type] = (empty[type] ?? 0) + 1
+        }
+        continue
+      }
       for (const pts of wires) {
         if (pts.length < 2) continue
         let edge: Line | Polyline3D
@@ -210,6 +222,16 @@ export function solidsAsWires(doc: CadDocument, meshes: PackedMesh[] = [], light
     }
   }
   return n
+}
+
+/**
+ * ¿Sólido sin nada que dibujar? Su modelo ACIS se lee y no tiene caras ni aristas, o el DWG no trae modelo (el bit de
+ * «ACIS vacío»: acad-ts no lee datos y la versión del modelo no es 1 ni 2; los guardados aparte, de 2013 en adelante,
+ * llevan versión 2 y, si no se pudieron leer, siguen avisándose como no soportados) ni aristas ni siluetas.
+ */
+export function solidIsEmpty(e: ModelerGeometry): boolean {
+  if (e.acisData?.length) return acisIsEmpty(e.acisData)
+  return !e.wires?.length && !e.silhouettes?.length && e.modelerFormatVersion !== 1 && e.modelerFormatVersion !== 2
 }
 
 /** ¿El DXF de texto tiene entidades proxy? (su dibujo de reemplazo lo interpreta la librería). */

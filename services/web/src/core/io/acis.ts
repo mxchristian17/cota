@@ -401,6 +401,19 @@ export function acisRecords(data: Uint8Array | string): Rec[] {
   return signed(data) ? parseSab(data) : parseSat(new TextDecoder().decode(data))
 }
 
+/**
+ * ¿Modelo ACIS que se lee pero no tiene nada que dibujar (ni caras ni aristas)? Así llegan cuerpos vacíos: sólo un
+ * vértice suelto o el encabezado. El CAD clásico tampoco dibuja nada. Uno que no se puede leer no cuenta como vacío.
+ */
+export function acisIsEmpty(data: Uint8Array | string): boolean {
+  try {
+    const recs = acisRecords(data)
+    return recs.length > 0 && !recs.some((r) => kindOf(r) === 'face' || kindOf(r) === 'edge')
+  } catch {
+    return false
+  }
+}
+
 /** Aristas de un modelo ACIS en SAT o SAB; [] si no se puede leer. */
 export function acisEdges(data: Uint8Array | string): Vec3[][] {
   try {
