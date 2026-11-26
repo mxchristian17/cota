@@ -4,6 +4,17 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.49.8] — 2026-11-26
+
+### Fixed
+- **Gravel stones still did not close exactly in drawings far from the pattern origin**: each pattern line stored in a
+  hatch carries its angle with 7 to 10 significant digits, so every line is turned by a slightly different, tiny amount
+  around the pattern origin. Millions of units away (survey coordinates) that left each line off by millimeters or
+  centimeters, and the segments of a stone no longer met. Cota now moves the pattern origin next to the hatch by a
+  whole multiple of the pattern's common period, worked out from its lines, so the pattern is computed close by: stones
+  close exactly as they do near the origin, and the pattern stays in the same place. When no common period is found,
+  or the hatch is near its origin, nothing changes.
+
 ## [2.49.7] — 2026-11-25
 
 ### Fixed

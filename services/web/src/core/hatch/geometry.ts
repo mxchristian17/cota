@@ -152,6 +152,90 @@ interface Edge {
   hi: number
 }
 
+/** Una línea del patrón ubicada en el plano del sombreado: dirección, normal, punto base, corrimiento y trazos. */
+interface PatternFamily {
+  D: P2
+  N: P2
+  B0: P2
+  step: P2
+  dashes: number[]
+  period: number
+}
+
+const cross = (u: P2, v: P2): number => u[0] * v[1] - u[1] * v[0]
+const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a)
+
+/** Denominador q (≤ `maxQ`) de una fracción p/q a menos de 1e-8 (relativo) de `x`, o null (fracciones continuas). */
+export function smallDenominator(x: number, maxQ = 100): number | null {
+  const tol = 1e-8 * Math.max(1, Math.abs(x))
+  let [h0, h1, k0, k1] = [1, Math.floor(x), 0, 1]
+  let r = x - Math.floor(x)
+  for (;;) {
+    if (Math.abs(x - h1 / k1) <= tol) return k1
+    if (r < 1e-15) return null
+    const v = 1 / r
+    const a = Math.floor(v)
+    r = v - a
+    ;[h0, h1] = [h1, a * h1 + h0]
+    ;[k0, k1] = [k1, a * k1 + k0]
+    if (k1 > maxQ) return null
+  }
+}
+
+/** Centro de la caja de los lazos. */
+function ringsCenter(rings: P2[][]): P2 {
+  let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity]
+  for (const r of rings)
+    for (const [x, y] of r) {
+      x0 = Math.min(x0, x)
+      y0 = Math.min(y0, y)
+      x1 = Math.max(x1, x)
+      y1 = Math.max(y1, y)
+    }
+  return [(x0 + x1) / 2, (y0 + y1) / 2]
+}
+
+/**
+ * Corrimiento del origen del patrón hasta el sombreado, un múltiplo de su período común: el dibujo es el
+ * mismo, pero se calcula cerca y no a millones de unidades. Lejos, los números del archivo (ángulos y corrimientos con
+ * 7–10 cifras) dejan cada línea del patrón corrida distinto, milímetros o centímetros: las piedras de GRAVEL no
+ * cerraban. El período común sale de las líneas con trazos: el corrimiento y el período de una son combinaciones
+ * racionales simples de los de las otras (y, en las continuas, de su separación). Si no lo son (o está cerca), [0, 0].
+ */
+export function patternShift(fams: PatternFamily[], R: P2): P2 {
+  const f0 = fams.find((f) => f.dashes.length > 0 && f.period > 0)
+  if (!f0) return [0, 0]
+  const S0 = f0.step
+  const P0: P2 = [f0.D[0] * f0.period, f0.D[1] * f0.period]
+  const det = cross(S0, P0)
+  const size = Math.max(Math.hypot(S0[0], S0[1]), f0.period)
+  const d: P2 = [R[0] - f0.B0[0], R[1] - f0.B0[1]]
+  if (Math.hypot(d[0], d[1]) < 1000 * size || Math.abs(det) < 1e-12 * size * size) return [0, 0]
+  let M = 1
+  for (const f of fams) {
+    let xs: number[]
+    if (f.dashes.length > 0 && f.period > 0) {
+      // S0 y P0 en la base (corrimiento, período) de esta línea.
+      const P: P2 = [f.D[0] * f.period, f.D[1] * f.period]
+      const df = cross(f.step, P)
+      xs = [S0, P0].flatMap((v) => [cross(v, P) / df, cross(f.step, v) / df])
+    } else {
+      // Línea continua: S0 y P0 en múltiplos de su separación.
+      const dy = f.step[0] * f.N[0] + f.step[1] * f.N[1]
+      xs = [S0, P0].map((v) => (v[0] * f.N[0] + v[1] * f.N[1]) / dy)
+    }
+    for (const x of xs) {
+      const q = smallDenominator(x)
+      if (q === null) return [0, 0]
+      M = (M / gcd(M, q)) * q
+      if (M > 1000) return [0, 0]
+    }
+  }
+  const n1 = Math.round(cross(d, P0) / det / M)
+  const n2 = Math.round(cross(S0, d) / det / M)
+  return [M * (n1 * S0[0] + n2 * P0[0]), M * (n1 * S0[1] + n2 * P0[1])]
+}
+
 /**
  * Líneas del patrón dentro de los lazos (par-impar), en mundo. Cada familia se barre en el orden de su
  * normal; las aristas activas salen de una lista ordenada (barrido), así no se prueba cada línea contra
@@ -172,16 +256,24 @@ export function hatchStrokes(p: HatchProps): HatchStrokes {
   const ringEdges: Array<[P2, P2]> = []
   for (const r of rings) for (let i = 0; i < r.length; i++) ringEdges.push([r[i], r[(i + 1) % r.length]])
 
+  const fams: PatternFamily[] = []
   for (const pl of lines) {
     const a = (pl.angle * Math.PI) / 180 + th
     const D: P2 = [Math.cos(a), Math.sin(a)]
     const N: P2 = [-D[1], D[0]]
     const [ox, oy] = rot(pl.origin[0] * s, pl.origin[1] * s)
-    const B0: P2 = [O[0] + ox, O[1] + oy]
     // Corrimiento entre líneas sucesivas (en los ejes de la línea).
     const step: P2 = [(D[0] * pl.delta[0] + N[0] * pl.delta[1]) * s, (D[1] * pl.delta[0] + N[1] * pl.delta[1]) * s]
+    if (Math.abs(step[0] * N[0] + step[1] * N[1]) < 1e-12) continue
+    const dashes = pl.dashes.map((d) => d * s)
+    fams.push({ D, N, B0: [O[0] + ox, O[1] + oy], step, dashes, period: dashes.reduce((t, d) => t + Math.abs(d), 0) })
+  }
+  // Lejos del origen del patrón (un plano en coordenadas de terreno), se lo trae al lado del sombreado.
+  const G = patternShift(fams, ringsCenter(rings))
+  for (const fam of fams) fam.B0 = [fam.B0[0] + G[0], fam.B0[1] + G[1]]
+
+  for (const { D, N, B0, step, dashes, period } of fams) {
     const dn = step[0] * N[0] + step[1] * N[1]
-    if (Math.abs(dn) < 1e-12) continue
     const nOf = (q: P2): number => q[0] * N[0] + q[1] * N[1]
     const edges: Edge[] = ringEdges.map(([ea, eb]) => ({ a: ea, b: eb, lo: Math.min(nOf(ea), nOf(eb)), hi: Math.max(nOf(ea), nOf(eb)) }))
     edges.sort((x, y) => x.lo - y.lo)
@@ -192,8 +284,6 @@ export function hatchStrokes(p: HatchProps): HatchStrokes {
     let k1 = Math.floor((nMax - n0) / dn)
     if (k0 > k1) [k0, k1] = [k1, k0]
     if (k1 - k0 + 1 > MAX_HATCH_LINES) return { segs: [], dots: [], tooDense: true }
-    const dashes = pl.dashes.map((d) => d * s)
-    const period = dashes.reduce((t, d) => t + Math.abs(d), 0)
     const ks: number[] = []
     for (let k = k0; k <= k1; k++) ks.push(k)
     if (dn < 0) ks.reverse() // barrer en `n` creciente
