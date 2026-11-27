@@ -289,6 +289,8 @@ Type the name to see or change the value. Each one is explained in [System varia
 | [`RENDERMINPX`](reference/variables.md#renderminpx) | Draw solids smaller than this many pixels as a point (0 = off) |
 | [`SMOOTHANGLE`](reference/variables.md#smoothangle) | Shade solid faces that meet at less than this angle as one smooth surface (0 = faceted) |
 | [`SOLIDKERNEL`](reference/variables.md#solidkernel) | Kernel for 3D solids: OCCT = exact (B-rep, OpenCascade), MESH = triangle meshes |
+| [`SOLIDIMPORT`](reference/variables.md#solidimport) | Solids of an opened DWG/DXF: 0 = ask, 1 = convert all to exact solids, 2 = as meshes (convert each when selected or edited) |
+| [`SOLIDIDLE`](reference/variables.md#solididle) | Compute exact solids left as meshes while you are not working: 1 = on, 0 = off |
 | [`ZOOMWHEEL`](reference/variables.md#zoomwheel) | Mouse wheel direction: 0 = forward zooms in, 1 = forward zooms out |
 | [`ISAVEBAK`](reference/variables.md#isavebak) | Keep the previous version as a .bak file when saving to the local folder (0/1) |
 | [`SAVETIME`](reference/variables.md#savetime) | Minutes between automatic recovery copies (.sv$) in the local folder (0 = off) |

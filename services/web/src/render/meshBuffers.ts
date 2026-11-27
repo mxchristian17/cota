@@ -15,6 +15,13 @@ export interface MeshRender {
  */
 export function meshRender(vertices: ArrayLike<Vec3>, faces: ArrayLike<ArrayLike<number>>, creaseDeg = 30, origin: Vec3 = [0, 0, 0]): MeshRender {
   const nv = vertices.length
+  const P = new Float64Array(nv * 3)
+  for (let i = 0; i < nv; i++) {
+    const v = vertices[i]
+    P[i * 3] = v[0]
+    P[i * 3 + 1] = v[1]
+    P[i * 3 + 2] = v[2]
+  }
   let nt = 0
   for (let f = 0; f < faces.length; f++) if (faces[f].length >= 3) nt += faces[f].length - 2
   const tri = new Uint32Array(nt * 3)
@@ -27,16 +34,22 @@ export function meshRender(vertices: ArrayLike<Vec3>, faces: ArrayLike<ArrayLike
       tri[w++] = q[i + 1]
     }
   }
+  return meshRenderFlat(P, tri, creaseDeg, origin)
+}
+
+/** Lo mismo, de vértices seguidos (x, y, z) y triángulos por índice (los de un sólido importado o del núcleo). */
+export function meshRenderFlat(P: ArrayLike<number>, tri: Uint32Array, creaseDeg = 30, origin: Vec3 = [0, 0, 0]): MeshRender {
+  const nv = Math.floor(P.length / 3)
+  const nt = Math.floor(tri.length / 3)
   // Normal de cada triángulo: con área (para promediar) y unitaria (para comparar).
   const area = new Float64Array(nt * 3)
   const unit = new Float32Array(nt * 3)
   for (let t = 0; t < nt; t++) {
-    const a = vertices[tri[t * 3]]
-    const b = vertices[tri[t * 3 + 1]]
-    const c = vertices[tri[t * 3 + 2]]
-    if (!a || !b || !c) continue
-    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2]
-    const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2]
+    const ia = tri[t * 3], ib = tri[t * 3 + 1], ic = tri[t * 3 + 2]
+    if (ia >= nv || ib >= nv || ic >= nv) continue
+    const ax = P[ia * 3], ay = P[ia * 3 + 1], az = P[ia * 3 + 2]
+    const ux = P[ib * 3] - ax, uy = P[ib * 3 + 1] - ay, uz = P[ib * 3 + 2] - az
+    const vx = P[ic * 3] - ax, vy = P[ic * 3 + 1] - ay, vz = P[ic * 3 + 2] - az
     const x = uy * vz - uz * vy, y = uz * vx - ux * vz, z = ux * vy - uy * vx
     area[t * 3] = x
     area[t * 3 + 1] = y
@@ -89,10 +102,9 @@ export function meshRender(vertices: ArrayLike<Vec3>, faces: ArrayLike<ArrayLike
       sum[g * 3 + 2] += area[t * 3 + 2]
       out[k] = n + g
     }
-    const p = vertices[v]
     for (let i = 0; i < sum.length; i += 3) {
       const l = Math.hypot(sum[i], sum[i + 1], sum[i + 2]) || 1
-      pos.push(p[0] - origin[0], p[1] - origin[1], p[2] - origin[2])
+      pos.push(P[v * 3] - origin[0], P[v * 3 + 1] - origin[1], P[v * 3 + 2] - origin[2])
       nor.push(sum[i] / l, sum[i + 1] / l, sum[i + 2] / l)
     }
     n += sum.length / 3

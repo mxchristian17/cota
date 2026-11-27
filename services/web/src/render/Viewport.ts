@@ -25,7 +25,9 @@ import { faceUcsAt, type FaceHit } from '../core/editing/faceUcs'
 import { rayFaces, solidPending, solidTopology } from '../core/editing/topology'
 import { DEFAULT_VISUAL_STYLE, type CameraMode, type ViewName, type VisualStyle } from '../core/view'
 import { CameraController, type ViewFrame } from './CameraController'
-import { displaySolidEdges, displaySolidGeometry, displaySolidTopology, previewSolidGeometry } from './csg'
+import { brepKernelMesh, displaySolidEdges, displaySolidGeometry, displaySolidTopology, previewSolidGeometry } from './csg'
+import { BrepRenders } from './brepRender'
+import { brepCorners } from '../core/editing/brepLeaf'
 import { meshRender, type MeshRender } from './meshBuffers'
 import { pointMarkTexture } from './pointMarks'
 import { lineSpans, rangedRaycast } from './rangedRaycast'
@@ -1835,6 +1837,12 @@ export class Viewport {
         if (!b) return { c: new THREE.Vector3(), r: Infinity }
         return { c: new THREE.Vector3((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2), r: Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]) / 2 }
       }
+      if (e.type === 'SOLID3D' && e.props.op === 'BREP') {
+        // Una pieza importada, por su caja (sus aristas cuestan leer el modelo).
+        const pts = brepCorners(e.props)
+        const c = pts.reduce((a, p) => a.add(new THREE.Vector3(p[0], p[1], p[2])), new THREE.Vector3()).multiplyScalar(1 / 8)
+        return { c, r: Math.max(...pts.map((p) => c.distanceTo(new THREE.Vector3(p[0], p[1], p[2])))) }
+      }
       let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
       for (const poly of entityOutline(e)) {
         for (const p of poly) {
@@ -2515,6 +2523,8 @@ export class Viewport {
   }
 
   private readonly meshCache = new WeakMap<object, MeshRender & { edges: Float32Array; faces: unknown; at: string }>()
+  /** Lo que se dibuja de las piezas importadas solas (hojas `BREP`), por pasada de la escena (ver `BrepRenders`). */
+  private readonly brepRenders = new BrepRenders()
   /**
    * Triángulos indexados, normales y aristas de más de 30° de una malla, por su lista de vértices: deshacer o rehacer
    * copia el dibujo pero comparte esas listas, así que no se vuelven a calcular.
@@ -2568,6 +2578,7 @@ export class Viewport {
       this.imageTextures.delete(k)
     }
     this.rebuildSeq++
+    this.brepRenders.frame()
     this.classifyLod(entities)
     this.lodBucket = this.lodBucketKey()
     this.disposeGroup(this.entityGroup)
@@ -2699,6 +2710,27 @@ export class Viewport {
           // Triángulos, normales y aristas de la malla, calculados una vez por malla (cambiar de vista o de zoom no los
           // rehace: un modelo grande tardaba segundos en cada cambio).
           const m = this.meshBuffers(e.props)
+          if (showMesh) {
+            const b = getMesh(`${ro}|${style === 'hidden' ? `${bgHex}|flat` : this.faceHex(colorHex)}`)
+            b.ranges.push({ s: b.n, id: e.id })
+            b.parts.push(m)
+            b.n += m.idx.length
+            b.verts += m.pos.length / 3
+          }
+          if (showEdges && m.edges.length) {
+            const b = getEdges(`${ro}|${this.edgeHex(colorHex)}${lwKey(layer, e.lineWeight)}`)
+            b.ranges.push({ s: b.n, id: e.id })
+            b.parts.push(m.edges)
+            b.n += m.edges.length / 3
+          }
+          continue
+        }
+        if (e.type === 'SOLID3D' && e.props.op === 'BREP' && !e.props.threads?.length) {
+          // Pieza importada sola (con una rosca, por el camino de los sólidos, que dibuja su textura): como las mallas (triángulos indexados, la mitad de memoria) con sus aristas exactas, de
+          // la malla de la importación o, ya convertida, de la del núcleo. Sin ninguna todavía (un dibujo recién abierto),
+          // nada hasta que llega (ver `requestBrepDisplay`).
+          const m = this.brepRenders.get(e.props, [this.origin.x, this.origin.y, this.origin.z], brepKernelMesh(e.props))
+          if (!m) continue
           if (showMesh) {
             const b = getMesh(`${ro}|${style === 'hidden' ? `${bgHex}|flat` : this.faceHex(colorHex)}`)
             b.ranges.push({ s: b.n, id: e.id })
@@ -3142,7 +3174,9 @@ export class Viewport {
     const byColor = new Map<string, number[]>()
     const toViewer = dir.clone().negate()
     for (const e of this.entities()) {
-      if (e.type !== 'SOLID3D' || this.lodSmall.get(lodKey(e))) continue
+      // Una pieza importada sola no lleva siluetas, como las mallas importadas: armar la topología de miles de piezas
+      // trababa la apertura de un ensamble (vuelven con la topología exacta del núcleo).
+      if (e.type !== 'SOLID3D' || e.props.op === 'BREP' || this.lodSmall.get(lodKey(e))) continue
       const layer = layers.get(e.layer)
       if (!layerVisible(layer) || solidPending(e.props)) continue // en boceto: sin siluetas hasta el resultado exacto
       const topo = solidTopology(e.props)

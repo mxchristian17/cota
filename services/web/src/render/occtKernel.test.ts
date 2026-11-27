@@ -59,6 +59,44 @@ describe('cliente del núcleo exacto', () => {
     expect(seen).toEqual([[key]])
   })
 
+  it('baja prioridad: sale sólo con la cola normal vacía, de a uno, y lo del usuario pasa primero', async () => {
+    const k = await load()
+    const [a, b, c, u] = [1, 2, 3, 9].map(box)
+    for (const p of [a, b, c]) k.requestKernelBackground(JSON.stringify(p), p)
+    const w = FakeWorker.all[0]
+    expect(w.posted.map((m) => m.props)).toEqual([a]) // de a uno por Worker libre
+    expect(k.foregroundBusy()).toBe(false)
+    expect(k.backgroundPending()).toBe(3)
+    // El usuario pide algo: va al mismo Worker detrás del único de baja prioridad que está en curso.
+    k.requestKernel(JSON.stringify(u), u)
+    expect(w.posted.map((m) => m.props)).toEqual([a, u])
+    expect(k.foregroundBusy()).toBe(true)
+    w.reply({ id: w.posted[0].id, ok: true, mesh: okMesh, stats: okStats })
+    // Con lo del usuario en curso, nada de baja prioridad.
+    expect(w.posted).toHaveLength(2)
+    expect(k.wasBackground(JSON.stringify(a))).toBe(true)
+    w.reply({ id: w.posted[1].id, ok: true, mesh: okMesh, stats: okStats })
+    expect(k.wasBackground(JSON.stringify(u))).toBe(false)
+    expect(w.posted.map((m) => m.props)).toEqual([a, u, b])
+    // El usuario vuelve a hacer algo: lo que no empezó sale de la cola.
+    k.cancelBackground()
+    expect(k.backgroundPending()).toBe(1) // el que está en curso
+    w.reply({ id: w.posted[2].id, ok: true, mesh: okMesh, stats: okStats })
+    expect(w.posted).toHaveLength(3)
+    expect(k.kernelResult(JSON.stringify(c))).toBeUndefined()
+  })
+
+  it('un pedido del usuario saca a su sólido de la cola de baja prioridad', async () => {
+    const k = await load()
+    const [a, b] = [1, 2].map(box)
+    k.requestKernelBackground(JSON.stringify(a), a)
+    k.requestKernelBackground(JSON.stringify(b), b)
+    k.requestKernel(JSON.stringify(b), b)
+    const w = FakeWorker.all[0]
+    expect(w.posted.map((m) => m.props)).toEqual([a, b])
+    expect(k.backgroundPending()).toBe(1)
+  })
+
   it('manda dos a la vez y, de lo que espera, primero lo más nuevo', async () => {
     const k = await load()
     const [a, b, c, d] = [1, 2, 3, 4].map(box)

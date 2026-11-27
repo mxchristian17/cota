@@ -49,7 +49,8 @@ export function xrefCandidates(path: string, folder: string): { folder: string; 
 /**
  * Pone en el bloque `name` de `r` el modelo del archivo de la referencia (`x`), como el CAD clásico: las capas de la
  * referencia pasan a llamarse `NOMBRE|capa` (la 0 sigue siendo la 0), sus bloques `NOMBRE|bloque`, y sus estilos de cota
- * y tipos de línea se agregan si no existen. Las referencias anidadas en la referencia quedan vacías.
+ * y tipos de línea se agregan si no existen, igual que los modelos de sus sólidos. Las referencias anidadas en la
+ * referencia quedan vacías.
  */
 export function attachXref(r: DxfImportResult, name: string, x: DxfImportResult): void {
   const block = r.blocks?.find((b) => b.name === name)
@@ -78,4 +79,6 @@ export function attachXref(r: DxfImportResult, name: string, x: DxfImportResult)
   }
   for (const d of x.dimStyles) if (!r.dimStyles.some((s) => s.name === d.name)) r.dimStyles.push(d)
   for (const t of x.linetypes) if (!r.linetypes.some((s) => s.name.toLowerCase() === t.name.toLowerCase())) r.linetypes.push(t)
+  // Los modelos de sus sólidos importados viajan con el dibujo que la usa.
+  if (x.breps) r.breps = { ...r.breps, ...x.breps }
 }

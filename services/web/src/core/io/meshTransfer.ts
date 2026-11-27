@@ -1,6 +1,7 @@
 import type { Vec3 } from '../math'
 import type { MeshProps } from '../document/types'
 import type { DxfEntitySpec, DxfImportResult } from './dxf'
+import { displayBuffers } from './importedBrep'
 
 /**
  * Malla lista para cruzar de hilo sin copiarse: las coordenadas seguidas y las caras como (cantidad de vértices,
@@ -49,7 +50,7 @@ export function packMesh(m: { vertices: ArrayLike<ArrayLike<number>>; faces: Arr
 
 const specsOf = (r: DxfImportResult): DxfEntitySpec[][] => [r.entities, ...(r.layouts ?? []).map((l) => l.entities), ...(r.blocks ?? []).map((b) => b.entities)]
 
-/** Empaqueta (en el lugar) las mallas del resultado y devuelve los buffers a transferir. */
+/** Empaqueta (en el lugar) las mallas del resultado y devuelve los buffers a transferir (con los de `breps`). */
 export function packMeshes(r: DxfImportResult): ArrayBuffer[] {
   // Las copias de un mismo bloque comparten sus caras: se empaquetan una vez.
   const facesOf = new Map<unknown, Uint32Array>()
@@ -74,6 +75,9 @@ export function packMeshes(r: DxfImportResult): ArrayBuffer[] {
       transfer.add(pos.buffer as ArrayBuffer)
       transfer.add(faces.buffer as ArrayBuffer)
     }
+  // Lo que se dibuja de cada sólido importado. Sus bytes no: se copian, porque el lector los sigue usando para
+  // comprimirlos después de mandar el dibujo (ver `cadWorker`).
+  for (const b of Object.values(r.breps ?? {})) for (const buf of displayBuffers(b.display)) transfer.add(buf)
   return [...transfer]
 }
 

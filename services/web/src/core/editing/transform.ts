@@ -1,3 +1,4 @@
+import { transformBrepInPlace } from './brepLeaf'
 import { mapHatch } from '../hatch/edit'
 import { mapRegion } from '../region/region'
 import { mapImage } from '../geom/image'
@@ -119,6 +120,9 @@ export function axisAligned(ax: MirrorAxis): boolean {
 export function mirrorSolid(p: SolidProps, ax: MirrorAxis): boolean {
   mapOwnThreads(p, (v) => mirrorPoint(v, ax))
   switch (p.op) {
+    case 'BREP':
+      transformBrepInPlace(p, (v) => mirrorPoint(v, ax))
+      return true
     case 'EXTRUDE':
       p.profile = p.profile.map((v) => mirrorPoint(v, ax))
       if (p.axis) p.axis = mirrorDirection(p.axis, ax)

@@ -1,3 +1,4 @@
+import { transformBrepInPlace } from './brepLeaf'
 import { hatchPoints, mapHatch } from '../hatch/edit'
 import { mapRegion, regionPoints } from '../region/region'
 import { imageRing, mapImage } from '../geom/image'
@@ -110,6 +111,9 @@ function entityPoints(e: Entity): Vec3[] {
 function rotateSolid(p: SolidProps, cx: number, cy: number, cos: number, sin: number): void {
   mapOwnThreads(p, (v) => rot(v, cx, cy, cos, sin))
   switch (p.op) {
+    case 'BREP':
+      transformBrepInPlace(p, (v) => rot(v, cx, cy, cos, sin))
+      break
     case 'EXTRUDE':
       p.profile = p.profile.map((v) => rot(v, cx, cy, cos, sin))
       if (p.axis) p.axis = rot(p.axis, 0, 0, cos, sin) // un perfil fuera de planta se extruye de lado

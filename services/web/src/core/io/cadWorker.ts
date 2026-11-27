@@ -1,5 +1,7 @@
 import { readCad } from './cadRead'
 import { packMeshes } from './meshTransfer'
+import { encodeBrep } from '../document/brepStore'
+import type { BrepModel } from '../document/types'
 
 /**
  * Hilo aparte que lee un DWG o un DXF (ver `importCadInWorker`): la pantalla sigue respondiendo y el hilo principal
@@ -17,6 +19,13 @@ ctx.onmessage = (e) => {
     // Las mallas viajan como buffers transferidos (sin copia): ver `packMeshes`.
     const transfer = packMeshes(out)
     ctx.postMessage({ ok: true, result: out }, transfer)
+    // Ya mandado el dibujo, los modelos de los sólidos comprimidos (lo que se guarda): comprimirlos antes demoraba la
+    // apertura más de un segundo en un ensamble grande.
+    if (out.breps) {
+      const models: Record<string, BrepModel> = {}
+      for (const [ref, b] of Object.entries(out.breps)) models[ref] = encodeBrep(b.bytes, b.fmt).model
+      ctx.postMessage({ models })
+    }
   } catch (err) {
     ctx.postMessage({ ok: false, error: err instanceof Error ? err.message : String(err) })
   }

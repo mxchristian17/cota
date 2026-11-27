@@ -199,7 +199,7 @@ describe('mensajes de error de DWG', () => {
     // De 2013 en adelante el modelo va aparte (versión 2): sin él no se sabe si está vacío.
     solid((s) => (s.modelerFormatVersion = 2))
     const empty: Record<string, number> = {}
-    expect(solidsAsWires(doc, [], false, empty)).toBe(0)
+    expect(solidsAsWires(doc, undefined, false, empty)).toBe(0)
     expect(empty).toEqual({ '3DSOLID': 2 })
     expect([...doc.modelSpace!.entities].filter((e) => e instanceof Solid3D)).toHaveLength(1)
   })

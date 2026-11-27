@@ -1,18 +1,25 @@
 import * as THREE from 'three'
 import { ADDITION, Brush, Evaluator, INTERSECTION, SUBTRACTION } from 'three-bvh-csg'
 import type { Vec3 } from '../core/math'
-import type { EdgeBlendProps, MeshProps, RevolveProps, SolidBasis, SolidProps } from '../core/document/types'
+import type { BrepProps, EdgeBlendProps, MeshProps, RevolveProps, SolidBasis, SolidProps } from '../core/document/types'
+import type { OcctMesh } from '../core/occt/occtEval'
 import { revolveMesh } from '../core/editing/revolve'
 import { sweepStartRef } from '../core/editing/solid'
 import { positiveLeaf } from '../core/editing/solidLeaf'
 import { buildTopology, forgetAllSolidTopologies, forgetSolidTopology, registerSolidMesher, registerSolidPending, solidTopology, type SurfShape, type Topology } from '../core/editing/topology'
-import { kernelAvailable, kernelResult, onKernelResults, requestKernel, type KernelResult } from './occtKernel'
+import { kernelAvailable, kernelResult, onKernelResults, requestKernel, wasBackground, type KernelResult } from './occtKernel'
 import { blendTools } from '../core/editing/edgeBlend'
 import { dropStrayTriangles, type BoolOp } from './csgClean'
 import { closeTJunctions } from './tjunctions'
 import { LruCache } from '../core/lru'
+import { cleanMeshNumber } from '../core/geom/clean'
 import { sysvars } from '../core/commands/sysvars'
 import { smoothShading } from './smoothShading'
+import { brepMeshGeometry } from './brepMesh'
+import { brepWanted } from './brepConvert'
+import { onBrepDisplays } from './brepDisplayPool'
+import { brepWire } from '../core/editing/brepLeaf'
+import { arcOfCircle, registerKernelEdges, type ExactEdge } from '../core/editing/exactEdges'
 
 /** Segmentos de una primitiva curva, acotados (un `.cota` o la IA pueden traer valores absurdos). */
 export const MAX_SEGMENTS = 512
@@ -451,6 +458,8 @@ function orientAlongAxis(geom: THREE.BufferGeometry, base: Vec3, height: number,
 function leafGeometry(raw: SolidProps): THREE.BufferGeometry | null {
   const props = positiveLeaf(raw)
   switch (props.op) {
+    case 'BREP':
+      return brepMeshGeometry(props)
     case 'EXTRUDE':
       return extrudeGeometry(props.profile, props.height, props.axis)
     case 'BOX': {
@@ -662,14 +671,34 @@ function wantsKernel(p: SolidProps): boolean {
       return !!p.arcs?.length // los arcos del perfil salen exactos
     case 'SWEEP':
       return !!p.smooth
+    case 'BREP':
+      // Sola, la pieza importada se dibuja con la malla de la importación hasta que se la convierte (ver `brepConvert`).
+      return brepWanted(p.ref)
     default:
       return true
   }
 }
 
-function exactGeometry(props: SolidProps, key: string): THREE.BufferGeometry | null {
-  if (sysvars.SOLIDKERNEL !== 'OCCT' || !kernelAvailable() || !wantsKernel(props)) return null
+/**
+ * Malla del núcleo exacto de una pieza importada sola (para dibujarla en lotes, ver `BrepRenders`); null si no se
+ * convierte, si no llegó todavía (se pide) o si el núcleo no pudo (queda la de la importación).
+ */
+export function brepKernelMesh(props: BrepProps): OcctMesh | null {
+  syncKernel()
+  if (sysvars.SOLIDKERNEL !== 'OCCT' || !kernelAvailable()) return null
+  const key = JSON.stringify(props)
   const r = kernelResult(key)
+  // Un resultado que ya está se usa aunque la pieza no se haya pedido (lo calculó la conversión en los ratos libres).
+  if (!r && brepWanted(props.ref)) requestKernel(key, props)
+  return r?.ok ? r.mesh : null
+}
+
+function exactGeometry(props: SolidProps, key: string): THREE.BufferGeometry | null {
+  if (sysvars.SOLIDKERNEL !== 'OCCT' || !kernelAvailable()) return null
+  const r = kernelResult(key)
+  // Una pieza importada sin pedir, con resultado (de los ratos libres): se usa.
+  if (props.op === 'BREP' && r?.ok && !wantsKernel(props)) return kernelGeometry(r)
+  if (!wantsKernel(props)) return null
   if (!r) {
     requestKernel(key, props)
     return null
@@ -720,7 +749,8 @@ function meshTopology(props: SolidProps): Topology {
   return topo
 }
 
-type SolidsListener = () => void
+/** `background`: todo lo que llegó lo calculó la conversión en los ratos libres (su redibujo puede esperar). */
+type SolidsListener = (info: { background: boolean }) => void
 const solidsListeners = new Set<SolidsListener>()
 /** Avisa cuando cambia la geometría de sólidos ya dibujados (llegó el resultado del núcleo exacto, cambió el núcleo). */
 export function onSolidsChanged(fn: SolidsListener): () => void {
@@ -728,16 +758,23 @@ export function onSolidsChanged(fn: SolidsListener): () => void {
   return () => solidsListeners.delete(fn)
 }
 
+// Llegó lo que se dibuja de piezas importadas de un dibujo guardado (ver `brepDisplayPool`): se vuelve a dibujar.
+onBrepDisplays(() => {
+  for (const fn of solidsListeners) fn({ background: false })
+})
+
 onKernelResults((keys) => {
   for (const key of keys) {
     roughCache.delete(key)
     if (!kernelResult(key)?.ok) continue // falló: queda (o se calcula ahora) la malla
     cache.delete(key)
     edgeCache.delete(key)
+    exactEdgeCache.delete(key)
     forgetSolidTopology(key)
   }
   // También con las fallas: lo que se mostraba como boceto pasa a la malla.
-  if (keys.length) for (const fn of solidsListeners) fn()
+  const background = keys.map(wasBackground).every(Boolean)
+  if (keys.length) for (const fn of solidsListeners) fn({ background })
 })
 
 /**
@@ -892,7 +929,7 @@ export function previewSolidGeometry(props: SolidProps): THREE.BufferGeometry | 
   }
 }
 
-const LEAF_OPS = new Set(['BOX', 'CYLINDER', 'CONE', 'SPHERE', 'EXTRUDE', 'REVOLVE', 'TORUS'])
+const LEAF_OPS = new Set(['BOX', 'CYLINDER', 'CONE', 'SPHERE', 'EXTRUDE', 'REVOLVE', 'TORUS', 'BREP'])
 const edgeCache = new LruCache<string, Float32Array>(4000)
 
 /**
@@ -907,6 +944,14 @@ export function solidEdgePositions(props: SolidProps): Float32Array {
   const hit = edgeCache.get(key)
   if (hit) return hit
   let out: Float32Array
+  if (props.op === 'BREP') {
+    // Una pieza importada sola: las aristas exactas de su modelo (las mismas con o sin el núcleo).
+    const pos: number[] = []
+    for (const pl of brepWire(props)) for (let i = 0; i + 1 < pl.length; i++) pos.push(...pl[i], ...pl[i + 1])
+    out = new Float32Array(pos)
+    edgeCache.set(key, out)
+    return out
+  }
   const topo = LEAF_OPS.has(props.op) && !solidGeometry(props).userData.exact ? null : solidTopology(props)
   if (topo) {
     const pos: number[] = []
@@ -952,14 +997,48 @@ export function exactSolidVolume(props: SolidProps): number | null {
   return r?.ok && r.stats.volume > 0 ? r.stats.volume : null
 }
 
+/** Masa exacta de un sólido (densidad 1) del resultado del núcleo: volumen, centroide e inercia respecto de él. */
+export function exactSolidMass(props: SolidProps): { volume: number; centroid: Vec3; inertia: number[] } | null {
+  const r = kernelResult(JSON.stringify(props))
+  if (!r?.ok || !(r.stats.volume > 0) || !r.stats.centroid || r.stats.inertia?.length !== 9) return null
+  return { volume: r.stats.volume, centroid: r.stats.centroid, inertia: r.stats.inertia }
+}
+
 /** Evalúa un sólido a malla de triángulos (vértices + caras) para exportar a OBJ. */
 export function solidMesh(props: SolidProps): MeshProps {
   const { vertices, faces } = solidMeshWithSurfaces(props)
   return { vertices, faces }
 }
 
+/** Clave del resultado con teselado fino de una pieza importada sola (para proyectarla en una vista). */
+export const viewKernelKey = (props: SolidProps): string => `${JSON.stringify(props)}#fine`
+
+const viewGeomCache = new LruCache<string, THREE.BufferGeometry>(500)
+/**
+ * Malla con que se proyecta un sólido en una vista: la de `solidMeshWithSurfaces`, salvo una pieza importada sola, que
+ * usa su resultado con teselado fino si ya llegó (la de pantalla es más gruesa: la silueta de un cilindro quedaba hasta
+ * un 3 % adentro, fuera de lo que corrige `snapSilhouettes`).
+ */
+export function solidViewMesh(props: SolidProps): ReturnType<typeof solidMeshWithSurfaces> & { sheet?: boolean } {
+  if (props.op === 'BREP' && sysvars.SOLIDKERNEL === 'OCCT') {
+    const key = viewKernelKey(props)
+    const r = kernelResult(key)
+    if (r?.ok) {
+      let g = viewGeomCache.get(key)
+      if (!g) viewGeomCache.set(key, (g = kernelGeometry(r)))
+      const pos = g.getAttribute('position')
+      const vertices: Vec3[] = []
+      const faces: number[][] = []
+      for (let i = 0; i < pos.count; i++) vertices.push([pos.getX(i), pos.getY(i), pos.getZ(i)])
+      for (let i = 0; i + 2 < pos.count; i += 3) faces.push([i, i + 1, i + 2])
+      return { vertices, faces, surf: triangleSurfaces(g), ...(r.stats.volume > 0 ? {} : { sheet: true }) }
+    }
+  }
+  return solidMeshWithSurfaces(props)
+}
+
 /** Como `solidMesh`, más la superficie de origen de cada cara (para separar las aristas tangentes). */
-export function solidMeshWithSurfaces(props: SolidProps): MeshProps & { surf?: Float32Array | null; topo?: ReturnType<typeof solidTopology> } {
+export function solidMeshWithSurfaces(props: SolidProps): MeshProps & { surf?: Float32Array | null; topo?: ReturnType<typeof solidTopology>; separateFaces?: boolean } {
   const g = solidGeometry(props)
   const pos = g.getAttribute('position')
   if (!pos) return { vertices: [], faces: [], surf: null }
@@ -972,7 +1051,9 @@ export function solidMeshWithSurfaces(props: SolidProps): MeshProps & { surf?: F
   } else {
     for (let i = 0; i + 2 < pos.count; i += 3) faces.push([i, i + 1, i + 2])
   }
-  return { vertices, faces, surf: triangleSurfaces(g), topo: solidTopology(props) }
+  // Una pieza importada sin el núcleo: la malla de la importación, con cada cara teselada por separado.
+  const separate = props.op === 'BREP' && !g.userData.exact
+  return { vertices, faces, surf: triangleSurfaces(g), topo: solidTopology(props), ...(separate ? { separateFaces: true } : {}) }
 }
 
 /** Sopa de triángulos (9 números por triángulo) de una geometría, indexada o no. */
@@ -1017,6 +1098,26 @@ export function displaySolidTopology(props: SolidProps): Topology | null {
   r.topo ??= buildTopology(triangleSoup(r.geom))
   return r.topo
 }
+
+/** Aristas exactas del resultado del núcleo, por árbol (los snaps las piden en cada movimiento del cursor). */
+const exactEdgeCache = new LruCache<string, ExactEdge[]>(4000)
+registerKernelEdges((p) => {
+  if (sysvars.SOLIDKERNEL !== 'OCCT') return null
+  const key = JSON.stringify(p)
+  const hit = exactEdgeCache.get(key)
+  if (hit) return hit
+  const r = kernelResult(key)
+  if (!r?.ok || !r.mesh.edges) return null
+  const out = r.mesh.edges.map((e): ExactEdge => {
+    const pts: Vec3[] = []
+    for (let i = 0; i + 2 < e.pts.length; i += 3) pts.push([e.pts[i], e.pts[i + 1], e.pts[i + 2]].map(cleanMeshNumber) as Vec3)
+    if (e.closed) pts[pts.length - 1] = pts[0]
+    const arc = e.kind === 'circle' && e.c && e.n && e.r ? arcOfCircle(e.c, e.n, e.r, pts, e.closed) : undefined
+    return { pts, closed: e.closed, kind: e.kind, ...(arc ? { arc } : {}) }
+  })
+  exactEdgeCache.set(key, out)
+  return out
+})
 
 registerSolidMesher((p) => {
   const g = solidGeometry(p)

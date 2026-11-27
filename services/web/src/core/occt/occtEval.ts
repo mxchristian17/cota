@@ -9,7 +9,11 @@
  * cóncavas y después las convexas (OCCT no resuelve algunos vértices mixtos de una sola vez).
  */
 import { JoinType, TransitionMode, type OcctKernel, type ShapeHandle } from 'occt-wasm'
-import type { EdgeRef, SolidProps } from '../document/types'
+import type { BrepProps, BrepSource, EdgeRef, SolidProps } from '../document/types'
+import { decodeBrep } from '../document/brepStore'
+import { acisToStep } from '../io/acisStep'
+import { affinePoint, isSimilarity } from '../geom/affine'
+import { LruCache } from '../lru'
 import type { Vec3 } from '../math'
 import { positiveLeaf } from '../editing/solidLeaf'
 import { isFullRevolve, openProfile, revolveAngle, revolveFrame, revolvePoint, type RevolveFrame } from '../editing/revolve'
@@ -17,9 +21,26 @@ import { isFullRevolve, openProfile, revolveAngle, revolveFrame, revolvePoint, t
 type K = OcctKernel
 
 /** Malla teselada: vértices indexados y, por triángulo, el grupo de superficie de su cara. */
+/**
+ * Arista exacta del resultado: su polilínea (la de la teselación: cada punto es un vértice de la malla), si es cerrada,
+ * qué curva es y, en un círculo, su centro, eje y radio. Sin las costuras (la arista de una cara periódica consigo misma)
+ * ni las degeneradas.
+ */
+export interface OcctEdge {
+  /** x, y, z seguidos. */
+  pts: number[]
+  closed: boolean
+  kind: 'line' | 'circle' | 'ellipse' | 'curve'
+  c?: Vec3
+  n?: Vec3
+  r?: number
+}
+
 export interface OcctMesh {
   positions: Float32Array
   indices: Uint32Array
+  /** Aristas exactas (ver `OcctEdge`). */
+  edges?: OcctEdge[]
   /** Grupo de superficie de cada triángulo: caras con la misma superficie (p. ej. dos mitades de un plano) comparten grupo. */
   triGroup: Uint32Array
   /** Esferas exactas por grupo (los empalmes de la malla de respaldo y los snaps las usan). */
@@ -34,6 +55,10 @@ export interface OcctStats {
   faces: number
   /** Lo más que un empalme del árbol salió de la cápsula convexa de su sólido original, en fracción de su tamaño. */
   hullExcess: number
+  /** Centroide (densidad 1); falta en una lámina. */
+  centroid?: Vec3
+  /** Matriz de inercia respecto del centroide (3×3 por filas, la de OpenCascade); falta en una lámina. */
+  inertia?: number[]
 }
 
 export interface OcctResult {
@@ -134,6 +159,50 @@ interface Ctx {
   allowance: number
   /** Lo más que salió un empalme del árbol (en fracción de su tamaño). */
   excess: number
+  /** Modelos de las hojas `BREP` del árbol, por `ref`. */
+  models: Record<string, BrepSource>
+}
+
+/**
+ * BREP binario de cada modelo importado ya leído, por `ref`: editar la pieza (restarle algo, empalmarla) no vuelve a
+ * traducir su ACIS. Las formas no se pueden guardar entre evaluaciones (`evalSolid` las libera todas).
+ */
+const brepBins = new LruCache<string, Uint8Array>(256)
+
+/**
+ * Forma exacta de un sólido importado: su modelo (el ACIS original pasa por STEP; un BREP binario se lee tal cual),
+ * corregido si OpenCascade lo da inválido, con la matriz de la hoja. El núcleo aplica rotaciones, reflexiones y una
+ * escala pareja; una escala distinta por eje (un bloque estirado) queda en la malla.
+ */
+function brepShape(ctx: Ctx, p: BrepProps): ShapeHandle {
+  const { k } = ctx
+  let s: ShapeHandle
+  const bin = brepBins.get(p.ref)
+  if (bin) s = k.fromBREPBinary(bin)
+  else {
+    const model = ctx.models[p.ref]
+    if (!model) throw new OcctEvalError('BREP', 'the model of the imported solid is missing')
+    const bytes = 'bytes' in model ? model.bytes : decodeBrep(model)
+    if (model.fmt === 'brep') s = k.fromBREPBinary(bytes)
+    else {
+      const st = acisToStep(bytes)
+      if (!st) throw new OcctEvalError('BREP', 'the ACIS model has no faces')
+      try {
+        s = k.importStep(st.step)
+      } catch (err) {
+        throw new OcctEvalError('BREP', (err as Error).message)
+      }
+      if (!k.isValid(s)) {
+        const fixed = k.fixShape(s)
+        if (!k.isValid(fixed)) throw new OcctEvalError('BREP', 'the imported solid is not valid')
+        s = fixed
+      }
+    }
+    brepBins.set(p.ref, k.toBREPBinary(s))
+  }
+  if (!p.m) return s
+  if (!isSimilarity(p.m)) throw new OcctEvalError('BREP', 'an imported solid cannot be scaled differently on each axis')
+  return k.transform(s, p.m)
 }
 
 function asSolid(k: K, s: ShapeHandle, op: string): ShapeHandle {
@@ -208,6 +277,8 @@ function leaf(ctx: Ctx, raw: SolidProps, path: string): ShapeHandle {
   const { k } = ctx
   const p = positiveLeaf(raw)
   switch (p.op) {
+    case 'BREP':
+      return brepShape(ctx, p)
     case 'BOX': {
       const bx = p.basis?.x ?? [1, 0, 0]
       const by = p.basis?.y ?? [0, 1, 0]
@@ -477,12 +548,12 @@ const hasBlend = (p: SolidProps): boolean =>
         : false
 
 /** Puntos de las aristas a empalmar (sus polilíneas), con las orientaciones por defecto. */
-function blendProbe(k: K, p: SolidProps): Vec3[] {
+function blendProbe(k: K, p: SolidProps, models: Record<string, BrepSource>): Vec3[] {
   const pts: Vec3[] = []
   const visit = (q: SolidProps, path: string): void => {
     if (q.op === 'FILLETEDGE' || q.op === 'CHAMFEREDGE') {
       try {
-        const ctx: Ctx = { k, orient: new Map(), strategy: 'direct', allowance: Infinity, excess: 0 }
+        const ctx: Ctx = { k, orient: new Map(), strategy: 'direct', allowance: Infinity, excess: 0, models }
         const solid = asSolid(k, build(ctx, q.solid, `${path}.0`), q.op)
         for (const e of pickEdges(k, solid, q.edges)) {
           const w = k.wireframe(e, { deflection: 0.05 })
@@ -539,7 +610,15 @@ export interface EvalOptions {
   angularDeflection?: number
   /** Cuánto puede salir un empalme de la cápsula convexa del original, en fracción de su tamaño (`HULL_ALLOWANCE`). */
   hullAllowance?: number
+  /** Modelos de las hojas `BREP` del árbol, por `ref` (los manda quien pide). */
+  models?: Record<string, BrepSource>
+  /** Teselado fino también para una pieza importada sola (para proyectarla en una vista). */
+  fine?: boolean
 }
+
+/** Teselado de una pieza importada sola: más grueso, para no dibujar más triángulos que su malla de siempre. */
+const IMPORTED_REL_DEFLECTION = 0.003
+const IMPORTED_ANGULAR_DEFLECTION = 0.5
 
 /**
  * Fracción del radio (o distancia) que un empalme puede salir de la cápsula convexa del sólido original. Medido en la
@@ -549,12 +628,26 @@ export interface EvalOptions {
  */
 export const HULL_ALLOWANCE = 0.1
 
-/** Evalúa el árbol y lo tesela. Lanza `OcctEvalError` con la operación que falló. */
-export function evalSolid(k: K, props: SolidProps, opts: EvalOptions = {}): OcctResult {
-  const t0 = performance.now()
+/** Lo que se sabe de la forma ya armada y validada (ver `withShape`). */
+interface Built {
+  shape: ShapeHandle
+  diag: number
+  sheet: boolean
+  volume: number
+  attempt: number
+  strategy: Strategy
+  excess: number
+}
+
+/**
+ * Arma la forma del árbol (con los reintentos de los empalmes), la valida y se la pasa a `use`; todas las formas se
+ * liberan al terminar. Lanza `OcctEvalError` con la operación que falló.
+ */
+function withShape<R>(k: K, props: SolidProps, opts: EvalOptions, use: (b: Built) => R): R {
   const blend = hasBlend(props)
   const leaves = seamLeaves(props)
-  const probe = blend ? blendProbe(k, props) : []
+  const models = opts.models ?? {}
+  const probe = blend ? blendProbe(k, props, models) : []
   k.releaseAll()
   const ranked = new Map(leaves.map((l) => [l.path, probe.length ? rankOrients(l.p, probe) : []]))
   const plan: Array<{ o: number; strategy: Strategy }> = []
@@ -568,19 +661,19 @@ export function evalSolid(k: K, props: SolidProps, opts: EvalOptions = {}): Occt
     const orient = new Map<string, Orient>()
     for (const [path, list] of ranked) if (list.length) orient.set(path, list[Math.min(o, list.length - 1)])
     try {
-      const ctx: Ctx = { k, orient, strategy, allowance: opts.hullAllowance ?? HULL_ALLOWANCE, excess: 0 }
+      const ctx: Ctx = { k, orient, strategy, allowance: opts.hullAllowance ?? HULL_ALLOWANCE, excess: 0, models }
       const shape = build(ctx, props)
-      // Nunca se da por bueno un sólido vacío o inválido: queda la malla y se avisa.
-      const bb = k.getBoundingBox(shape)
-      const diag = Math.hypot(bb.xmax - bb.xmin, bb.ymax - bb.ymin, bb.zmax - bb.zmin)
-      if (!(diag > 0) || !(k.getVolume(shape) > diag ** 3 * 1e-9)) throw new OcctEvalError(props.op, 'empty solid')
+      // Nunca se da por bueno un sólido vacío o inválido: queda la malla y se avisa. Una pieza importada puede ser una
+      // lámina (REGION, superficie): tiene caras pero no volumen.
+      const imported = props.op === 'BREP'
+      // La caja de una pieza importada ya se conoce (la de la hoja): la de OpenCascade, sin teselar, tardaba más que
+      // todo el resto (unos 6 ms por pieza, en una conversión de miles).
+      const diag = imported ? brepDiag(props) : boxDiag(k, shape)
+      const sheet = imported && k.subShapeCount(shape, 'solid') === 0 && k.subShapeCount(shape, 'face') > 0
+      const volume = sheet ? 0 : k.getVolume(shape)
+      if (!(diag > 0) || (!sheet && !(volume > diag ** 3 * 1e-9))) throw new OcctEvalError(props.op, 'empty solid')
       if (!k.isValid(shape)) throw new OcctEvalError(props.op, 'invalid solid')
-      const mesh = tessellate(k, shape, opts)
-      if (!mesh.indices.length) throw new OcctEvalError(props.op, 'empty mesh')
-      return {
-        mesh,
-        stats: { ms: performance.now() - t0, attempts: attempt + 1, strategy, volume: k.getVolume(shape), faces: k.getSubShapes(shape, 'face').length, hullExcess: ctx.excess },
-      }
+      return use({ shape, diag, sheet, volume, attempt, strategy, excess: ctx.excess })
     } catch (err) {
       lastErr = err
       // Fuera de los empalmes no hay otra estrategia que probar.
@@ -592,6 +685,32 @@ export function evalSolid(k: K, props: SolidProps, opts: EvalOptions = {}): Occt
   if (lastErr instanceof OcctEvalError) throw lastErr
   throw new OcctEvalError(props.op, lastErr instanceof Error ? lastErr.message : String(lastErr))
 }
+
+/** Evalúa el árbol y lo tesela. Lanza `OcctEvalError` con la operación que falló. */
+export function evalSolid(k: K, props: SolidProps, opts: EvalOptions = {}): OcctResult {
+  const t0 = performance.now()
+  const coarse = props.op === 'BREP' && !opts.fine
+  return withShape(k, props, opts, ({ shape, diag, sheet, volume, attempt, strategy, excess }) => {
+    const mesh = tessellate(
+      k,
+      shape,
+      {
+        ...opts,
+        relDeflection: opts.relDeflection ?? (coarse ? IMPORTED_REL_DEFLECTION : undefined),
+        angularDeflection: opts.angularDeflection ?? (coarse ? IMPORTED_ANGULAR_DEFLECTION : undefined),
+      },
+      diag,
+    )
+    if (!mesh.indices.length) throw new OcctEvalError(props.op, 'empty mesh')
+    mesh.edges = exactEdgesOf(k, shape, diag, !sheet)
+    const mass = sheet ? null : massOf(k, shape)
+    return {
+      mesh,
+      stats: { ms: performance.now() - t0, attempts: attempt + 1, strategy, volume, faces: k.subShapeCount(shape, 'face'), hullExcess: excess, ...mass },
+    }
+  })
+}
+
 
 /** Clave de la superficie de una cara: las caras de una misma superficie comparten grupo (no se marca arista entre ellas). */
 function surfaceKey(k: K, face: ShapeHandle, q: (x: number) => string, i: number): { key: string; sphere?: { c: Vec3; r: number } } {
@@ -628,13 +747,87 @@ function surfaceKey(k: K, face: ShapeHandle, q: (x: number) => string, i: number
   }
 }
 
-function tessellate(k: K, shape: ShapeHandle, opts: EvalOptions): OcctMesh {
+const HASH_BOUND = 2147483647
+
+/**
+ * Aristas exactas de una forma ya teselada (ver `OcctEdge`). En un sólido, una arista con una sola cara es una costura
+ * (no es una arista que se vea ni que se pueda elegir); en una lámina, su borde.
+ */
+function exactEdgesOf(k: K, shape: ShapeHandle, diag: number, solid: boolean): OcctEdge[] {
+  try {
+    const wf = k.wireframe(shape, { source: 'triangulation' })
+    const byHash = new Map<number, ShapeHandle>()
+    for (const e of k.getSubShapes(shape, 'edge')) byHash.set(k.hashCode(e, HASH_BOUND), e)
+    const faceCount = new Map<number, number>()
+    const map = k.edgeToFaceMap(shape, HASH_BOUND)
+    for (let i = 0; i + 1 < map.length; i += 2 + map[i + 1]) faceCount.set(map[i], new Set(map.slice(i + 2, i + 2 + map[i + 1])).size)
+    const tol = diag * 1e-7 + 1e-12
+    const out: OcctEdge[] = []
+    for (let g = 0; g + 2 < wf.edgeGroups.length; g += 3) {
+      const [start, count, hash] = [wf.edgeGroups[g], wf.edgeGroups[g + 1], wf.edgeGroups[g + 2]]
+      if (solid && (faceCount.get(hash) ?? 0) < 2) continue
+      const pts = Array.from(wf.points.subarray(start, start + count))
+      if (pts.length < 6) continue
+      let len = 0
+      for (let i = 3; i < pts.length; i += 3) len += Math.hypot(pts[i] - pts[i - 3], pts[i + 1] - pts[i - 2], pts[i + 2] - pts[i - 1])
+      if (len <= tol) continue // degenerada (el polo de una esfera)
+      const n = pts.length
+      const closed = Math.hypot(pts[0] - pts[n - 3], pts[1] - pts[n - 2], pts[2] - pts[n - 1]) <= tol
+      const edge = byHash.get(hash)
+      let info: Pick<OcctEdge, 'kind' | 'c' | 'n' | 'r'> = { kind: 'curve' }
+      try {
+        const d = edge ? k.curveData(edge) : null
+        const P = (v: { x: number; y: number; z: number }): Vec3 => [v.x, v.y, v.z]
+        if (d?.kind === 'line') info = { kind: 'line' }
+        else if (d?.kind === 'circle') info = { kind: 'circle', c: P(d.center), n: P(d.axis), r: d.radius }
+        else if (d?.kind === 'ellipse') info = { kind: 'ellipse' }
+      } catch {
+        /* sin datos de la curva: queda como curva */
+      }
+      out.push({ pts: info.kind === 'line' ? [...pts.slice(0, 3), ...pts.slice(n - 3)] : pts, closed, ...info })
+    }
+    return out
+  } catch {
+    return []
+  }
+}
+
+/** Centroide e inercia (densidad 1) de un sólido. */
+function massOf(k: K, shape: ShapeHandle): { centroid: Vec3; inertia: number[] } | null {
+  try {
+    const c = k.getCenterOfMass(shape)
+    return { centroid: [c.x, c.y, c.z], inertia: Array.from(k.getInertia(shape)) }
+  } catch {
+    return null
+  }
+}
+
+/** Diagonal de la caja de una forma. */
+function boxDiag(k: K, shape: ShapeHandle): number {
   const bb = k.getBoundingBox(shape)
-  const diag = Math.hypot(bb.xmax - bb.xmin, bb.ymax - bb.ymin, bb.zmax - bb.zmin) || 1
+  return Math.hypot(bb.xmax - bb.xmin, bb.ymax - bb.ymin, bb.zmax - bb.zmin)
+}
+
+/** Diagonal de la caja de una pieza importada (la de su hoja, con su matriz). */
+function brepDiag(p: BrepProps): number {
+  const [lo, hi] = p.box
+  const c = (i: number): Vec3 => affinePoint(p.m, [i & 1 ? hi[0] : lo[0], i & 2 ? hi[1] : lo[1], i & 4 ? hi[2] : lo[2]])
+  return Math.hypot(...sub(c(7), c(0)))
+}
+
+function tessellate(k: K, shape: ShapeHandle, opts: EvalOptions, knownDiag?: number): OcctMesh {
+  const diag = (knownDiag ?? boxDiag(k, shape)) || 1
   const m = k.meshShape(shape, { linearDeflection: diag * (opts.relDeflection ?? MESH_REL_DEFLECTION), angularDeflection: opts.angularDeflection ?? MESH_ANGULAR_DEFLECTION })
   const faces = k.getSubShapes(shape, 'face')
   const groups = m.faceGroups
-  if (!groups || groups.length !== faces.length * 3) throw new OcctEvalError('MESH', 'face groups do not match the faces')
+  if (!groups || groups.length % 3) throw new OcctEvalError('MESH', 'face groups do not match the faces')
+  if (groups.length !== faces.length * 3) {
+    // Alguna cara degenerada quedó sin triángulos (pasa en piezas importadas): no se sabe qué grupo es qué cara, así
+    // que cada cara teselada es su propia superficie (sin juntar las de una misma superficie).
+    const triGroup = new Uint32Array(m.triangleCount)
+    for (let i = 0; i < groups.length / 3; i++) triGroup.fill(i, groups[i * 3] / 3, (groups[i * 3] + groups[i * 3 + 1]) / 3)
+    return { positions: m.positions, indices: m.indices, triGroup, spheres: [] }
+  }
   const tol = diag * 1e-6
   const q = (x: number): string => String(Math.round(x / tol))
   const keyGroup = new Map<string, number>()

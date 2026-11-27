@@ -1,15 +1,20 @@
 /// <reference lib="webworker" />
 /**
  * Hilo del núcleo de sólidos exacto (OpenCascade). El módulo LGPL (`occt-wasm.js` + `occt-wasm.wasm`) se carga por URL
- * desde `occt/<versión>/` recién con el primer pedido; cada pedido evalúa un árbol `SolidProps` y devuelve la malla.
+ * desde `occt/<versión>/` recién con el primer pedido; cada pedido evalúa un árbol `SolidProps` (con los modelos de sus
+ * sólidos importados) y devuelve la malla.
  */
 import { OcctKernel } from 'occt-wasm'
-import type { SolidProps } from '../document/types'
+import type { BrepSource, SolidProps } from '../document/types'
 import { evalSolid, OcctEvalError, type OcctMesh, type OcctStats } from './occtEval'
 
 export interface KernelRequest {
   id: number
   props: SolidProps
+  /** Modelos de las hojas `BREP` del árbol (sólidos importados), por `ref`. */
+  models?: Record<string, BrepSource>
+  /** Teselado fino de una pieza importada (para una vista). */
+  fine?: boolean
 }
 
 export type KernelReply =
@@ -32,7 +37,7 @@ function load(): Promise<OcctKernel> {
 }
 
 self.onmessage = async (ev: MessageEvent<KernelRequest>) => {
-  const { id, props } = ev.data
+  const { id, props, models, fine } = ev.data
   let k: OcctKernel
   try {
     k = await load()
@@ -42,7 +47,7 @@ self.onmessage = async (ev: MessageEvent<KernelRequest>) => {
     return
   }
   try {
-    const r = evalSolid(k, props)
+    const r = evalSolid(k, props, { models, fine })
     const m = r.mesh
     self.postMessage({ id, ok: true, mesh: m, stats: { ...r.stats, initMs } } satisfies KernelReply, [m.positions.buffer, m.indices.buffer, m.triGroup.buffer])
   } catch (err) {

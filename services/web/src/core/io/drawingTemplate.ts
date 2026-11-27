@@ -1,3 +1,4 @@
+import { withUsedBreps } from '../document/brepStore'
 import type { DocumentData } from '../document/types'
 
 /**
@@ -23,7 +24,8 @@ export function makeTemplate(data: DocumentData, prefs: Record<string, unknown>)
   d.layouts = (d.layouts ?? []).map((l) => ({ ...l, entities: l.entities.filter((e) => !(e.type === 'INSERT' && e.props.view)) }))
   d.blocks = (d.blocks ?? []).filter((b) => !b.name.startsWith('*'))
   delete (d as { meta?: unknown }).meta
-  return { kind: 'cota-template', version: 1, drawing: d, prefs }
+  // Sólo los modelos exactos que usan los bloques y layouts que quedan.
+  return { kind: 'cota-template', version: 1, drawing: withUsedBreps(d), prefs }
 }
 
 export function parseTemplate(text: string): DrawingTemplate | null {

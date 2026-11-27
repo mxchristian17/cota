@@ -357,8 +357,41 @@ export interface ShellProps {
   thickness: number
 }
 
+/**
+ * Sólido exacto importado (3DSOLID, BODY o REGION de un DWG/DXF): su modelo está en `DocumentData.breps[ref]` y no
+ * tiene puntos que editar. Se mueve, gira, escala o refleja componiendo `m`, la matriz afín 3×4 por filas
+ * (`[r00, r01, r02, tx, r10, …, tz]`, la de `transform` de OpenCascade); ausente = identidad. `box` es la caja del
+ * modelo sin transformar (límites y boceto sin leer el modelo).
+ */
+export interface BrepProps {
+  op: 'BREP'
+  ref: string
+  m?: number[]
+  box: [Vec3, Vec3]
+}
+
+/**
+ * Modelo exacto de un sólido importado: `fmt` es el formato (el ACIS original en binario o texto, o el BREP binario de
+ * OpenCascade) y `data` sus bytes comprimidos (deflate) en base64. Es texto: las copias del dibujo (deshacer, cada
+ * comando) lo comparten sin copiarlo y va tal cual al archivo.
+ */
+export interface BrepModel {
+  fmt: 'sab' | 'sat' | 'brep'
+  data: string
+}
+
+/** Un modelo sin comprimir (lo recién importado, mientras se comprime): lo que se manda al núcleo exacto. */
+export interface BrepBytes {
+  fmt: BrepModel['fmt']
+  bytes: Uint8Array
+}
+
+/** Un modelo tal como lo recibe el núcleo exacto: comprimido o, si todavía no lo está, sus bytes. */
+export type BrepSource = BrepModel | BrepBytes
+
 /** Hoja de un árbol de sólido: extrusión o primitiva paramétrica. */
 export type SolidLeaf =
+  | BrepProps
   | ExtrudeProps
   | BoxProps
   | CylinderProps
@@ -1012,6 +1045,8 @@ export interface DocumentData {
   vars?: DrawingVars
   /** Vistas guardadas (-VIEW Save). */
   views?: NamedView[]
+  /** Modelos exactos de los sólidos importados (hojas `BREP`), por su `ref`. */
+  breps?: Record<string, BrepModel>
   meta: {
     /** Fechas ISO: creación, último guardado y último ploteo (campos CreateDate/SaveDate/PlotDate). */
     created?: string

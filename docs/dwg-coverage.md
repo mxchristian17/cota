@@ -26,7 +26,7 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 | TOLERANCE | Frame, symbols and text | The same pieces | |
 | HELIX | Spline | Spline | From DXF; the DWG reader does not deliver it yet |
 | VIEWPORT and paper space | Layouts with their sheet, content and viewports | Not exported | |
-| 3DSOLID, REGION, BODY | Meshes with their faces | 3DFACE | From the ACIS model (SAT and SAB): planes, cylinders, cones, spheres, tori; NURBS faces over their best-fit plane |
+| 3DSOLID, REGION, BODY | Exact solids from their ACIS model (SAT and SAB), shown with the faces of the model until each one is converted: all at once on open, when selected or edited, or in the background while you are idle (`SOLIDIMPORT`, `SOLIDIDLE`) | 3DFACE | Snaps, `MASSPROP` and drawing views use the exact edges and mass of the model even before converting. Until converted, NURBS faces are drawn over their best-fit plane |
 | SURFACE (extruded, lofted, revolved, swept, planar) | Meshes or edges | 3DFACE | |
 | IMAGE | The picture in its place (clip and fade included) once its file is loaded, on screen and in plots; until then, its frame and file name | IMAGE (DXF; the file path, not the pixels) | The drawing stores only the file path: open the image together with the drawing, drop it on Cota or load it with `IMAGE`; from the working folder it loads on its own |
 | PDF, DWF and DGN UNDERLAY | File name at the insertion point | Text | The content is an external file |
@@ -47,6 +47,6 @@ about half the triangles (18 segments per full turn instead of 36), and texts sm
 
 ## Next, by impact
 
-1. NURBS faces of ACIS solids following their surface (today, over their best-fit plane).
+1. 3D solids saved as ACIS solids (today, as 3DFACE meshes).
 2. Blocks and layouts on export (today inserts are expanded and layouts stay out of the file).
 3. Proxy entities in DWG files (the reader drops them).

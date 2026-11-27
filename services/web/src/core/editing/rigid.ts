@@ -1,3 +1,4 @@
+import { transformBrep } from './brepLeaf'
 import { keepCommon } from '../document/common'
 import { mapRegion } from '../region/region'
 import { mapImage } from '../geom/image'
@@ -115,6 +116,8 @@ function transformNode(p: SolidProps, r: Rigid): SolidProps | null {
   const q = structuredClone(p) as SolidProps
   const dir = (v: Vec3 | undefined, def: Vec3): Vec3 => vnorm(rigidDir(r, v ?? def))
   switch (q.op) {
+    case 'BREP':
+      return transformBrep(q, (v) => tp(r, v))
     case 'EXTRUDE':
       q.profile = q.profile.map((v) => tp(r, v))
       q.axis = dir(q.axis, [0, 0, 1])

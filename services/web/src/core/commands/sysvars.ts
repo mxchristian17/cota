@@ -71,6 +71,17 @@ export interface Sysvars {
    * llega su resultado, y si no puede, se muestra la malla); `MESH` = sólo la malla (booleanas sobre triángulos).
    */
   SOLIDKERNEL: 'OCCT' | 'MESH'
+  /**
+   * SOLIDIMPORT: qué se hace con los sólidos de un DWG/DXF al abrirlo. 0 = preguntar; 1 = conversión completa (todos
+   * al núcleo exacto de entrada, con su avance); 2 = como mallas (cada pieza se convierte al seleccionarla o editarla).
+   * En un teléfono empieza en 2.
+   */
+  SOLIDIMPORT: 0 | 1 | 2
+  /**
+   * SOLIDIDLE: 1 = lo que quedó como malla y se puede calcular exacto (las piezas importadas sin convertir) se calcula
+   * solo mientras el usuario no hace nada; cualquier acción lo corta. 0 = no.
+   */
+  SOLIDIDLE: 0 | 1
   /** ZOOMWHEEL: 0 = rueda hacia adelante acerca (CAD clásico), 1 = al revés. */
   ZOOMWHEEL: 0 | 1
   /** UCSVIEW: 1 = las vistas guardadas guardan también la UCS. */
@@ -121,6 +132,8 @@ const DEFAULTS: Sysvars = {
   RENDERMINPX: 3,
   SMOOTHANGLE: 12,
   SOLIDKERNEL: 'OCCT',
+  SOLIDIMPORT: 0,
+  SOLIDIDLE: 1,
   ZOOMWHEEL: 0,
   UCSVIEW: 1,
   PDMODE: 0,
@@ -142,7 +155,7 @@ export function resetSysvars(): void {
  */
 export const PERSISTED_SYSVARS = [
   'FILLETRAD', 'CHAMFERA', 'CHAMFERB', 'CHAMFERC', 'CHAMFERD', 'CHAMMODE', 'TRIMMODE',
-  'UCSICON', 'ZOOMFACTOR', 'ZOOMWHEEL', 'RENDERMINPX', 'SMOOTHANGLE', 'SOLIDKERNEL', 'UCSORTHO', 'UCSFOLLOW', 'UCSDETECT', 'UCSVIEW',
+  'UCSICON', 'ZOOMFACTOR', 'ZOOMWHEEL', 'RENDERMINPX', 'SMOOTHANGLE', 'SOLIDKERNEL', 'SOLIDIMPORT', 'SOLIDIDLE', 'UCSORTHO', 'UCSFOLLOW', 'UCSDETECT', 'UCSVIEW',
   'ATTDIA', 'ATTREQ', 'PEDITACCEPT', 'OFFSETGAPTYPE', 'EDGEMODE', 'PROJMODE', 'PDMODE', 'PDSIZE', 'POLARANG', 'PICKSTYLE',
   'ISAVEBAK', 'SAVETIME',
 ] as const
@@ -165,7 +178,7 @@ export function applySysvars(data: Record<string, unknown>): void {
   if (data.CHAMMODE === 'Distance' || data.CHAMMODE === 'Angle') sysvars.CHAMMODE = data.CHAMMODE
   if (data.TRIMMODE === 0 || data.TRIMMODE === 1) sysvars.TRIMMODE = data.TRIMMODE
   const bit = (v: unknown): v is 0 | 1 => v === 0 || v === 1
-  for (const k of ['ZOOMWHEEL', 'UCSORTHO', 'UCSFOLLOW', 'UCSDETECT', 'UCSVIEW', 'ATTDIA', 'ATTREQ', 'PEDITACCEPT', 'EDGEMODE', 'PICKSTYLE', 'ISAVEBAK'] as const) {
+  for (const k of ['ZOOMWHEEL', 'UCSORTHO', 'UCSFOLLOW', 'UCSDETECT', 'UCSVIEW', 'ATTDIA', 'ATTREQ', 'PEDITACCEPT', 'EDGEMODE', 'PICKSTYLE', 'ISAVEBAK', 'SOLIDIDLE'] as const) {
     const v = data[k]
     if (bit(v)) sysvars[k] = v
   }
@@ -178,6 +191,7 @@ export function applySysvars(data: Record<string, unknown>): void {
   if (nonNegative(data.RENDERMINPX)) sysvars.RENDERMINPX = data.RENDERMINPX
   if (nonNegative(data.SMOOTHANGLE) && data.SMOOTHANGLE <= 90) sysvars.SMOOTHANGLE = data.SMOOTHANGLE
   if (data.SOLIDKERNEL === 'OCCT' || data.SOLIDKERNEL === 'MESH') sysvars.SOLIDKERNEL = data.SOLIDKERNEL
+  if (data.SOLIDIMPORT === 0 || data.SOLIDIMPORT === 1 || data.SOLIDIMPORT === 2) sysvars.SOLIDIMPORT = data.SOLIDIMPORT
   if (data.PROJMODE === 'None' || data.PROJMODE === 'Ucs' || data.PROJMODE === 'View') sysvars.PROJMODE = data.PROJMODE
   const pd = data.PDMODE
   if (typeof pd === 'number' && Number.isInteger(pd) && (pd & 31) <= 4 && (pd & ~(31 | 32 | 64)) === 0) sysvars.PDMODE = pd

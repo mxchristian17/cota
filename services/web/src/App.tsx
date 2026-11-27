@@ -29,6 +29,7 @@ import { OptionsDialog } from './ui/OptionsDialog'
 import { OsnapDialog } from './ui/OsnapDialog'
 import { DimStyleDialog } from './ui/DimStyleDialog'
 import { DwgPropsDialog } from './ui/DwgPropsDialog'
+import { SolidConvertBar, SolidImportDialog } from './ui/SolidImportDialog'
 import { XrefDialog } from './ui/XrefDialog'
 import { AttEditDialog } from './ui/AttEditDialog'
 import { PageSetupDialog } from './ui/PageSetupDialog'
@@ -479,6 +480,8 @@ export default function App() {
       <ContextMenu />
       <DwgPropsDialog />
       <XrefDialog />
+      <SolidImportDialog />
+      <SolidConvertBar />
       <AttEditDialog />
       <PageSetupDialog />
       <TemplateDialog />

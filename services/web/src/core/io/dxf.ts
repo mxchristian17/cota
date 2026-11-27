@@ -15,8 +15,9 @@ import { angleFromOcs, angleToOcs, fromOcs, isWorldExtrusion, toOcs } from './dx
 import { normAngle } from '../geom/arc'
 import { catmullRomBezierSpline, dxfSplineThroughPoints } from '../geom/nurbs'
 import { acisEdges, acisIsEmpty, sabFromHex, satFromDxf } from './acis'
-import { acisMesh, SOLID_MESH_REF } from './acisMesh'
-import { packedOf, reversePackedFaces, type PackedMesh } from './meshTransfer'
+import { SOLID_MESH_REF } from './acisMesh'
+import { packedOf, reversePackedFaces } from './meshTransfer'
+import { importedBrep, type ImportedBrep, type ImportedSolids } from './importedBrep'
 import { fontLook, mtextLead, mtextRuns, type FontLook } from './dxfFont'
 import { image, wipeout, infiniteLine, mline, multileader, oleFrame, tolerance, underlay, viewBasis, type Piece } from './dxfExtra'
 
@@ -480,8 +481,13 @@ export interface DxfImportResult {
   view?: { center: [number, number]; height: number; aspect: number; direction: Vec3; target: Vec3 }
   /** (DWG) Sólidos, regiones y cuerpos ACIS que se trajeron como sus aristas guardadas (sin caras). */
   wireSolids?: number
-  /** Sólidos, regiones y cuerpos ACIS que se trajeron con sus caras (como mallas). */
+  /** Sólidos, regiones y cuerpos ACIS que se trajeron con sus caras (como sólidos importados). */
   meshedSolids?: number
+  /**
+   * Modelos de los sólidos importados (hojas `BREP`), por `ref`: sus bytes sin comprimir, su caja y lo que se dibuja
+   * mientras no los calcula el núcleo exacto. Viajan del hilo de lectura como buffers transferidos.
+   */
+  breps?: Record<string, ImportedBrep>
   unsupported: string[]
   /** Entidades que entraron simplificadas o sin una parte (se avisa al abrir): tipo → cantidad. */
   simplified?: Record<string, number>
@@ -761,7 +767,7 @@ function* dxfRecords(text: string): Generator<Rec> {
 }
 
 /** Parsea DXF ASCII a specs de layers/entidades. Robusto ante DXF malformado. */
-export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: PackedMesh[]; proxyShapes?: Map<string, Array<{ pts: Vec3[] } | { vertices: Vec3[]; faces: number[][] }>> } = {}): DxfImportResult {
+export function importDxf(text: string, opts: { light?: boolean; solids?: ImportedSolids; proxyShapes?: Map<string, Array<{ pts: Vec3[] } | { vertices: Vec3[]; faces: number[][] }>> } = {}): DxfImportResult {
   // Los records se leen y se procesan de a uno (ver `dxfRecords`). Los de OBJECTS que hacen falta antes (los modelos
   // ACIS binarios y los archivos de imágenes), en una pasada previa sólo si el texto los tiene.
   textStyles = new Map()
@@ -920,10 +926,11 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
         const handle = (str(c, 5) ?? '').toUpperCase()
         const stored = asmData.get(handle)
         const model = stored ? sabFromHex(stored) : satFromDxf(c)
-        const mesh = acisMesh(model, opts.light)
-        if (mesh) {
+        const solid = importedBrep(model, opts.light, breps)
+        if (solid) {
           meshedSolids++
-          return [{ type: 'MESH3D', props: { vertices: mesh.vertices, faces: mesh.faces } as EntityProps }]
+          breps[solid.ref] = solid.brep
+          return [{ type: 'SOLID3D', props: { op: 'BREP', ref: solid.ref, box: solid.brep.box } as EntityProps }]
         }
         const edges = acisEdges(model)
         if (!edges.length) return acisIsEmpty(model) ? noteEmpty(rec.type) : null
@@ -935,13 +942,16 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
     }
   }
   let meshedSolids = 0
-  /** La MESH que nombra la malla de un sólido leído del DWG (ver `SOLID_MESH_REF`). */
+  /** Modelos de los sólidos importados (los del DWG y los de este texto). */
+  const breps: Record<string, ImportedBrep> = { ...opts.solids?.breps }
+  /** La MESH que nombra un sólido leído del DWG (ver `SOLID_MESH_REF`): el sólido importado. */
   const solidMesh = (rec: Rec): { type: EntityType; props: EntityProps } | null => {
     if (rec.type !== 'MESH' || num(rec.codes, 20, 0) !== SOLID_MESH_REF || num(rec.codes, 30, 0) !== SOLID_MESH_REF) return null
-    const m = opts.solidMeshes?.[num(rec.codes, 10, -1)]
-    if (!m) return null
+    const ref = opts.solids?.refs[num(rec.codes, 10, -1)]
+    const brep = ref ? breps[ref] : undefined
+    if (!ref || !brep) return null
     meshedSolids++
-    return { type: 'MESH3D', props: m as unknown as EntityProps }
+    return { type: 'SOLID3D', props: { op: 'BREP', ref, box: brep.box } as EntityProps }
   }
   /** Entidades (tipo de línea por objeto incluido) de un record; null si no se soporta. */
   const specsOf = (rec: Rec, inBlock = false): DxfEntitySpec[] | null => {
@@ -1519,6 +1529,7 @@ export function importDxf(text: string, opts: { light?: boolean; solidMeshes?: P
     unsupported: [...unsupported],
     ...(wireSolids ? { wireSolids } : {}),
     ...(meshedSolids ? { meshedSolids } : {}),
+    ...(Object.keys(breps).length ? { breps } : {}),
     ...(Object.keys(simplified).length ? { simplified } : {}),
     ...(Object.keys(empty).length ? { empty } : {}),
     ...(layouts.length ? { layouts } : {}),

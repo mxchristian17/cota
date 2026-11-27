@@ -89,9 +89,9 @@ lengths, radii, areas and volumes.
 
 ## MASSPROP
 
-Mass properties of 3D solids (volume, mass with density 1, surface area, bounding box and centroid) and section
-properties of regions (area, perimeter, centroid, moments and product of inertia, radii of gyration and principal
-moments).
+Mass properties of 3D solids (volume, mass with density 1, surface area, bounding box, centroid and, for exact solids,
+moments and products of inertia, radii of gyration and principal moments) and section properties of regions (area,
+perimeter, centroid, moments and product of inertia, radii of gyration and principal moments).
 
 **Aliases** none · **Menu** Tools › Inquiry
 
@@ -121,6 +121,9 @@ MASSPROP L ""
 
 The volume is exact for boxes, cylinders, cones, spheres and tori, and for solids the exact kernel has computed;
 otherwise (and for the surface area and centroid) it comes from the solid's mesh. `LIST` shows the same volume.
+For solids the exact kernel computes (imported solids included: `MASSPROP` converts them first), the volume and centroid
+are exact and Cota also prints the moments and products of inertia and the radii of gyration in the current UCS, and
+the principal moments with their directions about the centroid.
 
 For each region, in the current UCS (a 100 × 50 rectangle):
 

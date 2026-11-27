@@ -1,3 +1,4 @@
+import { transformBrep } from './brepLeaf'
 import { BYBLOCK, BYLAYER_OF } from '../linetype/linetypes'
 import { mapImage } from '../geom/image'
 import { mapShade } from '../projection/shade'
@@ -122,6 +123,8 @@ function transformNode(p: SolidProps, P: (v: Vec3) => Vec3, sr: number, sz: numb
     return v ? { axis: v } : {}
   }
   switch (p.op) {
+    case 'BREP':
+      return transformBrep(p, P)
     case 'EXTRUDE':
       return { ...p, profile: p.profile.map(P), height: p.height * sz, ...withAxis(p.axis) }
     case 'BOX': {

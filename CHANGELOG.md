@@ -4,6 +4,33 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.50.0] — 2026-11-27
+
+### Added
+- **3D solids of a DWG or DXF open as exact solids**: each solid keeps its ACIS model (SAT or SAB), which the exact
+  kernel reads, so filleting an edge, subtracting a cylinder or measuring a part from a DWG now works on the real
+  geometry instead of a mesh. The model is saved with the drawing (`.cota`) and shared by every copy of a block; saving
+  as DWG or DXF still writes the solids as meshes (3DFACE). When a drawing has solids, Cota asks whether to convert them
+  all now (with progress and cancel) or open them as meshes, which is quick even for assemblies with thousands of parts;
+  then each piece becomes an exact solid when you select or edit it. `SOLIDIMPORT` (also in OPTIONS) remembers the
+  answer; phones open them as meshes.
+- **Imported solids convert by themselves while you are idle**: after 2 seconds without keys, clicks, wheel or cursor
+  movement, and with no command running, the pieces left as meshes are computed in the background. Any action stops it
+  at once, so it never delays what you ask for, and it resumes when things are quiet again. Turn it off with
+  `SOLIDIDLE` (also in OPTIONS).
+- **Exact snaps on imported solids, even before converting them**: endpoints, midpoints, centers and quadrants come
+  from the edges of the model, and the center of a hole made with the exact kernel snaps to the true center.
+- **MASSPROP prints the moments and products of inertia, the radii of gyration and the principal moments** of solids
+  the exact kernel computes, with the exact volume and centroid; imported solids are converted first.
+
+### Changed
+- **Drawing views of imported solids use their exact model**: VIEWBASE, VIEWUPDATE, FLATSHOT and SOLPROF wait for the
+  exact solids (with a finer tessellation) before projecting, and holes and arcs come out as exact circles and arcs.
+  Straight edges are drawn complete (99.9% instead of 92% in a large assembly) with about half the stray short
+  segments. Regions now show their edges in drawing views.
+- **Opening a DWG or DXF with many solids is faster and uses less memory**: the faces of the solids are drawn in
+  batches, and the silhouettes of curved faces of solids not yet converted are left for when they are.
+
 ## [2.49.9] — 2026-11-26
 
 ### Fixed

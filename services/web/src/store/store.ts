@@ -1,3 +1,5 @@
+import { registerImportedBreps, withoutBreps } from '../core/document/brepStore'
+import type { BrepProps } from '../core/document/types'
 import { docsUrl } from '../core/about'
 import { chooseFile, chooseFiles } from './filePicker'
 import { frozenLayerIds, layerEditable, layerShown } from '../core/layers/visibility'
@@ -74,7 +76,7 @@ import { fieldContextFor, resolveFieldTexts } from '../core/fields/context'
 import { exportObj, importObj, type ObjMesh } from '../core/io/obj'
 import { exportDxf, importDxf, type DxfEntitySpec, type DxfImportResult } from '../core/io/dxf'
 import { attachXref, xrefCandidates, xrefsOf } from '../core/io/xref'
-import { dwgErrorMessage, dwgVersion, dxfTextToDwg, importCadInWorker } from '../core/io/dwg'
+import { cadReadsInFlight, dwgErrorMessage, dwgVersion, dxfTextToDwg, importCadInWorker } from '../core/io/dwg'
 import {
   ensurePermission,
   fsaSupported,
@@ -102,8 +104,10 @@ import { solidThreads, threadViewItems } from '../core/thread/geometry'
 import { parseScript } from '../core/commands/script'
 import type { ScriptResult } from '../core/commands/CommandEngine'
 import { solidTopology } from '../core/editing/topology'
-import { exactSolidVolume, onSolidsChanged, solidMesh, solidMeshWithSurfaces } from '../render/csg'
-import { onKernelMessage } from '../render/occtKernel'
+import { exactSolidMass, exactSolidVolume, onSolidsChanged, solidMesh, solidViewMesh, viewKernelKey } from '../render/csg'
+import { kernelAvailable, kernelResult, onKernelMessage, onKernelResults, requestKernel } from '../render/occtKernel'
+import { convertAll, convertNow, type Conversion, type ConvertProgress } from '../render/brepConvert'
+import { noteActivity, startIdleConversion, userIdle } from '../render/brepIdle'
 import { parseStl } from '../core/io/stl'
 import { requestViewGen } from '../ui/ViewGenDialog'
 import { DRAWING_TEMPLATE_EXT, drawingFromTemplate, makeTemplate, parseTemplate as parseDrawingTemplate, readDefaultTemplate, writeDefaultTemplate, type DrawingTemplate } from '../core/io/drawingTemplate'
@@ -145,6 +149,10 @@ export interface AppState {
   helpOpen: boolean
   /** Referencias externas que faltan al abrir un DWG/DXF: el diálogo deja elegir sus archivos antes de terminar. */
   xrefAsk: XrefAsk | null
+  /** Sólidos de un DWG/DXF recién abierto: el diálogo pregunta si se convierten todos o quedan como mallas. */
+  solidImportAsk: { solids: number } | null
+  /** Avance de la conversión completa de los sólidos importados (con cancelar). */
+  solidConvert: ConvertProgress | null
   ortho: boolean
   /** Grilla visible en el modelo (GRID, F7). */
   gridOn: boolean
@@ -340,6 +348,10 @@ export interface AppState {
   xrefBrowse: (name: string) => void
   /** Termina de abrir el dibujo con las referencias que se eligieron (las demás quedan vacías). */
   xrefFinish: () => void
+  /** Respuesta del diálogo de sólidos: 1 = convertir todos, 2 = como mallas; `remember` la guarda en SOLIDIMPORT. */
+  solidImportChoose: (mode: 1 | 2, remember: boolean) => void
+  /** Corta la conversión completa: lo que no llegó queda como malla. */
+  solidConvertCancel: () => void
   toggleOrtho: () => void
   toggleDynInput: () => void
   togglePolar: () => void
@@ -607,6 +619,8 @@ async function readModelFile(file: File, lower: string): Promise<Array<Pick<ObjM
 
 /** Registra un cambio de selección como paso de deshacer (lo arma el store; ver `SelUndo`). */
 let selectionStep: ((prev: string[], next: string[]) => void) | null = null
+/** Convierte las piezas importadas de una selección (modo mallas); lo arma el store. */
+let selectionConvert: ((ids: string[]) => void) | null = null
 
 /** Una referencia externa del diálogo: su bloque, la ruta guardada y el archivo elegido. */
 export interface XrefAskItem {
@@ -769,6 +783,8 @@ export const useStore = create<AppState>((set, get) => {
   const applyDxf = (r: DxfImportResult, asDrawing = false): number => {
     const { currentLayer, layers, entities, dimStyles, linetypes, vars, view, unsupported } = r
     if (asDrawing) openedView = view
+    // Sólidos importados: sus modelos (todavía sin comprimir) y lo que se dibuja de cada uno, antes que las entidades.
+    registerImportedBreps(r.breps)
     // Tipos de línea: los del LTYPE del archivo; al abrir un DXF también sus variables.
     for (const d of linetypes) if (asDrawing || !doc.linetype(d.name)) doc.loadLinetype(d.name, d, true)
     if (asDrawing) for (const [k, v] of Object.entries(vars)) doc.setVar(k as keyof DrawingVars, v as never)
@@ -826,7 +842,8 @@ export const useStore = create<AppState>((set, get) => {
     const inserts = entities.filter((e) => e.type === 'INSERT').length
     if (inserts) print(`${inserts} block reference(s) kept as blocks (${r.blocks?.length ?? 0} block definition(s)).`)
     if (unsupported.length) print(`Unsupported entities skipped: ${unsupported.join(', ')}.`)
-    if (r.meshedSolids) print(`${r.meshedSolids} 3D solid(s) read with their faces (as meshes).`)
+    if (r.meshedSolids) print(`${r.meshedSolids} 3D solid(s) read with their faces (as exact solids).`)
+    if (r.breps) offerSolidConversion(new Set(Object.keys(r.breps)))
     if (r.wireSolids) print(`${r.wireSolids} 3D solid(s) shown by their edges (wireframe): their faces could not be read.`)
     if (r.empty) print(`Empty objects left out (nothing to draw): ${Object.entries(r.empty).map(([k, n]) => `${n} ${k}`).join(', ')}.`)
     const noFile = entities.filter((e) => e.type === 'IMAGE' && !(e.props as ImageProps).data)
@@ -882,6 +899,112 @@ export const useStore = create<AppState>((set, get) => {
   }
 
   const print = (line: string) => set((s) => ({ output: [...s.output, line].slice(-MAX_OUTPUT) }))
+  // --- Sólidos importados: conversión completa o como mallas ---
+  let conversion: Conversion | null = null
+  /** Piezas importadas solas del modelo (cada copia de un bloque, con su matriz); con `refs`, sólo las de esos modelos. */
+  const importedPieces = (refs?: Set<string>): BrepProps[] => {
+    const out: BrepProps[] = []
+    for (const e of expandEntities(doc.modelEntities, doc.blocks)) if (e.type === 'SOLID3D' && e.props.op === 'BREP' && (!refs || refs.has(e.props.ref))) out.push(e.props)
+    return out
+  }
+  const startConversion = (pieces: BrepProps[]) => {
+    conversion?.cancel()
+    const c = convertAll(pieces, (p) => set({ solidConvert: p }))
+    conversion = c
+    void c.finished.then((r) => {
+      if (conversion === c) conversion = null
+      set({ solidConvert: null })
+      if (r.cancelled) print(`Conversion cancelled: ${r.done} of ${r.total} piece(s) converted; the rest stay as meshes and convert when selected or edited.`)
+      else print(`${r.done - r.failed} of ${r.total} imported piece(s) converted to exact solids${r.failed ? `; ${r.failed} could not be read by the exact kernel and keep their mesh` : ''}.`)
+    })
+  }
+  /**
+   * Al abrir o importar un dibujo con sólidos importados: según SOLIDIMPORT se convierten todos, quedan como mallas o
+   * se pregunta. `refs`: sólo los modelos recién importados.
+   */
+  const offerSolidConversion = (refs?: Set<string>) => {
+    set({ solidImportAsk: null })
+    pendingRefs = refs
+    if (sysvars.SOLIDKERNEL !== 'OCCT' || !kernelAvailable() || sysvars.SOLIDIMPORT === 2) return
+    if (sysvars.SOLIDIMPORT === 1) return convertImported(refs)
+    // Se cuentan los sólidos (del modelo y de los bloques), sin desarmar las inserciones.
+    let solids = 0
+    for (const list of [doc.modelEntities, ...doc.blocks.map((b) => b.entities)]) for (const e of list) if (e.type === 'SOLID3D' && e.props.op === 'BREP' && (!refs || refs.has(e.props.ref))) solids++
+    if (solids) set({ solidImportAsk: { solids } })
+  }
+  /** Conversión completa de los sólidos importados (los de `refs`, o todos). */
+  const convertImported = (refs?: Set<string>) => {
+    // Sin el ruido de punto flotante antes de armar las claves de las piezas: la limpieza que corre al terminar de abrir
+    // (o el primer comando) cambiaba la matriz de las copias en bloques girados y se volvían a calcular.
+    doc.cleanNumbers()
+    const pieces = importedPieces(refs)
+    if (pieces.length) startConversion(pieces)
+  }
+  let pendingRefs: Set<string> | undefined
+  /** Modo mallas: las piezas importadas de lo seleccionado (también dentro de bloques) pasan al núcleo exacto. */
+  const convertSelected = (ids: string[]) => {
+    if (sysvars.SOLIDKERNEL !== 'OCCT' || !ids.length) return
+    const picked = ids.map((id) => doc.getEntity(id)).filter((e): e is Entity => !!e && (e.type === 'SOLID3D' || e.type === 'INSERT'))
+    if (!picked.length) return
+    const pieces: BrepProps[] = []
+    for (const e of expandEntities(picked, doc.blocks)) if (e.type === 'SOLID3D' && e.props.op === 'BREP') pieces.push(e.props)
+    if (pieces.length) convertNow(pieces)
+  }
+  selectionConvert = convertSelected
+  // Conversión en los ratos libres: las piezas importadas del dibujo (con las copias de los bloques), mientras Cota no
+  // está ocupada (un comando, una lectura, una conversión completa o un diálogo de apertura).
+  startIdleConversion({
+    pieces: () => importedPieces(),
+    revision: () => doc.revision,
+    busy: () => engine.busy || engine.hasPending || !!conversion || !!get().solidImportAsk || !!get().xrefAsk || cadReadsInFlight() > 0,
+  })
+  /** Tope de espera del resultado exacto antes de proyectar o medir (lo que no llegó usa la malla). */
+  const EXACT_WAIT_MS = 120_000
+  /**
+   * Espera el resultado exacto de los sólidos de `ids` (o de todo el modelo): para una vista, las piezas importadas solas
+   * con su teselado fino; para medir, el de cada sólido (también las primitivas, por su inercia). Lo pide adelante en la
+   * cola y avisa el avance si tarda. Devuelve cuántos no llegaron a tiempo.
+   */
+  const ensureExact = async (ids: string[] | null, purpose: 'view' | 'mass'): Promise<number> => {
+    if (sysvars.SOLIDKERNEL !== 'OCCT' || !kernelAvailable()) return 0
+    const src = ids ? ids.map((id) => doc.getEntity(id)).filter((e): e is Entity => !!e) : doc.modelEntities
+    const pending = new Map<string, { props: SolidProps; fine: boolean }>()
+    for (const e of expandEntities(src, doc.blocks, { skipLayers: frozenLayerIds(doc.layers) })) {
+      if (e.type !== 'SOLID3D') continue
+      const bare = e.props.op === 'BREP'
+      // Una vista sólo necesita el fino de las piezas importadas solas (los árboles ya van con el teselado fino).
+      if (purpose === 'view' && !bare) continue
+      const fine = purpose === 'view' && bare
+      const key = fine ? viewKernelKey(e.props) : JSON.stringify(e.props)
+      if (!kernelResult(key)) pending.set(key, { props: e.props, fine })
+    }
+    if (!pending.size) return 0
+    if (purpose === 'mass') convertNow([...pending.values()].flatMap((p) => (p.props.op === 'BREP' ? [p.props] : [])))
+    for (const [key, p] of pending) requestKernel(key, p.props, true, p.fine)
+    const total = pending.size
+    const t0 = performance.now()
+    let told = 0
+    await new Promise<void>((resolve) => {
+      const check = () => {
+        for (const key of [...pending.keys()]) if (kernelResult(key)) pending.delete(key)
+        const now = performance.now()
+        if (!pending.size || now - t0 > EXACT_WAIT_MS) {
+          off()
+          clearInterval(tick)
+          resolve()
+          return
+        }
+        if (now - t0 > 1500 && now - told > 3000) {
+          told = now
+          print(`Computing exact solids: ${total - pending.size} of ${total}…`)
+        }
+      }
+      const off = onKernelResults(check)
+      const tick = setInterval(check, 500)
+      check()
+    })
+    return pending.size
+  }
   // Núcleo de sólidos exacto: cuando llegan sus resultados se redibuja con la geometría nueva (el primero enseguida;
   // mientras siguen llegando, a lo sumo cada 0,75 s o el doble de lo que tardó el último redibujo) y sus fallas se avisan.
   let kernelRedraw: ReturnType<typeof setTimeout> | null = null
@@ -893,7 +1016,24 @@ export const useStore = create<AppState>((set, get) => {
     get().redraw()
     requestAnimationFrame(() => requestAnimationFrame(() => (kernelRedrawCost = performance.now() - kernelRedrawAt)))
   }
-  onSolidsChanged(() => {
+  // Lo calculado en los ratos libres no apura el redibujo: espera la calma y va a lo sumo cada 10 s (o 5 veces lo que
+  // tarda); los snaps, las vistas y MASSPROP ya lo usan sin redibujar. Así un redibujo largo (un ensamble de miles de
+  // piezas) no le cae encima al usuario que vuelve a trabajar.
+  let idleRedraw: ReturnType<typeof setTimeout> | null = null
+  const idleRedrawSolids = () => {
+    idleRedraw = null
+    if (kernelRedraw) return // ya viene uno
+    if (!userIdle()) {
+      idleRedraw = setTimeout(idleRedrawSolids, 1000)
+      return
+    }
+    redrawSolids()
+  }
+  onSolidsChanged(({ background }) => {
+    if (background) {
+      idleRedraw ??= setTimeout(idleRedrawSolids, Math.max(0, kernelRedrawAt + Math.max(10_000, 5 * kernelRedrawCost) - performance.now()))
+      return
+    }
     if (kernelRedraw) return
     const gap = Math.max(750, 2 * kernelRedrawCost)
     kernelRedraw = setTimeout(redrawSolids, Math.max(0, kernelRedrawAt + gap - performance.now()))
@@ -983,7 +1123,7 @@ export const useStore = create<AppState>((set, get) => {
     for (const e of expandEntities(src, doc.blocks, { skipLayers: frozenLayerIds(doc.layers) })) {
       if (shown.get(e.layer) === false) continue
       if (e.type === 'SOLID3D') {
-        const m = solidMeshWithSurfaces(e.props)
+        const m = solidViewMesh(e.props)
         if (m.vertices.length) {
           meshes.push(m)
           colors.push(colorOf.get(e.layer) ?? '#c0c0c0')
@@ -1383,6 +1523,8 @@ export const useStore = create<AppState>((set, get) => {
     script: () => get().openScript(),
     solidMesh: (e) => (e.type === 'SOLID3D' ? solidMesh(e.props) : e.type === 'MESH3D' ? e.props : null),
     solidVolume: (e) => (e.type === 'SOLID3D' ? exactSolidVolume(e.props) : null),
+    solidMass: (e) => (e.type === 'SOLID3D' ? exactSolidMass(e.props) : null),
+    ensureExact: (ids, purpose) => ensureExact(ids, purpose),
     plotDialog: (window) =>
       new Promise((resolve) => {
         plotResolve?.('cancel')
@@ -1838,6 +1980,8 @@ export const useStore = create<AppState>((set, get) => {
     cursor: { x: 0, y: 0, z: 0 },
     helpOpen: false,
     xrefAsk: null,
+    solidImportAsk: null,
+    solidConvert: null,
     ortho: false,
     gridOn: true,
     fullscreen: false,
@@ -2718,6 +2862,17 @@ export const useStore = create<AppState>((set, get) => {
     setCursor: (p) => set({ cursor: p }),
     openHelp: () => set({ helpOpen: true }),
     closeHelp: () => set({ helpOpen: false }),
+    solidImportChoose: (mode, remember) => {
+      set({ solidImportAsk: null })
+      if (remember) {
+        sysvars.SOLIDIMPORT = mode
+        set((st) => ({ sysvarRev: st.sysvarRev + 1 }))
+        saveConfig()
+      }
+      if (mode === 1) convertImported(pendingRefs)
+      else print('Imported solids open as meshes: each piece converts to an exact solid when you select or edit it (SOLIDIMPORT).')
+    },
+    solidConvertCancel: () => conversion?.cancel(),
     xrefBrowse: (name) => {
       const ask = get().xrefAsk
       const pending = xrefPending
@@ -3029,7 +3184,8 @@ export const useStore = create<AppState>((set, get) => {
         }
       }
       try {
-        const res = await api.aiGenerateStream(text, doc.toJSON(), get().aiLod, onEvent)
+        // La IA no lee los modelos exactos de los sólidos importados (pesan megas): van sin ellos.
+        const res = await api.aiGenerateStream(text, withoutBreps(doc.toJSON()), get().aiLod, onEvent)
         const backup = doc.toJSON() // para accept/discard
         const layerByName = new Map(doc.layers.map((l) => [l.name.toLowerCase(), l.id]))
         // Crea (una vez) la capa de una pieza y devuelve su id; agrupa la geometría por pieza.
@@ -3304,6 +3460,7 @@ export const useStore = create<AppState>((set, get) => {
           applyViews()
           print(`Opened "${file.name}" from the device.`)
           warnMissingBlocks()
+          offerSolidConversion()
         } else if (MODEL_EXTS.some((x) => lower.endsWith(x))) {
           // Modelos 3D (STL, OBJ, STEP, IGES): un dibujo nuevo con cada cuerpo como malla.
           const meshes = await readModelFile(file, lower)
@@ -3641,7 +3798,7 @@ export const useStore = create<AppState>((set, get) => {
           print('Permission to write in the folder was denied.')
           return false
         }
-        const text = JSON.stringify(doc.toJSON())
+        const text = JSON.stringify(doc.toFileJSON())
         // Con otro nombre o carpeta (SAVE con un nombre nuevo, o el nombre cambiado arriba) es otro archivo: el que estaba
         // abierto queda como estaba.
         const path = get().fsFilePath
@@ -3682,7 +3839,7 @@ export const useStore = create<AppState>((set, get) => {
         }
       }
       try {
-        const data = doc.toJSON()
+        const data = doc.toFileJSON()
         if (docId) {
           await api.updateDocument(docId, docName, data, docFolder)
         } else {
@@ -3767,7 +3924,7 @@ export const useStore = create<AppState>((set, get) => {
       try {
         const h = await fileHandleAt(workspaceDir, docFolder, drawingFileName(docName, '.sv$'), { create: true })
         if (!h) return
-        await writeTextFile(h, JSON.stringify(doc.toJSON()))
+        await writeTextFile(h, JSON.stringify(doc.toFileJSON()))
         print(`<Automatic save to "${joinPath(docFolder, drawingFileName(docName, '.sv$'))}">`)
       } catch {
         /* la copia de recuperación no es imprescindible */
@@ -3821,6 +3978,7 @@ export const useStore = create<AppState>((set, get) => {
           })
           print(backupCopy ? `Opened the copy "${path}": SAVE writes it as "${drawingFileName(name, DRAWING_EXT)}".` : `Opened "${path}".`)
           warnMissingBlocks()
+          offerSolidConversion()
           if (!backupCopy) markSaved()
         }
         bump()
@@ -3849,6 +4007,7 @@ export const useStore = create<AppState>((set, get) => {
         markSaved()
         print(`Opened "${payload.name}".`)
         warnMissingBlocks()
+        offerSolidConversion()
       } catch (err) {
         print(err instanceof ApiError ? err.message : 'Could not open document')
       }
@@ -3914,6 +4073,8 @@ useStore.subscribe((s, prev) => {
 // Preferencias del usuario guardadas en este navegador: se aplican antes del primer render, así las
 // barras, paletas y ayudas de dibujo aparecen como quedaron.
 {
+  // En un teléfono los sólidos de un DWG/DXF abren como mallas mientras el usuario no cambie SOLIDIMPORT.
+  if (isPhone()) sysvars.SOLIDIMPORT = 2
   const local = readLocalPrefs()
   if (local) useStore.getState().applyPrefs(local)
 }
@@ -3940,4 +4101,14 @@ useStore.subscribe((s, prev) => {
 // Cada cambio de selección del usuario es un paso de Ctrl+Z (el store decide cuáles; ver `selectionStep`).
 useStore.subscribe((s, prev) => {
   if (s.selection !== prev.selection) selectionStep?.(prev.selection, s.selection)
+})
+
+// Cualquier acción del usuario corta lo que se calcula en los ratos libres (lo que no empezó sale de la cola).
+if (typeof window !== 'undefined') {
+  for (const ev of ['pointerdown', 'pointermove', 'wheel', 'keydown', 'touchstart'] as const) window.addEventListener(ev, noteActivity, { capture: true, passive: true })
+}
+
+// Modo mallas: una pieza importada se convierte al seleccionarla (también para editarla: los comandos la eligen).
+useStore.subscribe((s, prev) => {
+  if (s.selection !== prev.selection) selectionConvert?.(s.selection)
 })

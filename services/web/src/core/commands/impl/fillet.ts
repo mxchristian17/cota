@@ -1,3 +1,4 @@
+import { mayHitSolid } from '../../editing/brepLeaf'
 import type { Command, CommandContext } from '../types'
 import type { Pt } from '../../math'
 import { fromVec3, toVec3 } from '../../math'
@@ -194,7 +195,7 @@ function onSolidEdge(ctx: CommandContext, r: { point: Pt; pick?: { id?: string |
   if (r.pick?.id) return ctx.doc.getEntity(r.pick.id)?.type === 'SOLID3D'
   const p = toVec3(r.point)
   return ctx.doc.entities.some((e) => {
-    if (e.type !== 'SOLID3D') return false
+    if (e.type !== 'SOLID3D' || !mayHitSolid(e.props, p, null)) return false
     const topo = solidTopology(e.props)
     return !!topo && !!nearestEdge(topo, p, topo.diag * 0.05)
   })

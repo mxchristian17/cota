@@ -3560,3 +3560,47 @@ div.lt-row {
 .m-fab span {
   letter-spacing: 0.02em;
 }
+
+/* Sólidos de un DWG/DXF: diálogo de importación y avance de la conversión. */
+.solid-import-modal {
+  width: min(520px, 94vw);
+}
+.solid-import-intro {
+  margin: 8px 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.solid-import-remember {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.solid-convert-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  padding: 6px 10px;
+  background: var(--c-raised);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-dialog);
+  font-size: 13px;
+}
+.solid-convert-bar progress {
+  width: 140px;
+  flex: 0 1 140px;
+}
+.solid-convert-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -1,8 +1,8 @@
 import { CadDictionary, DimensionArc, DwgHeaderReader, DwgReader, Field, FieldList, Hatch, DxfReader, DxfWriter, GraphicsType, Insert, ProxyGeometryReader, Line, Mesh, ModelerGeometry, MText, MultiLeader, Polyline3D, ProxyEntity, Solid, UnknownEntity, XYZ, type CadDocument, type Entity, type IProxyGeometry, type ModelerGeometryWire } from '@node-projects/acad-ts'
 
 import { acisEdges, acisIsEmpty } from './acis'
-import { acisMesh, SOLID_MESH_REF } from './acisMesh'
-import { packMesh, type PackedMesh } from './meshTransfer'
+import { SOLID_MESH_REF } from './acisMesh'
+import { importedBrep, type ImportedSolids } from './importedBrep'
 
 /**
  * DWG → DXF con acad-ts (MIT, port a TypeScript de ACadSharp). Import estático a propósito: lo usan el hilo aparte
@@ -15,8 +15,8 @@ export interface CadConversion {
   bytes: Uint8Array
   /** Sólidos que quedaron como sus aristas (sin caras legibles). */
   wireSolids: number
-  /** Mallas de los sólidos leídos con sus caras: el DXF las nombra por su posición acá (ver `SOLID_MESH_REF`). */
-  solidMeshes: PackedMesh[]
+  /** Sólidos leídos con sus caras: el DXF los nombra por su posición acá (ver `SOLID_MESH_REF`) y la lista da su modelo. */
+  solids: ImportedSolids
   /** Sólidos vacíos (sin nada que dibujar) que se omitieron: tipo → cantidad. */
   empty: Record<string, number>
 }
@@ -57,13 +57,13 @@ function readLwDisplayFlag(): void {
 export function convertDwgToDxfBytes(data: ArrayBuffer, light = false): CadConversion {
   readLwDisplayFlag()
   const doc = DwgReader.readFromStream(data, null)
-  const solidMeshes: PackedMesh[] = []
+  const solids: ImportedSolids = { refs: [], breps: {} }
   const empty: Record<string, number> = {}
-  const wireSolids = solidsAsWires(doc, solidMeshes, light, empty)
+  const wireSolids = solidsAsWires(doc, solids, light, empty)
   simplifyForDxf(doc)
   adoptOrphans(doc)
   hatchAnglesToDegrees(doc)
-  return { bytes: writeDxfBytes(doc), wireSolids, solidMeshes, empty }
+  return { bytes: writeDxfBytes(doc), wireSolids, solids, empty }
 }
 
 /** ¿DXF binario? Empieza con "AutoCAD Binary DXF" (el importador lee el de texto). */
@@ -72,13 +72,13 @@ export const isBinaryDxf = (b: Uint8Array): boolean => b.length > 18 && new Text
 /** DXF binario → DXF de texto (lo lee acad-ts y lo vuelve a escribir). */
 export function binaryDxfToDxfBytes(data: ArrayBuffer, light = false): CadConversion {
   const doc = DxfReader.readFromStream(new Uint8Array(data))
-  const solidMeshes: PackedMesh[] = []
+  const solids: ImportedSolids = { refs: [], breps: {} }
   const empty: Record<string, number> = {}
-  const wireSolids = solidsAsWires(doc, solidMeshes, light, empty)
+  const wireSolids = solidsAsWires(doc, solids, light, empty)
   simplifyForDxf(doc)
   adoptOrphans(doc)
   hatchAnglesToDegrees(doc)
-  return { bytes: writeDxfBytes(doc), wireSolids, solidMeshes, empty }
+  return { bytes: writeDxfBytes(doc), wireSolids, solids, empty }
 }
 
 /**
@@ -162,23 +162,25 @@ function wirePoint(w: ModelerGeometryWire, p: XYZ): XYZ {
 }
 
 /**
- * Sólidos, regiones y cuerpos ACIS (3DSOLID, REGION, BODY): se leen sus caras del modelo ACIS y cada uno pasa a ser una
- * malla (en `meshes`; en el dibujo queda una MESH que la nombra, así también se ubica dentro de los bloques). Los que no
- * tienen caras legibles se reemplazan por sus aristas: las guardadas como puntos (lo que el CAD clásico dibuja en
- * alambre) o las del modelo. Todo en su capa, color y tipo de línea. Devuelve cuántos quedaron como aristas.
- * Los vacíos (ver `solidIsEmpty`) se quitan y se cuentan en `empty` por tipo: no hay nada que dibujar.
+ * Sólidos, regiones y cuerpos ACIS (3DSOLID, REGION, BODY): los que tienen caras legibles pasan a ser sólidos
+ * importados (su modelo, su malla y sus aristas en `solids`; en el dibujo queda una MESH que los nombra, así también se
+ * ubican dentro de los bloques). Los que no tienen caras legibles se reemplazan por sus aristas: las guardadas como
+ * puntos (lo que el CAD clásico dibuja en alambre) o las del modelo. Todo en su capa, color y tipo de línea. Devuelve
+ * cuántos quedaron como aristas. Los vacíos (ver `solidIsEmpty`) se quitan y se cuentan en `empty` por tipo: no hay nada
+ * que dibujar.
  */
-export function solidsAsWires(doc: CadDocument, meshes: PackedMesh[] = [], light = false, empty: Record<string, number> = {}): number {
+export function solidsAsWires(doc: CadDocument, solids: ImportedSolids = { refs: [], breps: {} }, light = false, empty: Record<string, number> = {}): number {
   let n = 0
   for (const br of doc.blockRecords ?? []) {
     for (const e of [...br.entities]) {
       if (!(e instanceof ModelerGeometry)) continue
-      const mesh = e.acisData?.length ? acisMesh(e.acisData, light) : null
-      if (mesh) {
+      const solid = e.acisData?.length ? importedBrep(e.acisData, light, solids.breps) : null
+      if (solid) {
         const ref = new Mesh()
-        ref.vertices = [new XYZ(meshes.length, SOLID_MESH_REF, SOLID_MESH_REF)]
+        ref.vertices = [new XYZ(solids.refs.length, SOLID_MESH_REF, SOLID_MESH_REF)]
         ref.faces = []
-        meshes.push(packMesh(mesh))
+        solids.refs.push(solid.ref)
+        solids.breps[solid.ref] = solid.brep
         ref.layer = e.layer
         ref.color = e.color
         ref.lineType = e.lineType

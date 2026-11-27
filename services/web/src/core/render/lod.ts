@@ -1,6 +1,7 @@
 import type { Entity, SolidProps } from '../document/types'
 import type { Vec3 } from '../math'
 import { solidWireframe } from '../editing/solid'
+import { brepCorners } from '../editing/brepLeaf'
 
 /**
  * Dibujo por tamaño en pantalla: una pieza que mide menos de `RENDERMINPX` píxeles se dibuja como
@@ -72,7 +73,8 @@ export function sizeSignature(e: Entity): SizeSig | null {
   if (saved && saved.k === k) return saved
   let s = memo.get(k)
   if (!s) {
-    const pts = e.type === 'MESH3D' ? e.props.vertices : solidWireframe(e.props).flat()
+    // Un sólido importado, por su caja (sus aristas cuestan leer el modelo, y miles de piezas se miden al abrir).
+    const pts = e.type === 'MESH3D' ? e.props.vertices : e.props.op === 'BREP' ? brepCorners(e.props) : solidWireframe(e.props).flat()
     s = sphereOf(pts) ?? { c: [0, 0, 0], r: Infinity }
     if (memo.size > MEMO_MAX) memo.clear()
     memo.set(k, s)

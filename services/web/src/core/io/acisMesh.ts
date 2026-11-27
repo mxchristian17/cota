@@ -568,12 +568,19 @@ export const SOLID_MESH_REF = -987654321.125
 export interface AcisMesh {
   vertices: Vec3[]
   faces: number[][]
+  /** Cara del modelo de cada triángulo (en el orden de `faces`): separa las caras del B-rep en la malla. */
+  faceOf: number[]
+  /** Aristas del modelo, ubicadas (con `withEdges`): las mismas de `acisEdges`, muestreadas como los bordes de la malla. */
+  edges?: Vec3[][]
   /** Caras por cómo se triangularon. */
   stats: { analytic: number; planar: number; failed: number }
 }
 
-/** Malla de todas las caras de un modelo ACIS; null si no tiene caras legibles. `light`: menos triángulos (teléfonos). */
-export function acisMesh(data: Uint8Array | string, light = false): AcisMesh | null {
+/**
+ * Malla de todas las caras de un modelo ACIS; null si no tiene caras legibles. `light`: menos triángulos (teléfonos).
+ * `withEdges`: también las aristas, sin volver a leer el modelo (sus puntos ya están calculados para los bordes).
+ */
+export function acisMesh(data: Uint8Array | string, light = false, withEdges = false): AcisMesh | null {
   let recs: Rec[]
   try {
     recs = acisRecords(data)
@@ -583,9 +590,12 @@ export function acisMesh(data: Uint8Array | string, light = false): AcisMesh | n
   const { place, mirrored, edgePoints, angleStep } = modelOf(recs, light)
   const vertices: Vec3[] = []
   const faces: number[][] = []
+  const faceOf: number[] = []
   const stats: AcisMesh['stats'] = { analytic: 0, planar: 0, failed: 0 }
+  let face = -1
   for (const f of recs) {
     if (kindOf(f) !== 'face') continue
+    face++
     try {
       const rings = loopsOf(recs, f, edgePoints)
       const sref = refsOf(recs, f).find((q) => kindOf(q.to) === 'surface')
@@ -599,7 +609,10 @@ export function acisMesh(data: Uint8Array | string, light = false): AcisMesh | n
         }
         const base = vertices.length
         for (const p of whole.pts) vertices.push(place(p))
-        for (const t of whole.tris) faces.push(t.map((i) => i + base))
+        for (const t of whole.tris) {
+          faces.push(t.map((i) => i + base))
+          faceOf.push(face)
+        }
         stats.analytic++
         continue
       }
@@ -619,12 +632,23 @@ export function acisMesh(data: Uint8Array | string, light = false): AcisMesh | n
       }
       const base = vertices.length
       for (const p of mesh.pts) vertices.push(place(p))
-      for (const t of mesh.tris) faces.push(t.map((i) => i + base))
+      for (const t of mesh.tris) {
+        faces.push(t.map((i) => i + base))
+        faceOf.push(face)
+      }
     } catch {
       stats.failed++
     }
   }
   // Un cuerpo reflejado por su transformación da vuelta el sentido de los triángulos: se corrige para que miren afuera.
   if (mirrored) for (const f of faces) f.reverse()
-  return faces.length ? { vertices, faces, stats } : null
+  if (!faces.length) return null
+  if (!withEdges) return { vertices, faces, faceOf, stats }
+  const edges: Vec3[][] = []
+  for (const e of recs) {
+    if (kindOf(e) !== 'edge') continue
+    const pts = edgePoints(e)
+    if (pts) edges.push(pts.map(place))
+  }
+  return { vertices, faces, faceOf, stats, edges }
 }

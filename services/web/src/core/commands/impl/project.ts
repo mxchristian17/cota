@@ -22,6 +22,8 @@ export const flatshotCommand: Command = {
   async run(ctx) {
     const opts = await ctx.app.flatshotDialog?.()
     if (!opts) return
+    // Las piezas importadas se proyectan con su modelo exacto (teselado fino): se espera su resultado.
+    await ctx.app.ensureExact?.(null, 'view')
     const items = ctx.app.flatshotProject?.({ showObscured: opts.showObscured, tangential: opts.tangential }) ?? []
     if (items.length === 0) {
       ctx.print('No 3D solids to flatten in the current view.')

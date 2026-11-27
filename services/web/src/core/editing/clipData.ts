@@ -1,7 +1,8 @@
+import { brepsOf, solidTrees } from '../document/brepStore'
 import { LayerService } from '../layers/LayerService'
 import { cloneEntityInput, translateEntity } from './edit'
 import type { DocumentModel } from '../document/DocumentModel'
-import type { BlockDef, Entity, EntityInput, InsertProps, Layer } from '../document/types'
+import type { BlockDef, BrepModel, Entity, EntityInput, InsertProps, Layer, SolidProps } from '../document/types'
 import type { Pt } from '../math'
 
 /**
@@ -20,6 +21,8 @@ export interface ClipData {
   blocks: BlockDef[]
   /** Capas de los objetos y de esas definiciones. */
   layers: Layer[]
+  /** Modelos exactos de los sólidos importados de los objetos y de esas definiciones (otra pestaña no los tiene). */
+  breps?: Record<string, BrepModel>
 }
 
 /** Lo que pasó al pegar (para los mensajes de PASTECLIP). */
@@ -103,7 +106,14 @@ export function makeClip(doc: DocumentModel, ents: Entity[], base: Pt): ClipData
     items: ents.map(cloneEntityInput),
     blocks,
     layers: doc.layers.filter((l) => used.has(l.id)).map((l) => ({ ...l })),
+    ...withBreps([...solidTrees(ents), ...blocks.flatMap((b) => solidTrees(b.entities))]),
   }
+}
+
+/** `{ breps }` con los modelos que usan unos árboles, o nada si no usan ninguno. */
+function withBreps(trees: SolidProps[]): { breps?: Record<string, BrepModel> } {
+  const breps = brepsOf(trees)
+  return breps ? { breps } : {}
 }
 
 /** Huella de una definición para compararla con otra de otro dibujo: sin ids y con las capas por nombre. */
@@ -135,6 +145,7 @@ function freeAnonymousName(name: string, taken: Set<string>): string {
  */
 export function pasteClip(doc: DocumentModel, clip: ClipData, d: { x: number; y: number; z: number }, skipInsert?: (block: string) => boolean): PasteReport {
   const report: PasteReport = { ids: [], addedBlocks: [], keptBlocks: [], addedLayers: [], missing: [], missingRefs: 0, skipped: 0 }
+  doc.addBrepModels(clip.breps)
   // Capas por nombre.
   const layerId = new Map<string, string>()
   const layers = new LayerService(doc)

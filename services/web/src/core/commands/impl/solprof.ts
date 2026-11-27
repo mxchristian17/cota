@@ -52,6 +52,8 @@ export const solprofCommand: Command = {
     let n = 0
     const push = (list: Entity[], e: Omit<Entity, 'id'>) => list.push({ ...e, id: `p${++n}` } as Entity)
 
+    // Las piezas importadas se proyectan con su modelo exacto (teselado fino): se espera su resultado.
+    await ctx.app.ensureExact?.(ids, 'view')
     if (project) {
       const items = ctx.app.projectModel?.(ids, basis, { showObscured: true, tangential: !deleteTangent }) ?? []
       const at = (p: [number, number]): Vec3 => [p[0], p[1], 0]

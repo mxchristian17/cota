@@ -1,3 +1,4 @@
+import { mayHitSolid } from '../../editing/brepLeaf'
 import type { Command, CommandContext, PointResult } from '../types'
 import type { Pt, Vec3 } from '../../math'
 import { fromVec3 } from '../../math'
@@ -64,6 +65,7 @@ function pickEdge(ctx: CommandContext, p: Pt, ray: boolean): EdgeHit | null {
   const wire = ctx.app.visualStyle().endsWith('wireframe')
   const hits: (EdgeHit & { dist: number; t: number })[] = []
   for (const solid of selectableEntities(ctx.doc).filter(isSolid)) {
+    if (!mayHitSolid(solid.props, r ? r.origin : vec(p), r ? r.dir : null, r?.tol)) continue
     const topo = solidTopology(solid.props)
     if (!topo) continue
     if (r) {

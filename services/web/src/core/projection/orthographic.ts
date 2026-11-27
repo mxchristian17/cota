@@ -1,4 +1,5 @@
 import type { Vec3 } from '../math'
+import { exactEdges } from '../editing/exactEdges'
 import { buildTopology } from '../editing/topology'
 import { brepFaceIds, openBoundaryEdges } from './importedMesh'
 import type { SolidProps } from '../document/types'
@@ -25,6 +26,13 @@ export interface Mesh {
    * proyecta con los cuidados de `importedMesh` (ver `viewEdges` y `touch` en `projectHiddenGroups`).
    */
   imported?: boolean
+  /** Lámina (una REGION o superficie importada, sin volumen): sus bordes libres también son aristas de la vista. */
+  sheet?: boolean
+  /**
+   * Cada cara teselada por separado (la malla de un sólido importado sin el núcleo exacto): el borde de una no cae sobre
+   * la teselación de la vecina, como en `imported`, aunque las caras sí vienen separadas (`surf`).
+   */
+  separateFaces?: boolean
   vertices: Vec3[]
   faces: number[][]
 }
@@ -139,8 +147,9 @@ function viewEdges(meshes: Mesh[], out: Vec3, tangential = false): Array<[Vec3, 
   // se separan en las caras del B-rep (si vienen así) y se conservan las medias aristas sueltas para dibujar los bordes
   // que la topología no empareja.
   const imported = !!meshes[0].imported && !meshes[0].topo && !hasSurf
+  const open = imported || (!!meshes[0].sheet && !meshes[0].topo)
   const brep = imported ? brepFaceIds(meshes[0]) : null
-  const topo = meshes[0].topo ?? buildTopology(pos, hasSurf ? surf : brep, undefined, false, imported ? { orient: true, open: true } : {})
+  const topo = meshes[0].topo ?? buildTopology(pos, hasSurf ? surf : brep, undefined, false, imported ? { orient: true, open: true } : open ? { open: true } : {})
   const smooth = (a: Vec3, b: Vec3) => dot(a, b) > SMOOTH_DOT
   const curved = (f: number) => topo.shapes?.[f]?.kind !== 'plane'
   const res: Array<[Vec3, Vec3]> = []
@@ -170,7 +179,7 @@ function viewEdges(meshes: Mesh[], out: Vec3, tangential = false): Array<[Vec3, 
   // Sin el origen de cada cara, las tangentes se estiman por la forma de las facetas (en una malla teselada por caras del
   // B-rep la estimación inventaba tangentes en los cilindros de teselación irregular: ya salen arriba, entre caras).
   if (tangential && !hasSurf && !brep) res.push(...tangentEdges(topo))
-  if (imported) res.push(...openBoundaryEdges(topo, out, tangential, SMOOTH_DOT))
+  if (open) res.push(...openBoundaryEdges(topo, out, tangential, SMOOTH_DOT))
   return res
 }
 
@@ -297,7 +306,7 @@ export function projectHiddenGroups(groups: Mesh[][], basis: ProjBasis, opts: { 
   // En los sólidos propios, lo mismo con tres diezmilésimas: el teselado de un empalme deja aristas a centésimas de la cara
   // vecina, y una cara casi paralela a la vista (de canto) las tapaba por profundidad (medio borde del cabezal de un
   // radiador desaparecía en la vista superior).
-  const touch = meshes.map((m) => (m.imported && !m.topo && !m.surf ? 1e-3 : 3e-4) * meshDiag(m))
+  const touch = meshes.map((m) => ((m.imported && !m.topo && !m.surf) || m.separateFaces ? 1e-3 : 3e-4) * meshDiag(m))
   const occluded = (pu: number, pv: number, pd: number, p?: Vec3, mi = -1): boolean => {
     const [gx, gy] = cellOf(pu, pv)
     for (const k of grid[gy * G + gx]) {
@@ -713,11 +722,15 @@ function mergeCocircular(items: ProjItem[], tol: number): ProjItem[] {
 }
 
 export function mergeSegments(segs: ProjSegment[], tol: number): ProjItem[] {
-  return mergeCollinear2D(mergeCocircular(mergeChains(segs, tol), tol), tol)
+  return mergeCollinear2D(mergeCocircular(mergeChains(segs, tol), tol), tol, 5 * tol)
 }
 
-/** Une las líneas que están sobre la misma recta y se tocan o se superponen (la CSG las parte). */
-function mergeCollinear2D(items: ProjItem[], tol: number): ProjItem[] {
+/**
+ * Une las líneas que están sobre la misma recta y se tocan o se superponen (la CSG las parte), o que dejan entre sí un
+ * hueco de hasta `gap`: la prueba de visibilidad de la malla titubea a lo largo de una arista larga junto a otra cara y
+ * la partía en pedazos con huecos de una milésima del dibujo.
+ */
+function mergeCollinear2D(items: ProjItem[], tol: number, gap = tol): ProjItem[] {
   const lines = items.filter((i): i is Extract<ProjItem, { kind: 'line' }> => i.kind === 'line')
   const out: ProjItem[] = items.filter((i) => i.kind !== 'line')
   const used = new Set<number>()
@@ -737,7 +750,7 @@ function mergeCollinear2D(items: ProjItem[], tol: number): ProjItem[] {
         const o = lines[j]
         if (Math.abs(off(o.a)) > tol || Math.abs(off(o.b)) > tol) continue
         const [ta, tb] = [t(o.a), t(o.b)].sort((x, y) => x - y)
-        if (tb < lo - tol || ta > hi + tol) continue
+        if (tb < lo - gap || ta > hi + gap) continue
         lo = Math.min(lo, ta)
         hi = Math.max(hi, tb)
         used.add(j)
@@ -828,8 +841,17 @@ export interface CircleHint {
   r: number
 }
 
-/** Círculos que definen las primitivas del árbol de un sólido (su radio y centro exactos). */
+/**
+ * Círculos exactos de un sólido: los de las primitivas de su árbol y los de sus aristas exactas (las del modelo de una
+ * pieza importada o las del núcleo), con su radio y centro exactos.
+ */
 export function solidCircleHints(p: SolidProps): CircleHint[] {
+  const exact = exactEdges(p)
+  const fromEdges: CircleHint[] = exact ? exact.flatMap((e) => (e.arc ? [{ c: e.arc.center, n: e.arc.normal, r: e.arc.radius }] : [])) : []
+  return [...primitiveHints(p), ...fromEdges]
+}
+
+function primitiveHints(p: SolidProps): CircleHint[] {
   switch (p.op) {
     case 'CYLINDER':
     case 'CONE': {
@@ -843,11 +865,14 @@ export function solidCircleHints(p: SolidProps): CircleHint[] {
     case 'UNION':
     case 'SUBTRACT':
     case 'INTERSECT':
-      return p.operands.flatMap(solidCircleHints)
+      return p.operands.flatMap(primitiveHints)
     case 'SHELL':
     case 'FILLETEDGE':
     case 'CHAMFEREDGE':
-      return solidCircleHints(p.solid)
+      return primitiveHints(p.solid)
+    case 'BREP':
+      // Las piezas importadas dentro de un árbol: los círculos de su modelo (con su matriz).
+      return (exactEdges(p) ?? []).flatMap((e) => (e.arc ? [{ c: e.arc.center, n: e.arc.normal, r: e.arc.radius }] : []))
     default:
       return []
   }
@@ -863,10 +888,13 @@ export function viewHints(hints: CircleHint[], view: ViewDir, offset: P2 = [0, 0
 
 /** Lleva cada círculo o arco al círculo exacto de una primitiva que coincide (radio y centro). */
 /**
- * Contornos de los cilindros vistos de costado a su radio exacto: el teselado pone la silueta en un vértice del
- * polígono, a r·cos(δ) del eje (un Ø42 se acotaba 41,99, R19). Una línea paralela al eje proyectado de un círculo
- * del sólido (`hints`, con su normal ⟂ a la vista) y a la distancia del radio dentro del error del teselado (32 lados
- * o más, siempre por dentro) se corre a r. Sólo se mueve en perpendicular al eje.
+ * Contornos y bordes de los cilindros a su radio exacto: el teselado pone la silueta en un vértice del polígono, a
+ * r·cos(δ) del eje (un Ø42 se acotaba 41,99, R19), y un círculo visto de canto (una recta) termina en ese mismo vértice,
+ * no en el radio. Para cada círculo del sólido (`hints`) con su eje en el plano de la vista, cada extremo de una recta
+ * casi paralela al eje (la silueta) o de una recta sobre el plano del círculo (visto de canto) que cae a la distancia
+ * del radio dentro del error del teselado (32 lados o más, siempre por dentro) se corre a r, en perpendicular al eje.
+ * Moviendo cada extremo (no la recta entera), el de la silueta y el del círculo de canto vuelven a coincidir: antes
+ * quedaba un tramito suelto entre los dos.
  */
 export function snapSilhouettes(items: ProjItem[], hints: CircleHint[], basis: ProjBasis): ProjItem[] {
   const dot3 = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
@@ -879,22 +907,36 @@ export function snapSilhouettes(items: ProjItem[], hints: CircleHint[], basis: P
     return [{ c: [dot3(h.c, basis.right), dot3(h.c, basis.up)] as P2, u, p: [-u[1], u[0]] as P2, r: h.r }]
   })
   if (!side.length) return items
+  /** Distancia del punto al eje del círculo menos su radio (negativa: por dentro), su avance a lo largo del eje y la corrección. */
+  const measure = (q: P2, h: (typeof side)[number]) => {
+    const rel: P2 = [q[0] - h.c[0], q[1] - h.c[1]]
+    const off = rel[0] * h.p[0] + rel[1] * h.p[1]
+    return { err: Math.abs(off) - h.r, along: rel[0] * h.u[0] + rel[1] * h.u[1], k: Math.sign(off) * h.r - off }
+  }
+  /** ¿Sobre la generatriz o por dentro, dentro del error del teselado? */
+  const inBand = (err: number, r: number) => err <= 1e-9 && err >= -0.006 * r - 1e-9
   return items.map((it) => {
     if (it.kind !== 'line') return it
     const d: P2 = [it.b[0] - it.a[0], it.b[1] - it.a[1]]
     const len = Math.hypot(d[0], d[1])
     if (len < 1e-9) return it
+    // Para cada extremo, la corrección del círculo que mejor corresponde (la de menor error).
+    const best: Array<{ k: number; p: P2; err: number } | null> = [null, null]
     for (const h of side) {
-      if (Math.abs(d[0] * h.u[1] - d[1] * h.u[0]) / len > 1e-6) continue // no es paralela al eje
-      const rel = (q: P2): P2 => [q[0] - h.c[0], q[1] - h.c[1]]
-      const off = rel(it.a)[0] * h.p[0] + rel(it.a)[1] * h.p[1]
-      const err = Math.abs(off) - h.r
-      if (err > 1e-9 || err < -0.006 * h.r - 1e-9 || Math.abs(err) < 1e-12) continue
-      const k = (Math.sign(off) * h.r - off)
-      const mv = (q: P2): P2 => [q[0] + h.p[0] * k, q[1] + h.p[1] * k]
-      return { ...it, a: mv(it.a), b: mv(it.b) }
+      const sin = Math.abs(d[0] * h.u[1] - d[1] * h.u[0]) / len // ángulo con el eje
+      const ms = [measure(it.a, h), measure(it.b, h)]
+      // Silueta: casi paralela al eje, o con los dos extremos junto a la generatriz (un cilindro muy corto). Círculo de
+      // canto: perpendicular al eje y sobre el plano del círculo.
+      const silhouette = sin < 0.02 || (inBand(ms[0].err, h.r) && inBand(ms[1].err, h.r))
+      ms.forEach((m, i) => {
+        const edgeOn = sin > 1 - 2e-4 && Math.abs(m.along) <= h.r * 1e-6 + 1e-9
+        if (!(silhouette || edgeOn) || !inBand(m.err, h.r) || Math.abs(m.err) < 1e-12) return
+        if (!best[i] || Math.abs(m.err) < Math.abs(best[i]!.err)) best[i] = { k: m.k, p: h.p, err: m.err }
+      })
     }
-    return it
+    if (!best[0] && !best[1]) return it
+    const mv = (q: P2, x: { k: number; p: P2 } | null): P2 => (x ? [q[0] + x.p[0] * x.k, q[1] + x.p[1] * x.k] : q)
+    return { ...it, a: mv(it.a, best[0]), b: mv(it.b, best[1]) }
   })
 }
 

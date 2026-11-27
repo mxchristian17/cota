@@ -3,11 +3,12 @@ import type { NamedView } from '../view'
 import { cleanNumbersDeep } from '../geom/clean'
 import { meshVerticesCleaned } from '../editing/mesh'
 import { cloneDocument, cloneEntity } from './cloneShared'
+import { encodeBrep, registerBreps, withUsedBreps } from './brepStore'
 import { modelToPaperEntity, parseProxyId } from '../layout/transspatial'
 import { setModelAnnoScale } from '../dimension/dimGeometry'
 import { annoScaleOf, paperPerModel } from '../layout/scale'
 import { refreshBreaks } from '../dimension/breaks'
-import type { AttDisp, BlockDef, DimAssocRef, DimensionProps, DocumentData, DrawingVars, Entity, EntityInput, Layer, LayoutDef, LinetypeDefData, PageSetup, UcsDef, GroupDef } from './types'
+import type { AttDisp, BlockDef, BrepModel, DimAssocRef, DimensionProps, DocumentData, DrawingVars, Entity, EntityInput, Layer, LayoutDef, LinetypeDefData, PageSetup, UcsDef, GroupDef } from './types'
 import { loopsSignature, rebuildHatchLoops, sourceSignature } from '../hatch/assoc'
 import { BYBLOCK, BYLAYER, CONTINUOUS, CONTINUOUS_DEF, isSpecialLinetype, libraryLinetype, type LinetypeContext } from '../linetype/linetypes'
 import { defaultPageSetup } from '../layout/paper'
@@ -89,6 +90,7 @@ export class DocumentModel {
       this.data.layouts = [{ id: 'L1', name: 'Layout1', pageSetup: defaultPageSetup(), entities: [] }]
     }
     if (this.data.activeLayout && !this.getLayout(this.data.activeLayout)) delete this.data.activeLayout
+    registerBreps(this.data.breps)
     this.normalizeDimStyles()
     this.normalizeLinetypes()
     this.compactShades()
@@ -1094,6 +1096,26 @@ export class DocumentModel {
   /** Serializa a un objeto plano (copia profunda; las mallas comparten vértices y caras, ver `cloneDocument`). */
   toJSON(): DocumentData {
     return cloneDocument(this.data)
+  }
+
+  /** Lo que se guarda (archivo, servidor): el dibujo sin los modelos exactos que ya no usa ninguna entidad. */
+  toFileJSON(): DocumentData {
+    return withUsedBreps(this.toJSON())
+  }
+
+  /** Agrega el modelo exacto de un sólido importado (si no estaba) y devuelve su `ref` para la hoja `BREP`. */
+  addBrep(bytes: Uint8Array, fmt: BrepModel['fmt']): string {
+    const { ref, model } = encodeBrep(bytes, fmt)
+    this.addBrepModels({ [ref]: model })
+    return ref
+  }
+
+  /** Agrega modelos ya comprimidos (los de lo que se pega o se inserta). */
+  addBrepModels(rec: Record<string, BrepModel> | undefined): void {
+    if (!rec) return
+    const own = (this.data.breps ??= {})
+    for (const [ref, m] of Object.entries(rec)) own[ref] ??= m
+    registerBreps(rec)
   }
 
   static fromJSON(data: DocumentData): DocumentModel {

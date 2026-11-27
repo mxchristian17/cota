@@ -252,6 +252,8 @@ export const viewbaseCommand: Command = {
       if (picked === undefined) return
       source = picked
     }
+    // Las piezas importadas se proyectan con su modelo exacto (teselado fino): se espera su resultado.
+    await ctx.app.ensureExact?.(source, 'view')
     // La vista base se calcula antes de pasar al layout: sin sólidos se avisa sin cambiar de pestaña (B20).
     const anchor = ctx.app.viewAnchor?.(source) ?? null
     let size = buildView(ctx, block, source, st.basis, st.hidden, anchor)
@@ -381,6 +383,8 @@ export const viewupdateCommand: Command = {
     const sel = await ctx.getSelectionOrKeyword('Select views to update or [All] <All>: ', ['All'])
     if (sel === null) return
     const ids = sel.kind === 'selection' && sel.ids.length ? sel.ids : null
+    // Las piezas importadas del modelo, con su modelo exacto (teselado fino).
+    await ctx.app.ensureExact?.(null, 'view')
     const n = ctx.app.updateDrawingViews?.(ids, ids !== null) ?? 0
     ctx.print(n ? `${n} view(s) updated.` : 'All views are up to date.')
   },

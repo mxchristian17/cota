@@ -23,7 +23,7 @@ describe('mongeLayout', () => {
 })
 
 describe('silueta exacta de cilindros vistos de costado (R19)', () => {
-  it('las líneas de contorno del teselado (a r·cos δ del eje) se corren al radio; las demás no se tocan', async () => {
+  it('las líneas de contorno del teselado (a r·cos δ del eje) y los extremos de la base vista de canto se corren al radio; las demás no se tocan', async () => {
     const { snapSilhouettes } = await import('../projection/orthographic')
     const { viewBasis } = await import('./views')
     const r = 21
@@ -39,6 +39,10 @@ describe('silueta exacta de cilindros vistos de costado (R19)', () => {
     const xs = out.map((it) => (it.kind === 'line' ? it.a[0] : NaN))
     expect(xs[1] - xs[0]).toBeCloseTo(42, 12)
     expect(xs[2]).toBe(-15)
-    expect(out[3]).toEqual(items[3])
+    // La base (el círculo visto de canto) llega al radio, como la silueta: los dos extremos coinciden.
+    const base = out[3] as { a: [number, number]; b: [number, number] }
+    expect(base.a[0]).toBeCloseTo(-21, 12)
+    expect(base.b[0]).toBeCloseTo(21, 12)
+    expect([base.a[1], base.b[1]]).toEqual([0, 0])
   })
 })

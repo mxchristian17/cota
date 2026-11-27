@@ -12,6 +12,7 @@ vi.mock('./occtKernel', () => ({
   kernelAvailable: () => true,
   kernelResult: (key: string) => kernel.results.get(key),
   requestKernel: (key: string) => void kernel.requested.push(key),
+  wasBackground: () => false,
   onKernelResults: (fn: (keys: string[]) => void) => {
     kernel.listeners.push(fn)
     return () => {}

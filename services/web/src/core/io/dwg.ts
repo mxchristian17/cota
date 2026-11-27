@@ -1,5 +1,7 @@
 import type { DxfImportResult } from './dxf'
 import { unpackMeshes } from './meshTransfer'
+import { registerBreps } from '../document/brepStore'
+import type { BrepModel } from '../document/types'
 
 /**
  * DWG en el navegador, sin servidor: acad-ts (MIT, port a TypeScript de ACadSharp) lee el archivo y lo escribe como
@@ -36,7 +38,16 @@ async function importCadHere(kind: 'dwg' | 'dxf', data: ArrayBuffer, light?: boo
  * con un mensaje en vez de quedar leyendo para siempre. Sin Worker o si el hilo no arranca (sin conexión con una
  * versión vieja en caché), se lee en el hilo principal.
  */
+/** Lecturas de DWG/DXF en curso (mientras tanto, nada se calcula en los ratos libres). */
+let reading = 0
+export const cadReadsInFlight = (): number => reading
+
 export function importCadInWorker(kind: 'dwg' | 'dxf', data: ArrayBuffer, opts: { timeoutMs?: number; light?: boolean } = {}): Promise<DxfImportResult> {
+  reading++
+  return readInWorker(kind, data, opts).finally(() => reading--)
+}
+
+function readInWorker(kind: 'dwg' | 'dxf', data: ArrayBuffer, opts: { timeoutMs?: number; light?: boolean }): Promise<DxfImportResult> {
   const { timeoutMs = CAD_TIMEOUT_MS, light } = opts
   if (typeof Worker === 'undefined') return importCadHere(kind, data, light)
   return new Promise((resolve, reject) => {
@@ -56,11 +67,21 @@ export function importCadInWorker(kind: 'dwg' | 'dxf', data: ArrayBuffer, opts: 
       done()
       reject(new CadTimeoutError(timeoutMs))
     }, timeoutMs)
-    worker.onmessage = (e: MessageEvent<{ ok: boolean; result?: DxfImportResult; error?: string }>) => {
+    worker.onmessage = (e: MessageEvent<{ ok: boolean; result?: DxfImportResult; error?: string } | { models: Record<string, BrepModel> }>) => {
+      if ('models' in e.data) {
+        // Los modelos de los sólidos, comprimidos (ver `cadWorker`): reemplazan a sus bytes en el registro.
+        registerBreps(e.data.models)
+        worker.terminate()
+        return
+      }
       answered = true
-      done()
+      clearTimeout(timer)
+      if (e.data.ok && e.data.result?.breps) {
+        // El lector sigue un rato: comprime los modelos. Si no termina, se comprimen al guardar.
+        setTimeout(() => worker.terminate(), timeoutMs)
+      } else worker.terminate()
       if (e.data.ok && e.data.result) {
-        // Con el lector ya cerrado (su memoria se libera), las mallas vuelven a listas de vértices y caras.
+        // Las mallas vuelven a listas de vértices y caras.
         unpackMeshes(e.data.result)
         resolve(e.data.result)
       }

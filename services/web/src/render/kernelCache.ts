@@ -15,7 +15,8 @@ export type StoredResult = { ok: true; mesh: OcctMesh; stats: OcctStats & { init
 const DB_NAME = 'cota-kernel'
 const STORE = 'results'
 export const MAX_ENTRIES = 4000
-const PREFIX = `${typeof __OCCT_VERSION__ === 'string' ? __OCCT_VERSION__ : '0'}|${ABOUT.version}|`
+// La forma del resultado: con `e`, aristas exactas y masa (lo guardado antes, sin ellas, no se usa).
+const PREFIX = `${typeof __OCCT_VERSION__ === 'string' ? __OCCT_VERSION__ : '0'}|${ABOUT.version}|e|`
 
 let dbp: Promise<IDBDatabase | null> | null = null
 

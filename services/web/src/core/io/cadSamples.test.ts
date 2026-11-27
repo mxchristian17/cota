@@ -26,7 +26,7 @@ const byType = (r: DxfImportResult) => {
 /** Inserciones que quedan como bloques de Cota (por nombre) y definiciones que se traen. */
 const kept = (r: DxfImportResult) => r.entities.filter((e) => e.type === 'INSERT').map((e) => (e.props as { name: string }).name)
 
-const DWG_2018 = { POINT: 7, LINE: 64, POLYLINE: 38, CIRCLE: 17, ARC: 1, ELLIPSE: 1, MESH3D: 7, RECTANGLE: 16, HATCH: 26, TEXT: 79, SPLINE: 2, DIMENSION: 11, IMAGE: 1 } // la imagen, con su marco
+const DWG_2018 = { POINT: 7, LINE: 64, POLYLINE: 38, CIRCLE: 17, ARC: 1, ELLIPSE: 1, MESH3D: 4, SOLID3D: 3, RECTANGLE: 16, HATCH: 26, TEXT: 79, SPLINE: 2, DIMENSION: 11, IMAGE: 1 } // la imagen, con su marco
 
 describe('muestras estándar de DWG/DXF (ACadSharp)', () => {
   it('DWG 2018: todas las entidades que Cota entiende, con tablas, caras 3D, mallas y rellenos', async () => {
@@ -34,7 +34,8 @@ describe('muestras estándar de DWG/DXF (ACadSharp)', () => {
     expect(byType(r)).toEqual(DWG_2018)
     expect(r.unsupported).toEqual([])
     expect(r.simplified).toEqual({ SHAPE: 1, PDFUNDERLAY: 1 })
-    expect(r.meshedSolids).toBe(3) // los sólidos y regiones del ACIS, con sus caras
+    expect(r.meshedSolids).toBe(3) // los sólidos y regiones del ACIS, con sus caras: sólidos importados
+    expect(Object.keys(r.breps ?? {})).toHaveLength(3)
     expect(r.wireSolids).toBeUndefined()
     expect(r.layouts?.map((l) => l.name)).toEqual(['Layout1', 'Layout2', 'MyLayout'])
     // Los bloques con nombre quedan como bloques; el dinámico (anónimo) y la inserción cuyos atributos no caen donde
@@ -57,7 +58,7 @@ describe('muestras estándar de DWG/DXF (ACadSharp)', () => {
 
   it('DWG 2000: mismas entidades (sin las tablas, que no existían)', async () => {
     const r = await read('sample_AC1015.dwg', 'dwg')
-    expect(byType(r)).toEqual({ POINT: 7, LINE: 33, POLYLINE: 38, CIRCLE: 14, ARC: 1, ELLIPSE: 1, MESH3D: 7, RECTANGLE: 16, HATCH: 25, TEXT: 60, SPLINE: 2, DIMENSION: 11, IMAGE: 1 })
+    expect(byType(r)).toEqual({ POINT: 7, LINE: 33, POLYLINE: 38, CIRCLE: 14, ARC: 1, ELLIPSE: 1, MESH3D: 4, SOLID3D: 3, RECTANGLE: 16, HATCH: 25, TEXT: 60, SPLINE: 2, DIMENSION: 11, IMAGE: 1 })
     expect(kept(r)).toEqual(['my_block_v2', 'my_block'])
     expect(r.unsupported).toEqual([])
   })

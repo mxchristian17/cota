@@ -1,3 +1,4 @@
+import { brepCorners } from './brepLeaf'
 import type { Vec3 } from '../math'
 import type { BoxProps, Entity, EntityInput, ExtrudeProps, SolidProps } from '../document/types'
 import { boxCorners, solidVertices, translateSolid } from './solid'
@@ -259,7 +260,8 @@ export function stretchSolid(p: SolidProps, box: StretchBox, d: Vec3): { props: 
       const r = stretchExtrude(p.op === 'BOX' ? boxAsExtrude(p) : p, box, d)
       return r.hits && r.hits < r.total ? r : { props: p, hits: r.hits, total: r.total }
     }
-    const vs = solidVertices(p)
+    // Un sólido importado no tiene vértices propios: se mueve entero si su caja queda adentro.
+    const vs = p.op === 'BREP' ? brepCorners(p) : solidVertices(p)
     const hits = vs.filter((v) => inBox(v, box)).length
     if (!vs.length || hits < vs.length) return { props: p, hits: 0, total: Math.max(1, vs.length) }
     return { props: p, hits, total: hits }

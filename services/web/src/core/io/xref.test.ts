@@ -43,6 +43,12 @@ describe('referencias externas (XREF)', () => {
     expect(base.entities.map((e) => [e.type, e.layerName])).toEqual([['LINE', 'Base|Muros'], ['CIRCLE', '0'], ['INSERT', 'Base|Muros']])
     expect((base.entities[2].props as unknown as { name: string }).name).toBe('Base|Perno')
     expect(r.blocks!.find((b) => b.name === 'Base|Perno')?.entities.map((e) => e.layerName)).toEqual(['Base|Muros'])
+    // Los modelos de los sólidos importados de la referencia viajan con el dibujo.
+    const x = importDxf(child)
+    x.breps = { 'sab-1-x': { fmt: 'sab', bytes: new Uint8Array([1]), box: [[0, 0, 0], [1, 1, 1]], display: {} as never } }
+    const r2 = importDxf(host)
+    attachXref(r2, 'Base', x)
+    expect(Object.keys(r2.breps ?? {})).toEqual(['sab-1-x'])
     expect(r.layers.map((l) => l.name)).toContain('Base|Muros')
     expect(r.layers.map((l) => l.name)).not.toContain('Base|0')
     expect(xrefsOf(r)).toEqual([])

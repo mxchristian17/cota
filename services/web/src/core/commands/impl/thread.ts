@@ -1,3 +1,4 @@
+import { mayHitSolid } from '../../editing/brepLeaf'
 import { toVec3, type Pt, type Vec3 } from '../../math'
 import type { ArcEntity, ArcProps, CircleEntity, DimensionProps, Entity, SolidEntity, SolidThread } from '../../document/types'
 import type { Command, CommandContext } from '../types'
@@ -139,7 +140,7 @@ function faceHit(ctx: CommandContext, p: Pt): FaceHit | 'flat' | null {
   const d: Vec3 = ray ? ray.dir : [0, 0, -1]
   let best: { e: SolidEntity; face: number; t: number; point: Vec3 } | null = null
   for (const e of visibleEntities(ctx.doc)) {
-    if (e.type !== 'SOLID3D') continue
+    if (e.type !== 'SOLID3D' || !mayHitSolid(e.props, o, d)) continue
     const topo = solidTopology(e.props)
     const h = topo ? rayFaces(topo, o, d)[0] : undefined
     if (h && (!best || h.t < best.t)) best = { e, face: h.face, t: h.t, point: h.point }
@@ -158,7 +159,7 @@ function faceAtPoint(ctx: CommandContext, p: Pt): FaceHit | null {
   const q = toVec3(p)
   let best: { hit: FaceHit; err: number } | null = null
   for (const e of visibleEntities(ctx.doc)) {
-    if (e.type !== 'SOLID3D') continue
+    if (e.type !== 'SOLID3D' || !mayHitSolid(e.props, q, null)) continue
     const topo = solidTopology(e.props)
     if (!topo) continue
     for (let face = 0; face < topo.faceCount; face++) {

@@ -390,6 +390,57 @@ function edgesOf(recs: Rec[]): Pt[][] {
   return out
 }
 
+/** Arista exacta del modelo, ubicada: su polilínea y, si es un círculo o un arco, su centro, normal y radio. */
+export interface AcisExactEdge {
+  pts: Vec3[]
+  closed: boolean
+  kind: 'line' | 'circle' | 'ellipse' | 'curve'
+  circle?: { c: Vec3; n: Vec3; r: number }
+}
+
+function exactEdgesOf(recs: Rec[]): AcisExactEdge[] {
+  const { place, edgePoints, pointOf } = modelOf(recs)
+  const out: AcisExactEdge[] = []
+  for (const e of recs) {
+    if (kindOf(e) !== 'edge') continue
+    const raw = edgePoints(e)
+    if (!raw || raw.length < 2) continue
+    const refs = refsOf(recs, e)
+    const verts = refs.filter((q) => kindOf(q.to) === 'vertex')
+    const v0 = pointOf(verts[0]?.to)
+    const v1 = pointOf(verts[1]?.to ?? verts[0]?.to)
+    const closed = !!v0 && !!v1 && same(v0, v1)
+    const curve = refs.find((q) => /curve$/.test(q.to.type))?.to
+    const pts = raw.map(place)
+    if (closed && !same(pts[0], pts[pts.length - 1])) pts.push(pts[0])
+    if (curve?.type === 'straight-curve') {
+      out.push({ pts: [pts[0], pts[pts.length - 1]], closed: false, kind: 'line' })
+      continue
+    }
+    if (curve?.type === 'ellipse-curve') {
+      const n = lastNumbers(curve.items, 10)
+      if (n && Math.abs(n[9] - 1) < 1e-9) {
+        // Círculo: centro y normal ubicados con la transformación del cuerpo; el radio, la distancia a la polilínea.
+        const c = place([n[0], n[1], n[2]])
+        const tip = place([n[0] + n[3], n[1] + n[4], n[2] + n[5]])
+        out.push({ pts, closed, kind: 'circle', circle: { c, n: sub(tip, c), r: Math.hypot(...sub(pts[0], c)) } })
+      } else out.push({ pts, closed, kind: 'ellipse' })
+      continue
+    }
+    out.push({ pts, closed, kind: pts.length === 2 ? 'line' : 'curve' })
+  }
+  return out
+}
+
+/** Aristas exactas de un modelo ACIS (SAT o SAB), ubicadas; vacío si no se puede leer. */
+export function acisExactEdges(data: Uint8Array | string): AcisExactEdge[] {
+  try {
+    return exactEdgesOf(acisRecords(data))
+  } catch {
+    return []
+  }
+}
+
 const signed = (b: Uint8Array): boolean => {
   const head = new TextDecoder('latin1').decode(b.subarray(0, 15))
   return SAB_SIGNATURES.some((s) => head.startsWith(s))

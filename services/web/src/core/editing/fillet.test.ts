@@ -297,4 +297,13 @@ describe('sysvars persistidas', () => {
     applySysvars({ FILLETRAD: 3, CHAMFERD: 200, CHAMMODE: 'Bogus', TRIMMODE: 0, CHAMFERA: -1 })
     expect(persistedSysvars()).toMatchObject({ FILLETRAD: 3, CHAMFERD: 45, CHAMMODE: 'Distance', TRIMMODE: 0, CHAMFERA: 10 })
   })
+
+  it('SOLIDIMPORT: 0, 1 o 2; lo demás no cambia el valor', () => {
+    expect(sysvars.SOLIDIMPORT).toBe(0)
+    applySysvars({ SOLIDIMPORT: 2 })
+    expect(persistedSysvars()).toMatchObject({ SOLIDIMPORT: 2 })
+    applySysvars({ SOLIDIMPORT: 5 })
+    applySysvars({ SOLIDIMPORT: '1' })
+    expect(sysvars.SOLIDIMPORT).toBe(2)
+  })
 })

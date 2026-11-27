@@ -1,3 +1,5 @@
+import { brepCorners, brepWire, transformBrepInPlace } from './brepLeaf'
+import { exactEdges, type ExactEdge } from './exactEdges'
 import type { Vec3 } from '../math'
 import type { ArcProps, BoxProps, EdgeBlendProps, ExtrudeProps, RevolveProps, SolidLeaf, SolidProps, TorusProps } from '../document/types'
 import { arcBasis } from '../geom/arc'
@@ -44,6 +46,7 @@ export function edgeBlendNodes(p: SolidProps): EdgeBlendProps[] {
 
 function isLeaf(p: SolidProps): p is SolidLeaf {
   return (
+    p.op === 'BREP' ||
     p.op === 'EXTRUDE' ||
     p.op === 'BOX' ||
     p.op === 'CYLINDER' ||
@@ -120,6 +123,9 @@ function quadsAround(c: Vec3, u: Vec3, v: Vec3, r: number): Vec3[] {
 /** Traslada (in-place) el ancla de una hoja en 3D. */
 export function translateLeaf(leaf: SolidLeaf, dx: number, dy: number, dz: number): void {
   switch (leaf.op) {
+    case 'BREP':
+      transformBrepInPlace(leaf, (v) => add(v, dx, dy, dz))
+      break
     case 'EXTRUDE':
       leaf.profile = leaf.profile.map((v) => add(v, dx, dy, dz))
       break
@@ -165,6 +171,9 @@ const sp = (v: Vec3, c: Vec3, f: number): Vec3 => [c[0] + (v[0] - c[0]) * f, c[1
 /** Escala (in-place) una hoja respecto del centro `c` por factor `f`. */
 function scaleLeaf(leaf: SolidLeaf, c: Vec3, f: number): void {
   switch (leaf.op) {
+    case 'BREP':
+      transformBrepInPlace(leaf, (v) => sp(v, c, f))
+      break
     case 'EXTRUDE':
       leaf.profile = leaf.profile.map((v) => sp(v, c, f))
       leaf.height *= f
@@ -238,6 +247,8 @@ function scaleTree(p: SolidProps, c: Vec3, f: number): void {
 /** Footprint XY (polígono) de una hoja, para bounds. */
 function leafProfileXY(leaf: SolidLeaf): Vec3[] {
   switch (leaf.op) {
+    case 'BREP':
+      return brepCorners(leaf)
     case 'EXTRUDE':
       return leaf.profile
     case 'BOX':
@@ -284,6 +295,8 @@ export function solidProfiles(p: SolidProps): Vec3[][] {
  */
 function leafVertices(leaf: SolidLeaf): Vec3[] {
   switch (leaf.op) {
+    case 'BREP':
+      return [] // los vértices exactos llegan con la topología del núcleo
     case 'EXTRUDE': {
       const off = vscale(axisOf(leaf), leaf.height)
       const out: Vec3[] = []
@@ -510,6 +523,9 @@ const edgeCache = new LruCache<string, SnapEdge[]>(4000)
 
 /** Aristas del sólido para los object snaps: las de la hoja o, en booleanas/empalmes, las del resultado. */
 export function solidSnapEdges(p: SolidProps): SnapEdge[] {
+  // Las aristas exactas (del modelo importado o del núcleo), si se conocen: centros, radios y extremos del modelo.
+  const exact = exactEdges(p)
+  if (exact) return exact.map((e) => ({ pts: e.pts, closed: e.closed, ...(e.arc ? { arc: e.arc } : {}) }))
   const key = JSON.stringify(p)
   const hit = edgeCache.get(key)
   if (hit) return hit
@@ -598,6 +614,8 @@ function quads(x: number, y: number, z: number, r: number): Vec3[] {
 
 /** Vértices "endpoint" 3D del sólido (esquinas poligonales; sin puntos de facetado curvo). */
 export function solidVertices(p: SolidProps): Vec3[] {
+  const exact = exactEdges(p)
+  if (exact) return edgeEnds(exact)
   if (isLeaf(p)) return leafVertices(p)
   // Booleanas, empalmes y chaflanes: los vértices del sólido resultante (sin la esquina que el chaflán quitó).
   const shape = resultShape(p)
@@ -617,8 +635,26 @@ export function solidVertices(p: SolidProps): Vec3[] {
   return out
 }
 
+/** Extremos de las aristas abiertas (los vértices del modelo), sin repetir. */
+function edgeEnds(edges: ExactEdge[]): Vec3[] {
+  const seen = new Set<string>()
+  const out: Vec3[] = []
+  for (const e of edges) {
+    if (e.closed) continue
+    for (const v of [e.pts[0], e.pts[e.pts.length - 1]]) {
+      const k = v.map((x) => x.toFixed(9)).join(',')
+      if (seen.has(k)) continue
+      seen.add(k)
+      out.push(v)
+    }
+  }
+  return out
+}
+
 /** Aristas del sólido como polilíneas para los snaps (nearest, intersection): las del resultado, no las de las primitivas. */
 export function solidSnapWireframe(p: SolidProps): Vec3[][] {
+  const exact = exactEdges(p)
+  if (exact) return exact.map((e) => e.pts)
   if (isLeaf(p)) return leafWireframe(p)
   const shape = resultShape(p)
   return shape ? shape.edges.map((e) => (e.closed ? [...e.pts, e.pts[0]] : e.pts)) : solidWireframe(p)
@@ -626,6 +662,8 @@ export function solidSnapWireframe(p: SolidProps): Vec3[][] {
 
 /** Centros de los arcos de las aristas del resultado (empalmes): para CEN tipeado, como el CAD clásico. */
 export function solidArcCenters(p: SolidProps): Vec3[] {
+  const exact = exactEdges(p)
+  if (exact) return exact.flatMap((e) => (e.arc ? [e.arc.center] : []))
   if (isLeaf(p)) return []
   const out: Vec3[] = []
   const shape = resultShape(p)
@@ -777,6 +815,8 @@ const WIRE_SEGMENTS = 32
 /** Wireframe 3D de una hoja para snap/selección/preview/PDF. */
 function leafWireframe(leaf: SolidLeaf): Vec3[][] {
   switch (leaf.op) {
+    case 'BREP':
+      return brepWire(leaf)
     case 'EXTRUDE': {
       const base = leaf.profile
       if (base.length === 0) return []

@@ -317,17 +317,26 @@ export const masspropCommand: Command = {
       if (!regions.length) ctx.print('No solids or regions selected.')
       return
     }
+    // El resultado exacto (las piezas importadas se convierten antes): volumen, centroide e inercia del modelo.
+    const late = (await ctx.app.ensureExact?.(solids.map((e) => e.id), 'mass')) ?? 0
+    if (late) ctx.print(`${late} solid(s) are still being computed: their values come from the mesh.`)
     let vol = 0
     let surf = 0
     const c: Vec3 = [0, 0, 0]
     const min: Vec3 = [Infinity, Infinity, Infinity]
     const max: Vec3 = [-Infinity, -Infinity, -Infinity]
+    /** Inercia respecto del origen del mundo, sumada (sólo si todos los sólidos la tienen exacta). */
+    let inertia: number[] | null = Array(9).fill(0)
     for (const e of solids) {
       const m = ctx.app.solidMesh?.(e)
       if (!m) continue
       const q = meshProperties(m)
+      const exact = ctx.app.solidMass?.(e) ?? null
       // El volumen exacto (primitiva o núcleo) si se conoce; si no, el de la malla (R43).
-      q.volume = ctx.app.solidVolume?.(e) ?? q.volume
+      q.volume = exact?.volume ?? ctx.app.solidVolume?.(e) ?? q.volume
+      if (exact) q.centroid = exact.centroid
+      if (exact && inertia) inertia = addInertia(inertia, exact)
+      else inertia = null
       vol += q.volume
       surf += q.surface
       for (let k = 0; k < 3; k++) {
@@ -350,7 +359,86 @@ export const masspropCommand: Command = {
     ctx.print(`                 Y: ${n4(Math.min(lo.y, hi.y))} -- ${n4(Math.max(lo.y, hi.y))}`)
     ctx.print(`                 Z: ${n4(Math.min(lo.z, hi.z))} -- ${n4(Math.max(lo.z, hi.z))}`)
     ctx.print(`Centroid:        ${xyz(ctx, g)}`)
+    if (inertia) printInertia(ctx, inertia, vol, g)
   },
+}
+
+/** Inercia de un sólido respecto del origen del mundo (Steiner), sumada a `acc` (matrices 3×3 por filas). */
+function addInertia(acc: number[], m: { volume: number; centroid: Vec3; inertia: number[] }): number[] {
+  const [x, y, z] = m.centroid
+  const d2 = x * x + y * y + z * z
+  const g = [x, y, z]
+  return acc.map((v, i) => v + m.inertia[i] + m.volume * ((i % 4 === 0 ? d2 : 0) - g[Math.floor(i / 3)] * g[i % 3]))
+}
+
+/** Autovalores y autovectores de una matriz simétrica 3×3 (Jacobi). */
+function symEigen(a: number[][]): { values: number[]; vectors: Vec3[] } {
+  const m = a.map((r) => [...r])
+  const v = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+  for (let sweep = 0; sweep < 50; sweep++) {
+    const off = Math.abs(m[0][1]) + Math.abs(m[0][2]) + Math.abs(m[1][2])
+    if (off < 1e-14 * (Math.abs(m[0][0]) + Math.abs(m[1][1]) + Math.abs(m[2][2]) + 1e-300)) break
+    for (const [p, q] of [[0, 1], [0, 2], [1, 2]]) {
+      if (Math.abs(m[p][q]) < 1e-300) continue
+      const th = (m[q][q] - m[p][p]) / (2 * m[p][q])
+      const t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1))
+      const cs = 1 / Math.sqrt(t * t + 1)
+      const sn = t * cs
+      for (let k = 0; k < 3; k++) {
+        const [mkp, mkq] = [m[k][p], m[k][q]]
+        m[k][p] = cs * mkp - sn * mkq
+        m[k][q] = sn * mkp + cs * mkq
+      }
+      for (let k = 0; k < 3; k++) {
+        const [mpk, mqk] = [m[p][k], m[q][k]]
+        m[p][k] = cs * mpk - sn * mqk
+        m[q][k] = sn * mpk + cs * mqk
+      }
+      for (let k = 0; k < 3; k++) {
+        const [vkp, vkq] = [v[k][p], v[k][q]]
+        v[k][p] = cs * vkp - sn * vkq
+        v[k][q] = sn * vkp + cs * vkq
+      }
+    }
+  }
+  return { values: [m[0][0], m[1][1], m[2][2]], vectors: [0, 1, 2].map((j) => [v[0][j], v[1][j], v[2][j]] as Vec3) }
+}
+
+/**
+ * Momentos y productos de inercia, radios de giro (respecto del origen de la UCS) y momentos principales (respecto del
+ * centroide), como el MASSPROP del CAD clásico. `world`: la inercia respecto del origen del mundo.
+ */
+function printInertia(ctx: CommandContext, world: number[], vol: number, g: Vec3): void {
+  // Ejes de la UCS en el mundo y su origen: R lleva vectores del mundo a la UCS.
+  const o = local(ctx, [0, 0, 0])
+  const col = (v: Vec3) => {
+    const q = local(ctx, v)
+    return [q.x - o.x, q.y - o.y, q.z - o.z]
+  }
+  const R = [col([1, 0, 0]), col([0, 1, 0]), col([0, 0, 1])] // columnas
+  const W = [0, 1, 2].map((i) => world.slice(i * 3, i * 3 + 3))
+  // Al centroide (Steiner al revés) y girada a la UCS: Ic' = R·Ic·Rᵀ.
+  const d2 = g[0] * g[0] + g[1] * g[1] + g[2] * g[2]
+  const Ic = W.map((r, i) => r.map((v, j) => v - vol * ((i === j ? d2 : 0) - g[i] * g[j])))
+  const Rm = [0, 1, 2].map((i) => [R[0][i], R[1][i], R[2][i]]) // filas de R
+  const Icu = Rm.map((ri) => Rm.map((rj) => ri.reduce((t, _, a) => t + ri[a] * Ic[a].reduce((u, __, b) => u + Ic[a][b] * rj[b], 0), 0)))
+  const gu = local(ctx, g)
+  const gv = [gu.x, gu.y, gu.z]
+  const gd2 = gv[0] * gv[0] + gv[1] * gv[1] + gv[2] * gv[2]
+  const Io = Icu.map((r, i) => r.map((v, j) => v + vol * ((i === j ? gd2 : 0) - gv[i] * gv[j])))
+  ctx.print(`Moments of inertia: X: ${n4(Io[0][0])}`)
+  ctx.print(`                    Y: ${n4(Io[1][1])}`)
+  ctx.print(`                    Z: ${n4(Io[2][2])}`)
+  ctx.print(`Products of inertia: XY: ${n4(-Io[0][1])}`)
+  ctx.print(`                     YZ: ${n4(-Io[1][2])}`)
+  ctx.print(`                     ZX: ${n4(-Io[2][0])}`)
+  ctx.print(`Radii of gyration:  X: ${n4(Math.sqrt(Math.max(0, Io[0][0]) / vol))}`)
+  ctx.print(`                    Y: ${n4(Math.sqrt(Math.max(0, Io[1][1]) / vol))}`)
+  ctx.print(`                    Z: ${n4(Math.sqrt(Math.max(0, Io[2][2]) / vol))}`)
+  const { values, vectors } = symEigen(Icu)
+  const dir = (v: Vec3) => `[${v.map((x) => n4(x)).join(' ')}]`
+  ctx.print('Principal moments and X-Y-Z directions about centroid:')
+  for (const [k, name] of ['I', 'J', 'K'].entries()) ctx.print(`                 ${name}: ${n4(values[k])} along ${dir(vectors[k])}`)
 }
 
 /** POLARANG: incremento de ángulo del rastreo polar (POLAR / F10). */

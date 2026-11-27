@@ -194,6 +194,13 @@ export interface AppHooks {
   solidMesh?(e: Entity): import('../document/types').MeshProps | null
   /** Volumen exacto de un sólido (primitiva o resultado del núcleo exacto); null si sólo se conoce el de la malla. */
   solidVolume?(e: Entity): number | null
+  /** Masa exacta (densidad 1) de un sólido calculado por el núcleo: volumen, centroide e inercia respecto de él. */
+  solidMass?(e: Entity): { volume: number; centroid: import('../math').Vec3; inertia: number[] } | null
+  /**
+   * Espera el resultado exacto de los sólidos indicados (convierte antes las piezas importadas): `view` para proyectarlos
+   * (con la teselación fina), `mass` para medirlos. Devuelve cuántos no llegaron a tiempo.
+   */
+  ensureExact?(ids: string[] | null, purpose: 'view' | 'mass'): Promise<number>
   /** PLOT: diálogo con vista previa; 'window' = el usuario pidió marcar una ventana (se vuelve a abrir con ella). */
   plotDialog?(window?: import('../io/pdf').PlotArea | null): Promise<'plot' | 'window' | 'cancel'>
   /** PUBLISH: un PDF multipágina con los layouts indicados. */

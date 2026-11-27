@@ -404,6 +404,24 @@ export const zoomVarCommands: Command[] = [
     },
   },
   {
+    name: 'SOLIDIMPORT',
+    aliases: [],
+    description: 'Solids of an opened DWG/DXF: 0 = ask, 1 = convert all to exact solids, 2 = as meshes (convert each when selected or edited)',
+    async run(ctx) {
+      const k = await askKeyword(ctx, `Enter new value for SOLIDIMPORT [0/1/2] <${sysvars.SOLIDIMPORT}>: `, ['0', '1', '2'], String(sysvars.SOLIDIMPORT))
+      if (k === '0' || k === '1' || k === '2') sysvars.SOLIDIMPORT = Number(k) as 0 | 1 | 2
+    },
+  },
+  {
+    name: 'SOLIDIDLE',
+    aliases: [],
+    description: 'Compute exact solids left as meshes while you are not working: 1 = on, 0 = off',
+    async run(ctx) {
+      const k = await askKeyword(ctx, `Enter new value for SOLIDIDLE [0/1] <${sysvars.SOLIDIDLE}>: `, ['0', '1'], String(sysvars.SOLIDIDLE))
+      if (k === '0' || k === '1') sysvars.SOLIDIDLE = k === '1' ? 1 : 0
+    },
+  },
+  {
     name: 'ZOOMWHEEL',
     aliases: [],
     description: 'Mouse wheel direction: 0 = forward zooms in, 1 = forward zooms out',
