@@ -667,7 +667,11 @@ export function acisToStep(data: Uint8Array | string): AcisStep | null {
             const h = dot(d, a)
             return Math.max(mx, Math.abs(len(sub(d, scale(a, h))) - (r0 + sg * h * tan)))
           }, 0)
-        const sg = err(1) <= err(-1) ? 1 : -1
+        // Con puntos a una sola altura (un cono con punta: sus vértices están todos en la base) los dos lados dan lo
+        // mismo: manda el signo de seno/coseno (radio r + h·seno/coseno sobre la normal, como en todos los conos del
+        // censo que se podían decidir por sus puntos).
+        const [e1, e2] = [err(1), err(-1)]
+        const sg = Math.abs(e1 - e2) <= 1e-9 * (1 + r0) ? (sine / cosine >= 0 ? 1 : -1) : e1 <= e2 ? 1 : -1
         const axis = turn(scale(a, sg))
         return {
           id: w.add(`CONICAL_SURFACE('',#${w.axes(place(c), axis, turn(ref))},${real(r0 * ks)},${real(Math.atan(tan))})`),

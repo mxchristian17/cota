@@ -108,9 +108,19 @@ export function dwgVersion(data: ArrayBuffer): string | null {
  * DXF → DWG en el navegador: el DXF que ya exporta Cota se lee con acad-ts y se escribe como DWG 2018 (AC1032), el
  * formato que abren los programas actuales.
  */
-export async function dxfTextToDwg(dxf: string): Promise<ArrayBuffer> {
-  const { ACadVersion, Color, DwgWriter, DxfReader } = await import('@node-projects/acad-ts')
+export async function dxfTextToDwg(dxf: string, sab?: ReadonlyMap<string, Uint8Array>): Promise<ArrayBuffer> {
+  const { ACadVersion, Color, DwgObjectWriter, DwgWriter, DxfReader, ModelerGeometry, RasterImage, XY } = await import('@node-projects/acad-ts')
   const doc = DxfReader.readFromStream(new TextEncoder().encode(dxf))
+  // Sólidos ACIS: el DXF los trae con una marca (`cota-solid n`) en lugar del SAT; acá va su SAB, que el DWG 2018
+  // guarda en su sección de datos del modelador.
+  if (sab?.size)
+    for (const br of doc.blockRecords ?? [])
+      for (const e of br.entities) {
+        if (!(e instanceof ModelerGeometry)) continue
+        const m = /^cota-solid (\S+)/.exec(e.getAcisText()?.trim() ?? '')
+        const bytes = m && sab.get(m[1])
+        if (bytes) e.acisData = bytes
+      }
   doc.header!.version = ACadVersion.AC1032
   // acad-ts 3.6 escribe el color verdadero como R-G-B y el formato (y su propio lector) lo esperan B-G-R: se invierte
   // antes de escribir para que el DWG salga con los colores correctos.
@@ -121,10 +131,61 @@ export async function dxfTextToDwg(dxf: string): Promise<ArrayBuffer> {
   }
   for (const l of doc.layers ?? []) fix(l as unknown as Colored)
   for (const br of doc.blockRecords ?? []) for (const e of br.entities) fix(e as unknown as Colored)
+  // Una imagen sin recorte: acad-ts escribe igual el rectángulo de recorte (vacío, fallaba el DWG entero); va el de la
+  // imagen completa, con el recorte apagado.
+  for (const br of doc.blockRecords ?? [])
+    for (const e of br.entities)
+      if (e instanceof RasterImage && e.clipBoundaryVertices.length < 2) e.clipBoundaryVertices = [new XY(-0.5, -0.5), new XY(e.size.x - 0.5, e.size.y - 0.5)]
   // Las tablas que el DWG exige (estilo de texto y de cota Standard…) aunque el DXF no las traiga.
   doc.createDefaults()
-  const bytes = DwgWriter.writeToBuffer(doc)
+  const bytes = withLinearLookups(DwgObjectWriter, () => DwgWriter.writeToBuffer(doc))
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+}
+
+/** Lista de las entidades de un bloque: `find` sigue desde donde encontró la anterior (se buscan en orden, por handle). */
+class InOrder<T> extends Array<T> {
+  cursor = 0
+  find(pred: (v: T, i: number, a: T[]) => unknown): T | undefined {
+    // Sin repetidos (handles): el único que cumple es el mismo que encontraría `find` desde el principio.
+    const n = this.length
+    for (let k = 0; k < n; k++) {
+      const i = (this.cursor + k) % n
+      if (pred(this[i], i, this)) {
+        this.cursor = i + 1
+        return this[i]
+      }
+    }
+    return undefined
+  }
+}
+
+/**
+ * Escribe el DWG con búsquedas lineales: acad-ts busca cada entidad del espacio modelo recorriendo la lista entera
+ * (`find` e `includes` dentro de un recorrido de la misma lista), cuadrático: con un ensamble de miles de sólidos y
+ * decenas de miles de objetos tardaba más de dos minutos. Mientras escribe (es sincrónico), las listas de entidades
+ * buscan desde la última encontrada y `includes` de las listas largas usa un conjunto; después todo vuelve a ser como era.
+ */
+function withLinearLookups<R>(writer: { prototype: object }, write: () => R): R {
+  const proto = writer.prototype as { _getCompatibleEntities?: (entities: Iterable<unknown>) => unknown[] }
+  const own = proto._getCompatibleEntities
+  const includes = Array.prototype.includes
+  const sets = new WeakMap<unknown[], { n: number; set: Set<unknown> }>()
+  if (own)
+    proto._getCompatibleEntities = function (this: unknown, entities: Iterable<unknown>) {
+      return InOrder.from(own.call(this, entities))
+    }
+  Array.prototype.includes = function (this: unknown[], x: unknown, from?: number): boolean {
+    if (this.length < 256 || from !== undefined || (typeof x !== 'number' && typeof x !== 'bigint' && typeof x !== 'string')) return includes.call(this, x, from)
+    let c = sets.get(this)
+    if (!c || c.n !== this.length) sets.set(this, (c = { n: this.length, set: new Set(this) }))
+    return c.set.has(x)
+  }
+  try {
+    return write()
+  } finally {
+    Array.prototype.includes = includes
+    if (own) proto._getCompatibleEntities = own
+  }
 }
 
 /**

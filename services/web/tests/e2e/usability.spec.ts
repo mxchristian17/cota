@@ -458,15 +458,23 @@ test.describe('Abrir un DWG de referencia', () => {
     }
   })
 
-  test('EXPORT DXF lleva los sólidos como caras y las líneas infinitas como tales', async ({ page }) => {
+  test('EXPORT DXF lleva los sólidos como sólidos ACIS (con SOLIDEXPORT 0, como caras) y las líneas infinitas como tales', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByTestId('command-input')).toBeVisible()
     await cmd(page, 'RECTANGLE', '0,0', '10,5', 'EXTRUDE', 'L', '', '4', 'XLINE', '0,0', '10,10', '')
-    const file = page.waitForEvent('download')
-    await cmd(page, 'EXPORT', 'DXF')
-    const text = readFileSync(await (await file).path(), 'utf8')
-    expect(text).toContain('3DFACE')
+    const exported = async () => {
+      const file = page.waitForEvent('download')
+      await cmd(page, 'EXPORT', 'DXF')
+      return readFileSync(await (await file).path(), 'utf8')
+    }
+    const text = await exported()
+    expect(text).toContain('3DSOLID\n100\nAcDbEntity')
+    expect(text).not.toContain('3DFACE')
     expect(text).toContain('XLINE')
+    await cmd(page, 'SOLIDEXPORT', '0')
+    const faces = await exported()
+    expect(faces).toContain('3DFACE')
+    expect(faces).not.toContain('3DSOLID')
   })
 })
 

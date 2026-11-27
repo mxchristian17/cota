@@ -90,6 +90,9 @@ describe('ACIS', () => {
   })
   it('el SAT de un DXF viene con cada carácter invertido, y el grupo 3 continúa el renglón', () => {
     const enc = (s: string) => [...s].map((c) => (c === ' ' ? ' ' : String.fromCharCode(159 - c.charCodeAt(0)))).join('').replace(/\^/g, '^ ')
-    expect(satFromDxf([[8, 'capa'], [1, enc('Autodesk #')], [3, enc('body ')], [1, enc('$-1 #')]])).toBe('Autodesk #\nbody $-1 #\n')
+    // Un registro de más de 255 caracteres sigue en grupos 3, sin cortar el renglón (un número partido serían dos).
+    expect(satFromDxf([[8, 'capa'], [1, enc('body $-1 -1 $-1 $2 $-1 $-1 #')], [1, enc('lump $-1 -1 $-1 $-1 $3 $1 #')], [1, enc('point $-1 -1 $-1 12.34')], [3, enc('56 7 8 #')]])).toBe(
+      'body $-1 -1 $-1 $2 $-1 $-1 #\nlump $-1 -1 $-1 $-1 $3 $1 #\npoint $-1 -1 $-1 12.3456 7 8 #\n',
+    )
   })
 })

@@ -26,7 +26,7 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 | TOLERANCE | Frame, symbols and text | The same pieces | |
 | HELIX | Spline | Spline | From DXF; the DWG reader does not deliver it yet |
 | VIEWPORT and paper space | Layouts with their sheet, content and viewports | Not exported | |
-| 3DSOLID, REGION, BODY | Exact solids from their ACIS model (SAT and SAB), shown with the faces of the model until each one is converted: all at once on open, when selected or edited, or in the background while you are idle (`SOLIDIMPORT`, `SOLIDIDLE`) | 3DFACE | Snaps, `MASSPROP` and drawing views use the exact edges and mass of the model even before converting. Until converted, NURBS faces are drawn over their best-fit plane |
+| 3DSOLID, REGION, BODY | Exact solids from their ACIS model (SAT and SAB), shown with the faces of the model until each one is converted: all at once on open, when selected or edited, or in the background while you are idle (`SOLIDIMPORT`, `SOLIDIDLE`) | 3DSOLID, REGION, BODY (ACIS: SAB in DWG, SAT in DXF) | Snaps, `MASSPROP` and drawing views use the exact edges and mass of the model even before converting. Until converted, NURBS faces are drawn over their best-fit plane |
 | SURFACE (extruded, lofted, revolved, swept, planar) | Meshes or edges | 3DFACE | |
 | IMAGE | The picture in its place (clip and fade included) once its file is loaded, on screen and in plots; until then, its frame and file name | IMAGE (DXF; the file path, not the pixels) | The drawing stores only the file path: open the image together with the drawing, drop it on Cota or load it with `IMAGE`; from the working folder it loads on its own |
 | PDF, DWF and DGN UNDERLAY | File name at the insertion point | Text | The content is an external file |
@@ -40,13 +40,15 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 | ACAD_PROXY_ENTITY | By its replacement drawing (DXF); left out (DWG) | The same pieces | Texts of the replacement drawing are not read |
 | SECTION, POINTCLOUD, COORDINATION MODEL, OLEFRAME | Listed as unsupported on open | — | |
 
-Cota's 3D solids are exported as meshes of their faces (3DFACE), so a part looks the same but stops being a solid.
+3D solids are exported as ACIS solids: an imported piece you have not changed keeps its original model (with its new
+placement if you moved, rotated, scaled or mirrored it), and edited pieces and Cota's own solids are written from the
+exact kernel (planes, cylinders, cones, spheres, tori and NURBS). The few that cannot be written exactly (offset
+surfaces, for example) go as meshes of their faces (3DFACE). `SOLIDEXPORT 0` writes every solid as its faces.
 
 Large 3D assemblies (a thousand solids, millions of triangles) open on a phone too: there the faces of the solids use
 about half the triangles (18 segments per full turn instead of 36), and texts smaller than 3 pixels are not drawn.
 
 ## Next, by impact
 
-1. 3D solids saved as ACIS solids (today, as 3DFACE meshes).
-2. Blocks and layouts on export (today inserts are expanded and layouts stay out of the file).
-3. Proxy entities in DWG files (the reader drops them).
+1. Blocks and layouts on export (today inserts are expanded and layouts stay out of the file).
+2. Proxy entities in DWG files (the reader drops them).

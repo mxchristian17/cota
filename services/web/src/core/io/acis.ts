@@ -478,6 +478,7 @@ export function acisEdges(data: Uint8Array | string): Vec3[][] {
 /** SAT guardado en un DXF: grupos 1 (renglones) y 3 (continuación), con cada carácter invertido. */
 export function satFromDxf(codes: Array<[number, string]>): string {
   let out = ''
+  let any = false
   for (const [k, v] of codes) {
     if (k !== 1 && k !== 3) continue
     let line = ''
@@ -486,9 +487,12 @@ export function satFromDxf(codes: Array<[number, string]>): string {
       const c = raw.charCodeAt(i)
       line += c === 32 ? ' ' : String.fromCharCode(159 - c)
     }
-    out += line + (k === 1 ? '\n' : '')
+    // Un grupo 3 sigue el renglón del grupo 1 anterior (no lo corta: un número partido serían dos).
+    if (k === 1 && any) out += '\n'
+    out += line
+    any = true
   }
-  return out
+  return any ? out + '\n' : out
 }
 
 /** SAB de la sección ACDSDATA de un DXF 2013+ (grupos 310 en hexadecimal). */

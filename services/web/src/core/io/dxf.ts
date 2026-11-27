@@ -15,6 +15,7 @@ import { angleFromOcs, angleToOcs, fromOcs, isWorldExtrusion, toOcs } from './dx
 import { normAngle } from '../geom/arc'
 import { catmullRomBezierSpline, dxfSplineThroughPoints } from '../geom/nurbs'
 import { acisEdges, acisIsEmpty, sabFromHex, satFromDxf } from './acis'
+import { satDxfGroups } from './acisWrite'
 import { SOLID_MESH_REF } from './acisMesh'
 import { packedOf, reversePackedFaces } from './meshTransfer'
 import { importedBrep, type ImportedBrep, type ImportedSolids } from './importedBrep'
@@ -340,6 +341,17 @@ export interface DxfLinetypeOptions {
   linetypes?: LinetypeDefData[]
   /** Variables del dibujo ($LTSCALE, $CELTYPE, $CELTSCALE, $PSLTSCALE, $LWDISPLAY). */
   vars?: DrawingVars
+  /**
+   * Sólidos que van como sólidos ACIS (3DSOLID, REGION, BODY) con su SAT, por entidad; el resto de los `SOLID3D` tiene
+   * que llegar ya como sus caras (`MESH3D`).
+   */
+  acis?: ReadonlyMap<Entity, { kind: 'solid' | 'region' | 'body'; sat: string }>
+}
+
+/** Sólido ACIS (versión 1 del modelador: el SAT cifrado en el propio objeto, como en un DXF 2000). */
+function acisDxf(e: Entity, layerName: string, a: { kind: 'solid' | 'region' | 'body'; sat: string }): string {
+  const type = a.kind === 'solid' ? '3DSOLID' : a.kind === 'region' ? 'REGION' : 'BODY'
+  return p(0, type) + p(100, 'AcDbEntity') + p(8, layerName) + commonCodes(e) + p(100, 'AcDbModelerGeometry') + p(70, 1) + satDxfGroups(a.sat)
 }
 
 export function exportDxf(entities: Entity[], layers: Layer[], currentLayer?: string, dimStyles?: DimStyleDef[], lt: DxfLinetypeOptions = {}): string {
@@ -391,6 +403,11 @@ export function exportDxf(entities: Entity[], layers: Layer[], currentLayer?: st
       const def = imageDefs.get(key) ?? { handle: (0x1000 + imageDefs.size).toString(16).toUpperCase(), p: e.props }
       imageDefs.set(key, def)
       ents += imageDxf(e.props, p(8, layerName) + commonCodes(e), def.handle)
+      continue
+    }
+    const solid = lt.acis?.get(e)
+    if (solid) {
+      ents += acisDxf(e, layerName, solid)
       continue
     }
     const dxf = (e.type === 'DIMENSION' ? dims.dimension(e, layerName, commonCodes(e)) : null) ?? entityDxf(e, layerName)

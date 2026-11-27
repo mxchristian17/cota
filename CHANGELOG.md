@@ -4,6 +4,25 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.51.0] — 2026-11-27
+
+### Added
+- **EXPORT DWG and EXPORT DXF write 3D solids as ACIS solids** (3DSOLID, REGION, BODY), so a drawing saved by Cota
+  opens with real solids in other CAD programs and back in Cota. An imported piece you have not changed keeps its
+  original model byte for byte (colors and attributes included); if you moved, rotated, scaled or mirrored it, only its
+  placement changes. Edited pieces and Cota's own solids are written from the exact kernel: planes, cylinders, cones,
+  spheres, tori and NURBS faces, with straight, circular, elliptic and NURBS edges. DWG files carry the binary model
+  (SAB) and DXF files the text one (SAT). The few solids that cannot be written exactly (offset surfaces, for example)
+  go as their faces, as before, and the command line says how many. `SOLIDEXPORT 0` (also in OPTIONS) writes every
+  solid as its faces.
+
+### Fixed
+- **Saving a large drawing as DWG is about ten times faster**: the writer looked up every entity of the model space
+  one by one, so a 4000-part assembly took three minutes; now it takes 15 to 20 seconds.
+- **A drawing with an image that has no clipping boundary could not be saved as DWG.**
+- **A cone that ends in a point could open turned inside out** when its ACIS model gave no point off the base.
+- **A DXF solid whose ACIS lines were split in continuation groups opened with a broken line in the middle.**
+
 ## [2.50.0] — 2026-11-27
 
 ### Added

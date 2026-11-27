@@ -130,7 +130,8 @@ Exports the drawing to another format.
 
 **Steps**
 
-1. `Format [OBJ/DXF/DWG] <OBJ>:` OBJ is a 3D mesh of the solids; DXF and DWG carry the 2D drawing.
+1. `Format [OBJ/DXF/DWG] <OBJ>:` OBJ is a 3D mesh of the solids; DXF and DWG carry the drawing, with 3D solids as ACIS
+   solids (see `SOLIDEXPORT`).
 
 ## PAGESETUP
 

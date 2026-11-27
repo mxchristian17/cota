@@ -40,10 +40,22 @@ interface Job {
   fine?: boolean
   /** De la cola de baja prioridad (lo que se calcula en los ratos libres). */
   bg?: boolean
+  /** Pide el modelo ACIS de la forma (guardar un DWG/DXF), no la malla: la respuesta va a `acisWaiters`. */
+  acis?: 'sab' | 'sat'
 }
 
 /** Un pedido que espera: su clave, el árbol y si va con el teselado fino o en la cola de baja prioridad. */
-type Pending = { key: string; props: SolidProps; fine?: boolean; bg?: boolean }
+type Pending = { key: string; props: SolidProps; fine?: boolean; bg?: boolean; acis?: 'sab' | 'sat' }
+
+/** Modelo ACIS de un sólido calculado por el núcleo (o por qué no se pudo). */
+export type AcisResult = { ok: true; data: Uint8Array | string; kind: 'solid' | 'region' | 'body' } | { ok: false; message: string }
+/** Quién espera el modelo ACIS de cada pedido (clave `acis:formato:árbol`). */
+const acisWaiters = new Map<string, Array<(r: AcisResult) => void>>()
+function resolveAcis(key: string, r: AcisResult): void {
+  const list = acisWaiters.get(key)
+  acisWaiters.delete(key)
+  for (const f of list ?? []) f(r)
+}
 
 /**
  * Cola de baja prioridad (ver `render/brepIdle.ts`): sólo sale con la cola normal vacía y de a un pedido por Worker
@@ -141,6 +153,21 @@ export function requestKernel(key: string, props: SolidProps, urgent = false, fi
 }
 
 /** Pide un sólido en la cola de baja prioridad (si nadie lo pidió ni está calculado). */
+/**
+ * El modelo ACIS (SAB o SAT) del sólido, calculado por el núcleo: para guardarlo en un DWG/DXF como 3DSOLID. Va a la
+ * cola normal (es lo que el usuario pidió) y no se guarda en el caché.
+ */
+export function requestAcis(key: string, props: SolidProps, format: 'sab' | 'sat'): Promise<AcisResult> {
+  if (unavailable) return Promise.resolve({ ok: false, message: 'exact kernel unavailable' })
+  const jobKey = `acis:${format}:${key}`
+  return new Promise((resolve) => {
+    const list = acisWaiters.get(jobKey)
+    if (list) return list.push(resolve)
+    acisWaiters.set(jobKey, [resolve])
+    enqueue({ key: jobKey, props, acis: format })
+  })
+}
+
 export function requestKernelBackground(key: string, props: SolidProps): void {
   if (unavailable || results.get(key) || queued.has(key) || bgQueued.has(key) || looking.has(key) || slots.some((s) => s.inflight.some((j) => j.key === key))) return
   if (!persistentCacheAvailable()) {
@@ -282,8 +309,9 @@ function pump(): void {
       queued.delete(job.key)
       const id = ++seq
       if (!slot.inflight.length) slot.headSince = performance.now()
-      slot.inflight.push({ id, key: job.key, props: job.props, ...(job.fine ? { fine: true } : {}) })
-      slot.w.postMessage({ id, props: job.props, models: brepSourcesOf([job.props]), ...(job.fine ? { fine: true } : {}) } satisfies KernelRequest)
+      const extra = { ...(job.fine ? { fine: true } : {}), ...(job.acis ? { acis: job.acis } : {}) }
+      slot.inflight.push({ id, key: job.key, props: job.props, ...extra })
+      slot.w.postMessage({ id, props: job.props, models: brepSourcesOf([job.props]), ...extra } satisfies KernelRequest)
     }
     // Baja prioridad: sólo con la cola normal vacía y de a uno por Worker libre.
     if (!queue.length && !slot.inflight.length && bgQueue.length) {
@@ -349,11 +377,12 @@ function hang(slot: Slot): void {
       bgQueued.add(j.key)
       continue
     }
-    queue.push({ key: j.key, props: j.props, ...(j.fine ? { fine: true } : {}) })
+    queue.push({ key: j.key, props: j.props, ...(j.fine ? { fine: true } : {}), ...(j.acis ? { acis: j.acis } : {}) })
     queued.add(j.key)
   }
   drop(slot)
-  settle(head, { id: head.id, ok: false, op: head.props.op, message: TIMEOUT_MESSAGE })
+  if (head.acis) resolveAcis(head.key, { ok: false, message: TIMEOUT_MESSAGE })
+  else settle(head, { id: head.id, ok: false, op: head.props.op, message: TIMEOUT_MESSAGE })
   pump()
 }
 
@@ -371,15 +400,18 @@ function finish(slot: Slot, r: KernelReply): void {
     queue.length = 0
     queued.clear()
     for (const key of waiting) notify(key)
+    for (const key of [...acisWaiters.keys()]) resolveAcis(key, { ok: false, message: 'exact kernel unavailable' })
     emitMessage('The exact solid kernel cannot run in this browser; solids are shown with the mesh kernel.')
     console.warn('Cota: exact solid kernel unavailable.', r.message)
     return
   }
-  settle(job, r)
+  if (job.acis) resolveAcis(job.key, !r.ok ? { ok: false, message: r.message } : 'acis' in r ? { ok: true, data: r.acis, kind: r.kind } : { ok: false, message: 'no ACIS' })
+  else settle(job, r)
   pump()
 }
 
 function settle(job: Job, r: KernelReply): void {
+  if (r.ok && 'acis' in r) return
   const res: KernelResult = r.ok ? { ok: true, mesh: r.mesh, stats: r.stats } : { ok: false, op: r.op, message: r.message, size: r.size }
   results.set(job.key, res)
   if (job.bg) bgDone.add(job.key)

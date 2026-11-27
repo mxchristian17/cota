@@ -74,7 +74,8 @@ import { PAPER_SIZES, defaultPageSetup } from '../core/layout/paper'
 import { newViewportProps } from '../core/layout/viewport'
 import { fieldContextFor, resolveFieldTexts } from '../core/fields/context'
 import { exportObj, importObj, type ObjMesh } from '../core/io/obj'
-import { exportDxf, importDxf, type DxfEntitySpec, type DxfImportResult } from '../core/io/dxf'
+import { exportDxf, importDxf, type DxfEntitySpec, type DxfImportResult, type DxfLinetypeOptions } from '../core/io/dxf'
+import { solidsAsAcis } from '../render/acisExport'
 import { attachXref, xrefCandidates, xrefsOf } from '../core/io/xref'
 import { cadReadsInFlight, dwgErrorMessage, dwgVersion, dxfTextToDwg, importCadInWorker } from '../core/io/dwg'
 import {
@@ -3544,28 +3545,50 @@ export const useStore = create<AppState>((set, get) => {
         return
       }
       // Las inserciones salen desarmadas; lo de una inserción en una capa congelada, en esa capa (así sigue oculto).
-      const dxf = exportDxf(solidsAsMeshes(expandEntities(doc.entities, doc.blocks, { attdisp: doc.attdisp, frozenInto: frozenLayerIds(doc.layers) })), doc.layers, get().currentLayerId, doc.dimStyles, {
-        linetypes: doc.linetypes,
-        vars: doc.toJSON().vars,
-      })
-      if (format === 'DXF') {
-        download(dxf, 'dxf', 'application/dxf')
-        return
-      }
-      // DWG: el DXF se convierte en el navegador (acad-ts); si falla y hay servidor con conversor, lo hace él.
-      print('Writing DWG…')
-      // Si el navegador no puede y tampoco hay servidor, el mensaje es el del navegador (el del servidor, "Request
-      // failed", no explica nada).
-      dxfTextToDwg(dxf)
-        .catch(async (local) => {
-          try {
-            return await api.dxfToDwg(dxf)
-          } catch {
-            throw local
+      const entities = expandEntities(doc.entities, doc.blocks, { attdisp: doc.attdisp, frozenInto: frozenLayerIds(doc.layers) })
+      const dxfOf = (list: Entity[], acis?: DxfLinetypeOptions['acis']) =>
+        exportDxf(list, doc.layers, get().currentLayerId, doc.dimStyles, { linetypes: doc.linetypes, vars: doc.toJSON().vars, ...(acis ? { acis } : {}) })
+      const solids = entities.filter((e) => e.type === 'SOLID3D').length
+      if (format === 'DWG') print('Writing DWG…')
+      if (solids && sysvars.SOLIDEXPORT === 1) print(`Writing ${solids} solid(s) as ACIS solids…`)
+      void (async () => {
+        // Sólidos: las piezas importadas sin cambios, con su modelo; los demás, con el del núcleo exacto (avance cada
+        // segundo en un ensamble grande). Los que no se pueden, como sus caras.
+        let shown = performance.now()
+        const acis = await solidsAsAcis(entities, format === 'DXF' ? 'sat' : 'sab', (done, total) => {
+          const now = performance.now()
+          if (done < total && now - shown > 1000) {
+            shown = now
+            print(`  ${done} of ${total} solid(s)…`)
           }
         })
-        .then((bytes) => download(bytes, 'dwg', 'image/vnd.dwg'))
-        .catch((err) => print(`DWG export failed: ${dwgErrorMessage(err)}`))
+        const list = entities.map((e) => (e.type === 'SOLID3D' && !acis.has(e) ? solidsAsMeshes([e])[0] : e))
+        if (solids && sysvars.SOLIDEXPORT === 1) {
+          const faces = solids - acis.size
+          print(`${acis.size} solid(s) written as ACIS solids${faces ? `; ${faces} as their faces (they could not be written exactly)` : ''}.`)
+        }
+        if (format === 'DXF') {
+          const sat = new Map([...acis].map(([e, a]) => [e, { kind: a.kind, sat: a.data as string }]))
+          download(dxfOf(list, sat), 'dxf', 'application/dxf')
+          return
+        }
+        // DWG: el DXF se convierte en el navegador (acad-ts), con el SAB de cada sólido en lugar de una marca; si falla y
+        // hay servidor con conversor, lo hace él (con los sólidos como caras). Si el navegador no puede y tampoco hay
+        // servidor, el mensaje es el del navegador (el del servidor, "Request failed", no explica nada).
+        const sab = new Map<string, Uint8Array>()
+        const marks = new Map([...acis].map(([e, a], i) => (sab.set(String(i), a.data as Uint8Array), [e, { kind: a.kind, sat: `cota-solid ${i}\n` }])))
+        const dxf = dxfOf(list, marks)
+        dxfTextToDwg(dxf, sab)
+          .catch(async (local) => {
+            try {
+              return await api.dxfToDwg(dxfOf(solidsAsMeshes(entities)))
+            } catch {
+              throw local
+            }
+          })
+          .then((bytes) => download(bytes, 'dwg', 'image/vnd.dwg'))
+          .catch((err) => print(`DWG export failed: ${dwgErrorMessage(err)}`))
+      })()
     },
     computePreview: (cursor) => {
       const shapes = engine.computePreview(cursor)

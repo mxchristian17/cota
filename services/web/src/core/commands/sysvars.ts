@@ -82,6 +82,11 @@ export interface Sysvars {
    * solo mientras el usuario no hace nada; cualquier acción lo corta. 0 = no.
    */
   SOLIDIDLE: 0 | 1
+  /**
+   * SOLIDEXPORT: 1 = al guardar un DWG o un DXF los sólidos van como sólidos ACIS (3DSOLID, REGION, BODY): las piezas
+   * importadas sin cambios con su modelo original, los demás con el del núcleo exacto. 0 = como sus caras (3DFACE).
+   */
+  SOLIDEXPORT: 0 | 1
   /** ZOOMWHEEL: 0 = rueda hacia adelante acerca (CAD clásico), 1 = al revés. */
   ZOOMWHEEL: 0 | 1
   /** UCSVIEW: 1 = las vistas guardadas guardan también la UCS. */
@@ -134,6 +139,7 @@ const DEFAULTS: Sysvars = {
   SOLIDKERNEL: 'OCCT',
   SOLIDIMPORT: 0,
   SOLIDIDLE: 1,
+  SOLIDEXPORT: 1,
   ZOOMWHEEL: 0,
   UCSVIEW: 1,
   PDMODE: 0,
@@ -155,7 +161,7 @@ export function resetSysvars(): void {
  */
 export const PERSISTED_SYSVARS = [
   'FILLETRAD', 'CHAMFERA', 'CHAMFERB', 'CHAMFERC', 'CHAMFERD', 'CHAMMODE', 'TRIMMODE',
-  'UCSICON', 'ZOOMFACTOR', 'ZOOMWHEEL', 'RENDERMINPX', 'SMOOTHANGLE', 'SOLIDKERNEL', 'SOLIDIMPORT', 'SOLIDIDLE', 'UCSORTHO', 'UCSFOLLOW', 'UCSDETECT', 'UCSVIEW',
+  'UCSICON', 'ZOOMFACTOR', 'ZOOMWHEEL', 'RENDERMINPX', 'SMOOTHANGLE', 'SOLIDKERNEL', 'SOLIDIMPORT', 'SOLIDIDLE', 'SOLIDEXPORT', 'UCSORTHO', 'UCSFOLLOW', 'UCSDETECT', 'UCSVIEW',
   'ATTDIA', 'ATTREQ', 'PEDITACCEPT', 'OFFSETGAPTYPE', 'EDGEMODE', 'PROJMODE', 'PDMODE', 'PDSIZE', 'POLARANG', 'PICKSTYLE',
   'ISAVEBAK', 'SAVETIME',
 ] as const
@@ -178,7 +184,7 @@ export function applySysvars(data: Record<string, unknown>): void {
   if (data.CHAMMODE === 'Distance' || data.CHAMMODE === 'Angle') sysvars.CHAMMODE = data.CHAMMODE
   if (data.TRIMMODE === 0 || data.TRIMMODE === 1) sysvars.TRIMMODE = data.TRIMMODE
   const bit = (v: unknown): v is 0 | 1 => v === 0 || v === 1
-  for (const k of ['ZOOMWHEEL', 'UCSORTHO', 'UCSFOLLOW', 'UCSDETECT', 'UCSVIEW', 'ATTDIA', 'ATTREQ', 'PEDITACCEPT', 'EDGEMODE', 'PICKSTYLE', 'ISAVEBAK', 'SOLIDIDLE'] as const) {
+  for (const k of ['ZOOMWHEEL', 'UCSORTHO', 'UCSFOLLOW', 'UCSDETECT', 'UCSVIEW', 'ATTDIA', 'ATTREQ', 'PEDITACCEPT', 'EDGEMODE', 'PICKSTYLE', 'ISAVEBAK', 'SOLIDIDLE', 'SOLIDEXPORT'] as const) {
     const v = data[k]
     if (bit(v)) sysvars[k] = v
   }

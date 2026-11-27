@@ -712,6 +712,14 @@ export function evalSolid(k: K, props: SolidProps, opts: EvalOptions = {}): Occt
 }
 
 
+/**
+ * La forma exacta de un árbol como texto BRep de OpenCascade, para escribirla como ACIS (ver `brepToAcis`). Una copia
+ * sin la triangulación; `sheet`: es una lámina (sin volumen).
+ */
+export function brepOfSolid(k: K, props: SolidProps, opts: EvalOptions = {}): { brep: string; sheet: boolean } {
+  return withShape(k, props, opts, ({ shape, sheet }) => ({ brep: k.toBREP(k.copy(shape)), sheet }))
+}
+
 /** Clave de la superficie de una cara: las caras de una misma superficie comparten grupo (no se marca arista entre ellas). */
 function surfaceKey(k: K, face: ShapeHandle, q: (x: number) => string, i: number): { key: string; sphere?: { c: Vec3; r: number } } {
   try {
