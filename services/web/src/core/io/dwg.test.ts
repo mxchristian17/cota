@@ -87,6 +87,24 @@ describe('guardar DWG en el navegador', () => {
     expect(line.layerName).toBe('Ejes')
     expect((r.entities.find((e) => e.type === 'CIRCLE')!.props as unknown as { radius: number }).radius).toBe(15)
   })
+
+  it('una malla va como una malla de caras y vuelve como la misma malla (no una por cara), en su capa', async () => {
+    const { exportDxf } = await import('./dxf')
+    const { dxfTextToDwg } = await import('./dwg')
+    const layers = [{ id: 'L1', name: 'Mallas', color: '#ffffff', visible: true, locked: false, frozen: false, printable: true, lineWeight: 0.25, lineType: 'CONTINUOUS' }]
+    const props = {
+      vertices: [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 1], [2, 0, 0], [3, 1, 0], [2, 2, 0]],
+      faces: [[0, 1, 2, 3], [1, 4, 2], [1, 4, 5, 6, 2]],
+    }
+    const ents = [
+      { id: 'a', type: 'MESH3D', layer: 'L1', props },
+      { id: 'b', type: 'MESH3D', layer: 'L1', props: { vertices: props.vertices.slice(0, 3), faces: [[0, 1, 2]] } },
+    ]
+    const r = importDxf(await dwgToDxfText(await dxfTextToDwg(exportDxf(ents as never, layers as never, 'L1'))))
+    const meshes = r.entities.filter((e) => e.type === 'MESH3D')
+    expect(meshes.map((e) => e.props)).toEqual(ents.map((e) => e.props))
+    expect(meshes.every((e) => e.layerName === 'Mallas')).toBe(true)
+  })
 })
 
 describe('mensajes de error de DWG', () => {

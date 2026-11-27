@@ -12,7 +12,7 @@ Every command can be typed in the command line (aliases too) or picked from the 
 | [`SAVE`](reference/file.md#save) | `QSAVE`, `SAVEAS` | Save the current drawing: working folder, your account, or a downloaded .cota file |
 | [`CLOUD`](reference/file.md#cloud) | `CLOUDSTORAGE` | Store drawings in your account again (detach the local folder) |
 | [`IMPORT`](reference/file.md#import) | `IMP` | Import geometry from a DXF, DWG, OBJ, STL, STEP or IGES file |
-| [`EXPORT`](reference/file.md#export) | `EXP` | Export the drawing to OBJ (3D mesh), DXF or DWG (3D solids as ACIS solids, see SOLIDEXPORT) |
+| [`EXPORT`](reference/file.md#export) | `EXP` | Export the drawing to OBJ (3D mesh), DXF or DWG (3D solids as ACIS solids, see SOLIDEXPORT) or STEP (exact 3D solids) |
 | [`PAGESETUP`](reference/file.md#pagesetup) | — | Page setup of the current layout (paper, orientation, margins, plot style) |
 | [`PLOT`](reference/file.md#plot) | `PRINT` | Plot to a vector PDF from a dialog with preview: paper, orientation, area (Extents/Display/Window), scale, plot style; a layout plots 1:1 with its page setup |
 | [`PUBLISH`](reference/file.md#publish) | — | Publish layouts to a multi-page PDF [All/Current or layout names] |
@@ -291,7 +291,7 @@ Type the name to see or change the value. Each one is explained in [System varia
 | [`SOLIDKERNEL`](reference/variables.md#solidkernel) | Kernel for 3D solids: OCCT = exact (B-rep, OpenCascade), MESH = triangle meshes |
 | [`SOLIDIMPORT`](reference/variables.md#solidimport) | Solids of an opened DWG/DXF: 0 = ask, 1 = convert all to exact solids, 2 = as meshes (convert each when selected or edited) |
 | [`SOLIDIDLE`](reference/variables.md#solididle) | Compute exact solids left as meshes while you are not working: 1 = on, 0 = off |
-| [`SOLIDEXPORT`](reference/variables.md#solidexport) | Solids in a saved DWG/DXF: 1 = ACIS solids (3DSOLID), 0 = their faces (3DFACE) |
+| [`SOLIDEXPORT`](reference/variables.md#solidexport) | Solids in a saved DWG/DXF: 1 = ACIS solids (3DSOLID), 0 = meshes of their faces |
 | [`ZOOMWHEEL`](reference/variables.md#zoomwheel) | Mouse wheel direction: 0 = forward zooms in, 1 = forward zooms out |
 | [`ISAVEBAK`](reference/variables.md#isavebak) | Keep the previous version as a .bak file when saving to the local folder (0/1) |
 | [`SAVETIME`](reference/variables.md#savetime) | Minutes between automatic recovery copies (.sv$) in the local folder (0 = off) |

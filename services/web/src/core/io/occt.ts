@@ -2,8 +2,9 @@ import type { MeshProps } from '../document/types'
 import type { Vec3 } from '../math'
 
 /**
- * STEP e IGES con OpenCascade compilado a WebAssembly (`occt-import-js`, LGPL-2.1). Se carga sólo al abrir uno de
- * estos archivos: el resto de la app no lo descarga. Cada cuerpo del archivo llega como una malla triangulada.
+ * IGES (y STEP sin el núcleo exacto, ver `stepExact.ts`) con OpenCascade compilado a WebAssembly (`occt-import-js`,
+ * LGPL-2.1). Se carga sólo al abrir uno de estos archivos: el resto de la app no lo descarga. Cada cuerpo del archivo
+ * llega como una malla triangulada.
  */
 export async function readCadFile(buf: ArrayBuffer, kind: 'step' | 'iges'): Promise<Array<MeshProps & { name?: string }>> {
   const [{ default: factory }, { default: wasmUrl }] = await Promise.all([import('occt-import-js'), import('occt-import-js/dist/occt-import-js.wasm?url')])

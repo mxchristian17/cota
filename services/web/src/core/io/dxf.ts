@@ -206,20 +206,8 @@ function entityDxf(e: Entity, layerName: string): string | null {
     case 'DIMENSION':
       // Sin equivalente nativo (ver `DxfDimWriter`): explotada a líneas, flechas rellenas (SOLID) y texto.
       return dimGeometryDxf(dimDisplay(e.props), layerName, false)
-    case 'MESH3D': {
-      // Cada cara como 3DFACE (hasta 4 esquinas; las de más, en abanico).
-      const { vertices, faces } = e.props
-      let out = ''
-      for (const f of faces) {
-        for (let k = 1; k + 1 < f.length; k += 2) {
-          const ids = f.length <= 4 ? f : k + 2 < f.length ? [f[0], f[k], f[k + 1], f[k + 2]] : [f[0], f[k], f[k + 1]]
-          const q = [0, 1, 2, 3].map((i) => vertices[ids[Math.min(i, ids.length - 1)]])
-          out += p(0, '3DFACE') + h + q.map((v, i) => p(10 + i, v[0]) + p(20 + i, v[1]) + p(30 + i, v[2])).join('')
-          if (f.length <= 4) break
-        }
-      }
-      return out || null
-    }
+    case 'MESH3D':
+      return polyfaceDxf(e.props.vertices, e.props.faces, layerName, commonCodes(e))
     // Un sólido se exporta como la malla de sus caras (`exportableEntities`, que tiene con qué calcularla).
     case 'SOLID3D':
     case 'INSERT': // las inserciones se expanden a geometría de mundo antes de exportar
@@ -302,6 +290,60 @@ function convexQuad(q: Vec3[]): boolean {
 /** Grupos 210/220/230 de la extrusión, sólo si no es la del mundo (+Z). */
 function extrusion(n: Vec3): string {
   return isWorldExtrusion(n) ? '' : p(210, n[0]) + p(220, n[1]) + p(230, n[2])
+}
+
+/** Índices de un POLYLINE de caras: 16 bits con signo. */
+const POLYFACE_MAX = 32767
+
+/**
+ * Una malla como un POLYLINE de caras (70 = 64): sus vértices una vez y cada cara con los índices de sus esquinas, así
+ * vuelve como una sola malla (antes, un 3DFACE por cara: una malla por cara al reabrir). Una cara de más de 4 esquinas
+ * va en abanico, con las aristas de adentro ocultas (índice negativo), y el lector la vuelve a unir. Una malla con más
+ * vértices o caras de los que caben en los índices se parte en varias.
+ */
+function polyfaceDxf(vertices: Vec3[], faces: number[][], layerName: string, common: string): string | null {
+  // Registros de 3 o 4 esquinas: [índice, visible] por esquina (la arista que sale de ella).
+  const records: Array<Array<[number, boolean]>> = []
+  for (const f of faces) {
+    if (f.length < 3) continue
+    if (f.length <= 4) {
+      records.push(f.map((i) => [i, true]))
+      continue
+    }
+    for (let k = 1; k + 1 < f.length; k += 2) {
+      const last = k + 2 >= f.length - 1
+      const ids = k + 2 < f.length ? [f[0], f[k], f[k + 1], f[k + 2]] : [f[0], f[k], f[k + 1]]
+      // f0→fk es de adentro salvo en la primera; la que cierra (→ f0), salvo en la última.
+      records.push(ids.map((i, j) => [i, j === 0 ? k === 1 : j === ids.length - 1 ? last : true]))
+    }
+  }
+  if (!records.length) return null
+  // Sin marcadores de subclase, como las demás entidades: con ellos acad-ts (DXF → DWG) toma los vértices por caras.
+  const head = p(8, layerName) + common
+  let out = ''
+  // Si cabe, con los vértices tal cual (vuelve igual); si no, de a trozos que quepan, cada uno con los suyos.
+  const whole = vertices.length <= POLYFACE_MAX && records.length <= POLYFACE_MAX
+  for (let start = 0; start < records.length; ) {
+    const local = new Map<number, number>(whole ? vertices.map((_, i) => [i, i + 1]) : [])
+    let end = whole ? records.length : start
+    for (; end < records.length && end - start < POLYFACE_MAX; end++) {
+      const fresh = records[end].filter(([i]) => !local.has(i)).length
+      if (local.size + fresh > POLYFACE_MAX) break
+      for (const [i] of records[end]) if (!local.has(i)) local.set(i, local.size + 1)
+    }
+    out += p(0, 'POLYLINE') + head + p(66, 1) + p(10, 0) + p(20, 0) + p(30, 0) + p(70, 64) + p(71, local.size) + p(72, end - start)
+    for (const i of local.keys()) {
+      const v = vertices[i]
+      out += p(0, 'VERTEX') + head + p(10, v[0]) + p(20, v[1]) + p(30, v[2]) + p(70, 192)
+    }
+    for (let r = start; r < end; r++) {
+      out += p(0, 'VERTEX') + head + p(10, 0) + p(20, 0) + p(30, 0) + p(70, 128)
+      records[r].forEach(([i, visible], j) => (out += p(71 + j, visible ? local.get(i)! : -local.get(i)!)))
+    }
+    out += p(0, 'SEQEND') + head
+    start = end
+  }
+  return out
 }
 
 function lwpolyline(
@@ -1741,10 +1783,18 @@ function heavyPolyline(rec: Rec): { type: EntityType; props: EntityProps } | nul
     // Primero los vértices (128 + 64); después las caras (sólo 128) con 71–74: índices desde 1, negativo = arista oculta.
     const vertices = vs.filter((v) => (vflag(v) & 192) === 192).map(at)
     const faces: number[][] = []
+    // Una cara en abanico (la que cierra la anterior y la primera de ésta, ocultas, desde la misma esquina) vuelve a ser
+    // un polígono, como la escriben Cota y otros programas para las de más de 4 esquinas.
+    let open = false
     for (const v of vs) {
       if ((vflag(v) & 192) !== 128) continue
-      const idx = [71, 72, 73, 74].map((k) => Math.abs(num(v.codes, k, 0))).filter((i) => i > 0 && i <= vertices.length)
-      if (idx.length >= 3) faces.push(idx.map((i) => i - 1))
+      const raw = [71, 72, 73, 74].map((k) => num(v.codes, k, 0)).filter((i) => i !== 0 && Math.abs(i) <= vertices.length)
+      if (raw.length < 3) continue
+      const idx = raw.map((i) => Math.abs(i) - 1)
+      const prev = faces.at(-1)
+      if (open && prev && raw[0] < 0 && prev[0] === idx[0] && prev.at(-1) === idx[1]) prev.push(...idx.slice(2))
+      else faces.push(idx)
+      open = raw.at(-1)! < 0
     }
     return faces.length ? { type: 'MESH3D', props: { vertices, faces } as EntityProps } : null
   }

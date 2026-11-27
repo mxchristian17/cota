@@ -108,9 +108,9 @@ test.describe('Cambios sin guardar (R28)', () => {
 test.describe('Abrir un STEP y copiarlo no es un cambio (B26)', () => {
   test('COPYBASE en un STEP recién abierto: NEW y OPEN no preguntan si guardar', async ({ page }) => {
     await ready(page)
-    // Coordenadas con decimales: la malla trae ruido de punto flotante (lo que limpiaba el primer comando).
+    // Coordenadas con decimales: la pieza trae ruido de punto flotante (lo que limpiaba el primer comando).
     await openChosen(page, 'LM8UU.step', boxStep(24.3, 15.1, 15.7, [0.1, 0.2, 0.3], 'LM8UU'))
-    await expect(out(page)).toContainText('Opened "LM8UU.step" from the device (1 mesh(es)).', { timeout: 30_000 })
+    await expect(out(page)).toContainText('Opened "LM8UU.step" from the device (1 exact solid(s)).', { timeout: 30_000 })
     await cmd(page, 'COPYBASE', 'ALL', '', '0,0,0')
     await expect(out(page)).toContainText('1 object(s) copied to the clipboard.')
     expect(await st(page, 'return s.isDirty()')).toBe(false)

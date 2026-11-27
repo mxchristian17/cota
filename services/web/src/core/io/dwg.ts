@@ -109,8 +109,20 @@ export function dwgVersion(data: ArrayBuffer): string | null {
  * formato que abren los programas actuales.
  */
 export async function dxfTextToDwg(dxf: string, sab?: ReadonlyMap<string, Uint8Array>): Promise<ArrayBuffer> {
-  const { ACadVersion, Color, DwgObjectWriter, DwgWriter, DxfReader, ModelerGeometry, RasterImage, XY } = await import('@node-projects/acad-ts')
+  const { ACadVersion, Color, DwgObjectWriter, DwgWriter, DxfReader, ModelerGeometry, PolyfaceMesh, RasterImage, Seqend, XY } = await import('@node-projects/acad-ts')
   const doc = DxfReader.readFromStream(new TextEncoder().encode(dxf))
+  // Mallas de caras (POLYLINE 70 = 64): sin handles en el DXF, acad-ts no registra sus vértices ni sus caras (ni crea
+  // su SEQEND), y el DWG las escribía vacías.
+  const register = (doc as unknown as { _addCadObject(o: unknown): void })._addCadObject.bind(doc)
+  for (const br of doc.blockRecords ?? [])
+    for (const e of br.entities) {
+      if (!(e instanceof PolyfaceMesh)) continue
+      e.vertices.seqend ??= new Seqend()
+      for (const o of [...e.vertices, ...e.faces, e.vertices.seqend]) {
+        o.owner = e
+        if (!o.handle) register(o)
+      }
+    }
   // Sólidos ACIS: el DXF los trae con una marca (`cota-solid n`) en lugar del SAT; acá va su SAB, que el DWG 2018
   // guarda en su sección de datos del modelador.
   if (sab?.size)

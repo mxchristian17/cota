@@ -1,4 +1,4 @@
-import { registerImportedBreps, withoutBreps } from '../core/document/brepStore'
+import { brepFormat, brepSourcesOf, registerImportedBreps, withoutBreps } from '../core/document/brepStore'
 import type { BrepProps } from '../core/document/types'
 import { docsUrl } from '../core/about'
 import { chooseFile, chooseFiles } from './filePicker'
@@ -75,6 +75,8 @@ import { newViewportProps } from '../core/layout/viewport'
 import { fieldContextFor, resolveFieldTexts } from '../core/fields/context'
 import { exportObj, importObj, type ObjMesh } from '../core/io/obj'
 import { exportDxf, importDxf, type DxfEntitySpec, type DxfImportResult, type DxfLinetypeOptions } from '../core/io/dxf'
+import type { StepReadResult } from '../core/io/stepRead'
+import type { StepSolid } from '../core/io/stepWrite'
 import { solidsAsAcis } from '../render/acisExport'
 import { attachXref, xrefCandidates, xrefsOf } from '../core/io/xref'
 import { cadReadsInFlight, dwgErrorMessage, dwgVersion, dxfTextToDwg, importCadInWorker } from '../core/io/dwg'
@@ -508,7 +510,7 @@ export interface AppState {
   attachImages: () => void
   /** Carga los píxeles de las imágenes del dibujo desde esos archivos, asociados por el nombre; devuelve cuántas. */
   attachImageFiles: (files: File[]) => Promise<number>
-  exportModel: (format: 'OBJ' | 'DXF' | 'DWG') => void
+  exportModel: (format: 'OBJ' | 'DXF' | 'DWG' | 'STEP') => void
   computePreview: (cursor: Pt) => PreviewShape[]
   listCommands: () => Command[]
   clearSelection: () => void
@@ -616,6 +618,25 @@ async function readModelFile(file: File, lower: string): Promise<Array<Pick<ObjM
   }
   const { readCadFile } = await import('../core/io/occt')
   return readCadFile(await file.arrayBuffer(), lower.endsWith('.step') || lower.endsWith('.stp') ? 'step' : 'iges')
+}
+
+const isStepName = (lower: string) => lower.endsWith('.step') || lower.endsWith('.stp')
+const stepSummary = (r: StepReadResult) => `${r.stats.solids} exact solid(s)${r.blocks?.length ? `, with ${r.blocks.length} block(s) for its parts and assemblies` : ''}`
+
+/**
+ * Un STEP con su árbol y sus piezas exactas (en el hilo del núcleo), escalado a las unidades del dibujo; null si no hay
+ * núcleo exacto, si el navegador no puede con él o si no lo lee: entonces va como mallas (`readModelFile`), que avisa
+ * si el archivo no es un STEP.
+ */
+async function readStepExactFile(file: File, mmPerUnit: number): Promise<StepReadResult | null> {
+  if (sysvars.SOLIDKERNEL !== 'OCCT' || !kernelAvailable()) return null
+  try {
+    const { readStepFile } = await import('../core/io/stepExact')
+    const r = await readStepFile(await file.arrayBuffer(), { light: isPhone(), scale: 1 / mmPerUnit })
+    return r.stats.solids ? r : null
+  } catch {
+    return null
+  }
 }
 
 /** Registra un cambio de selección como paso de deshacer (lo arma el store; ver `SelUndo`). */
@@ -781,7 +802,7 @@ export const useStore = create<AppState>((set, get) => {
     doc.setActiveTab(back)
   }
   /** Carga en el dibujo un DXF ya interpretado (en el hilo aparte de lectura o acá). */
-  const applyDxf = (r: DxfImportResult, asDrawing = false): number => {
+  const applyDxf = (r: DxfImportResult, asDrawing = false, into: { layerId?: string; block?: string } = {}): number => {
     const { currentLayer, layers, entities, dimStyles, linetypes, vars, view, unsupported } = r
     if (asDrawing) openedView = view
     // Sólidos importados: sus modelos (todavía sin comprimir) y lo que se dibuja de cada uno, antes que las entidades.
@@ -819,23 +840,28 @@ export const useStore = create<AppState>((set, get) => {
       blockName.set(b.name, name)
     }
     const renamed = (e: DxfEntitySpec): EntityProps => (e.type === 'INSERT' && blockName.has((e.props as InsertProps).name) ? { ...(e.props as InsertProps), name: blockName.get((e.props as InsertProps).name)! } : e.props)
-    for (const b of r.blocks ?? []) {
-      const list: Entity[] = b.entities.map((e) => {
-        const child = { id: doc.nextEntityId(), type: e.type, layer: idByName.get(e.layerName.toLowerCase()) ?? doc.firstLayerId, props: renamed(e) } as Entity
-        // Como las del dibujo, sin ByLayer guardado; ByBlock sí (lo resuelve cada inserción).
-        if (e.lineType && e.lineType !== 'BYLAYER') child.lineType = e.lineType
-        if (e.ltScale !== undefined && e.ltScale !== 1) child.ltScale = e.ltScale
-        if (e.color) child.color = e.color
-        if (e.lineWeight !== undefined) child.lineWeight = e.lineWeight
-        if (e.transparency) child.transparency = e.transparency
-        if (child.lineType && child.lineType !== 'BYBLOCK') doc.loadLinetype(child.lineType)
-        if (child.type === 'DIMENSION' && doc.dimStyleDef(child.props.styleName ?? '')) doc.restyleDimension(child.props, child.props.styleName, child.props.overrides)
-        return child
-      })
-      doc.setBlock({ name: blockName.get(b.name)!, entities: list, ...(b.xref ? { xref: b.xref } : {}) })
+    const blockEntity = (e: DxfEntitySpec): Entity => {
+      const child = { id: doc.nextEntityId(), type: e.type, layer: idByName.get(e.layerName.toLowerCase()) ?? doc.firstLayerId, props: renamed(e) } as Entity
+      // Como las del dibujo, sin ByLayer guardado; ByBlock sí (lo resuelve cada inserción).
+      if (e.lineType && e.lineType !== 'BYLAYER') child.lineType = e.lineType
+      if (e.ltScale !== undefined && e.ltScale !== 1) child.ltScale = e.ltScale
+      if (e.color) child.color = e.color
+      if (e.lineWeight !== undefined) child.lineWeight = e.lineWeight
+      if (e.transparency) child.transparency = e.transparency
+      if (child.lineType && child.lineType !== 'BYBLOCK') doc.loadLinetype(child.lineType)
+      if (child.type === 'DIMENSION' && doc.dimStyleDef(child.props.styleName ?? '')) doc.restyleDimension(child.props, child.props.styleName, child.props.overrides)
+      return child
+    }
+    for (const b of r.blocks ?? []) doc.setBlock({ name: blockName.get(b.name)!, entities: b.entities.map(blockEntity), ...(b.xref ? { xref: b.xref } : {}) })
+    // Todo en un bloque (IMPORT ▸ Block): su definición (se reemplaza si existe) y una inserción en el origen.
+    if (into.block) {
+      doc.setBlock({ name: into.block, entities: entities.map(blockEntity) })
+      doc.addEntity({ type: 'INSERT', layer: into.layerId ?? doc.firstLayerId, props: { name: into.block, position: [0, 0, 0], scale: [1, 1, 1], rotation: 0 } })
+      if (r.breps) offerSolidConversion(new Set(Object.keys(r.breps)))
+      return entities.length
     }
     for (const e of entities) {
-      const layerId = idByName.get(e.layerName.toLowerCase()) ?? doc.firstLayerId
+      const layerId = into.layerId ?? idByName.get(e.layerName.toLowerCase()) ?? doc.firstLayerId
       const added = doc.addEntity({ type: e.type, layer: layerId, props: renamed(e), lineType: e.lineType ?? 'BYLAYER', ltScale: e.ltScale ?? 1, color: e.color ?? 'BYLAYER', lineWeight: e.lineWeight ?? -1, ...(e.transparency ? { transparency: e.transparency } : {}) })
       if (added.lineType && added.lineType !== 'BYBLOCK') doc.loadLinetype(added.lineType)
       if (added.type === 'DIMENSION' && doc.dimStyleDef(added.props.styleName ?? '')) doc.restyleDimension(added.props, added.props.styleName, added.props.overrides)
@@ -930,7 +956,9 @@ export const useStore = create<AppState>((set, get) => {
     if (sysvars.SOLIDIMPORT === 1) return convertImported(refs)
     // Se cuentan los sólidos (del modelo y de los bloques), sin desarmar las inserciones.
     let solids = 0
-    for (const list of [doc.modelEntities, ...doc.blocks.map((b) => b.entities)]) for (const e of list) if (e.type === 'SOLID3D' && e.props.op === 'BREP' && (!refs || refs.has(e.props.ref))) solids++
+    // Las piezas de un STEP (modelo de OpenCascade) no se convierten: el núcleo las lee directo.
+    for (const list of [doc.modelEntities, ...doc.blocks.map((b) => b.entities)])
+      for (const e of list) if (e.type === 'SOLID3D' && e.props.op === 'BREP' && (!refs || refs.has(e.props.ref)) && brepFormat(e.props.ref) !== 'brep') solids++
     if (solids) set({ solidImportAsk: { solids } })
   }
   /** Conversión completa de los sólidos importados (los de `refs`, o todos). */
@@ -3355,6 +3383,22 @@ export const useStore = create<AppState>((set, get) => {
         const format = name.endsWith('.stp') ? 'STEP' : name.endsWith('.igs') ? 'IGES' : name.slice(name.lastIndexOf('.') + 1).toUpperCase()
         if (format === 'STEP' || format === 'IGES') print(`Reading ${format}…`)
         try {
+          // STEP con el núcleo exacto: su árbol y sus piezas exactas, en la capa actual o en un bloque.
+          const step = format === 'STEP' ? await readStepExactFile(file, unitToMm(doc.units)) : null
+          if (step)
+            return {
+              file: file.name,
+              format,
+              meshes: [],
+              exact: {
+                summary: stepSummary(step),
+                place: (block?: string) =>
+                  runImport(
+                    () => applyDxf(step, false, { layerId: get().currentLayerId, ...(block ? { block } : {}) }),
+                    () => `Imported ${stepSummary(step)} from STEP${block ? ` in block "${block}", inserted at 0,0,0` : ''}.`,
+                  ),
+              },
+            }
           return { file: file.name, format, meshes: await readModelFile(file, name) }
         } catch (err) {
           print(`"${file.name}" could not be read (${err instanceof Error && err.message ? err.message : 'invalid file?'}).`)
@@ -3451,6 +3495,12 @@ export const useStore = create<AppState>((set, get) => {
       const supported = isDrawingFile(lower) || MODEL_EXTS.some((x) => lower.endsWith(x)) || lower.endsWith('.dxf') || lower.endsWith('.dwg')
       if (supported && !(await askSaveChanges())) return
       try {
+        // Un STEP, con el núcleo exacto si se puede (si no, como mallas, más abajo).
+        let step: StepReadResult | null = null
+        if (isStepName(lower)) {
+          print('Reading STEP…')
+          step = await readStepExactFile(file, 1)
+        }
         if (isDrawingFile(lower)) {
           const data = JSON.parse(await file.text()) as DocumentData
           pushSnapshot('open')
@@ -3462,8 +3512,17 @@ export const useStore = create<AppState>((set, get) => {
           print(`Opened "${file.name}" from the device.`)
           warnMissingBlocks()
           offerSolidConversion()
+        } else if (step) {
+          // STEP con el núcleo exacto: un dibujo nuevo con su árbol (bloques con nombre) y sus piezas exactas.
+          pushSnapshot('open')
+          doc.reset()
+          applyDxf(step, true)
+          currentFile = null
+          set({ ...detached, viewportLayout: doc.viewportLayout })
+          restoreModelUcs()
+          print(`Opened "${file.name}" from the device (${stepSummary(step)}).`)
         } else if (MODEL_EXTS.some((x) => lower.endsWith(x))) {
-          // Modelos 3D (STL, OBJ, STEP, IGES): un dibujo nuevo con cada cuerpo como malla.
+          // Modelos 3D (STL, OBJ, STEP sin núcleo exacto, IGES): un dibujo nuevo con cada cuerpo como malla.
           const meshes = await readModelFile(file, lower)
           pushSnapshot('open')
           doc.reset()
@@ -3506,10 +3565,11 @@ export const useStore = create<AppState>((set, get) => {
     exportModel: (format) => {
       const docName = get().docName || 'drawing'
       // Desde una hoja, el DXF/DWG es esa hoja aplanada: lleva su nombre, así exportar la siguiente no pisa el archivo.
-      const sheet = format !== 'OBJ' && !doc.editingBlock ? doc.activeLayout : undefined
+      const sheet = format !== 'OBJ' && format !== 'STEP' && !doc.editingBlock ? doc.activeLayout : undefined
       const base = sheet ? `${docName}-${sanitizeSegment(sheet.name) || 'layout'}` : docName
       const download = (content: BlobPart, ext: string, mime: string) => {
-        const name = `${base}.${ext}`
+        // Un dibujo abierto de un archivo de ese formato (un STEP) ya lleva la extensión en el nombre.
+        const name = base.toLowerCase().endsWith(`.${ext}`) ? base : `${base}.${ext}`
         const blob = new Blob([content], { type: mime })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
@@ -3520,6 +3580,49 @@ export const useStore = create<AppState>((set, get) => {
         a.remove()
         setTimeout(() => URL.revokeObjectURL(url), 1000)
         print(`<Exported "${name}">`)
+      }
+      if (format === 'STEP') {
+        // Los sólidos del modelo (o del bloque abierto) con sus formas exactas: cada uno con el nombre del bloque de su
+        // inserción (o «Solid n») y su color.
+        const solids: StepSolid[] = []
+        let meshes = 0
+        let loose = 0
+        const rgb = (e: Entity): [number, number, number] | undefined => {
+          const c = e.color?.startsWith('#') ? e.color : doc.layers.find((l) => l.id === e.layer)?.color
+          return c && /^#[0-9a-f]{6}$/i.test(c) ? [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16) / 255) as [number, number, number] : undefined
+        }
+        for (const top of doc.editingBlock ? doc.entities : doc.modelEntities) {
+          const inner = expandEntities([top], doc.blocks).filter((e) => e.type === 'SOLID3D' || e.type === 'MESH3D')
+          const own = inner.filter((e): e is Entity & { type: 'SOLID3D' } => e.type === 'SOLID3D')
+          meshes += inner.length - own.length
+          const name = top.type === 'INSERT' ? top.props.name : null
+          own.forEach((e, i) => {
+            const color = rgb(e)
+            solids.push({ props: e.props, name: name ? (own.length > 1 ? `${name} ${i + 1}` : name) : `Solid ${++loose}`, ...(color ? { color } : {}) })
+          })
+        }
+        if (!solids.length) {
+          print(`Nothing to export (no 3D solids for STEP${meshes ? `; ${meshes} mesh(es) are not solids` : ''}).`)
+          return
+        }
+        if (sysvars.SOLIDKERNEL !== 'OCCT' || !kernelAvailable()) {
+          print('STEP export needs the exact solids kernel (SOLIDKERNEL OCCT).')
+          return
+        }
+        print(`Writing STEP (${solids.length} solid(s))…`)
+        void import('../core/io/stepExact')
+          .then(({ writeStepFile }) => writeStepFile(solids, brepSourcesOf(solids.map((x) => x.props)) ?? {}, doc.units, unitToMm(doc.units)))
+          .then((r) => {
+            if (!r.written) {
+              print('STEP export failed: the exact kernel could not build any of the solids.')
+              return
+            }
+            download(r.step, 'step', 'model/step')
+            const left = [r.failed ? `${r.failed} solid(s) the exact kernel could not build` : '', meshes ? `${meshes} mesh(es) (STEP carries solids only)` : ''].filter(Boolean)
+            print(`${r.written} solid(s) written as exact STEP solids${left.length ? `; left out: ${left.join(', ')}` : ''}.`)
+          })
+          .catch((err) => print(`STEP export failed: ${err instanceof Error ? err.message : String(err)}`))
+        return
       }
       if (format === 'OBJ') {
         // El OBJ es la geometría 3D del modelo, aunque la pestaña activa sea una hoja (en el papel no hay sólidos: desde
@@ -3565,7 +3668,7 @@ export const useStore = create<AppState>((set, get) => {
         const list = entities.map((e) => (e.type === 'SOLID3D' && !acis.has(e) ? solidsAsMeshes([e])[0] : e))
         if (solids && sysvars.SOLIDEXPORT === 1) {
           const faces = solids - acis.size
-          print(`${acis.size} solid(s) written as ACIS solids${faces ? `; ${faces} as their faces (they could not be written exactly)` : ''}.`)
+          print(`${acis.size} solid(s) written as ACIS solids${faces ? `; ${faces} as meshes (they could not be written exactly)` : ''}.`)
         }
         if (format === 'DXF') {
           const sat = new Map([...acis].map(([e, a]) => [e, { kind: a.kind, sat: a.data as string }]))

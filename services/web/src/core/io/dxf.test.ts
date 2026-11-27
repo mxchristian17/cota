@@ -5,6 +5,7 @@ import { textTop } from '../geom/text'
 import type { TextProps } from '../document/types'
 import { DEFAULT_DIM_STYLE } from '../dimension/dimGeometry'
 import type { DimensionProps, Entity, HatchProps, ImageProps, Layer } from '../document/types'
+import type { Vec3 } from '../math'
 import { formatDim, measureDim } from '../dimension/dimGeometry'
 import { BUILTIN_DIM_VARS } from '../dimension/style'
 
@@ -955,11 +956,29 @@ describe('entidades de DWG/DXF que Cota dibuja con piezas simples', () => {
     expect(back.entities[0].props).toEqual(e.props) // los píxeles no viajan: el DXF guarda la ruta
   })
 
-  it('una malla se exporta como caras 3D', () => {
-    const mesh = { id: 'm', type: 'MESH3D', layer: 'A', props: { vertices: [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 1]], faces: [[0, 1, 2, 3]] } } as unknown as Entity
-    const back = importDxf(exportDxf([mesh], [lineLayer]))
+  it('una malla se exporta como un POLYLINE de caras y vuelve como la misma malla (no una por cara)', () => {
+    const vertices: Vec3[] = [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 1], [2, 0, 0], [3, 1, 0], [2, 2, 0], [1.5, 3, 0], [0.5, 2, 0]]
+    // Un cuadrilátero, un triángulo y un polígono de 7 esquinas (va en abanico con las aristas de adentro ocultas).
+    const faces = [[0, 1, 2, 3], [1, 4, 2], [0, 4, 5, 6, 7, 8, 3]]
+    const mesh = { id: 'm', type: 'MESH3D', layer: 'A', props: { vertices, faces } } as unknown as Entity
+    const text = exportDxf([mesh], [lineLayer])
+    expect(text).not.toContain('3DFACE')
+    expect(text.match(/\nPOLYLINE\n/g)).toHaveLength(1)
+    const back = importDxf(text)
+    expect(back.entities).toHaveLength(1)
     expect(back.entities[0].type).toBe('MESH3D')
-    expect((back.entities[0].props as { vertices: number[][] }).vertices).toEqual([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 1]])
+    expect(back.entities[0].props).toEqual({ vertices, faces })
+  })
+
+  it('una malla con más vértices de los que caben en los índices de un POLYLINE se parte, y vuelve con las mismas caras', () => {
+    const n = 40_000
+    const vertices: Vec3[] = Array.from({ length: n + 2 }, (_, i) => [i, i % 2, 0])
+    const faces = Array.from({ length: n }, (_, i) => [i, i + 1, i + 2])
+    const mesh = { id: 'm', type: 'MESH3D', layer: 'A', props: { vertices, faces } } as unknown as Entity
+    const back = importDxf(exportDxf([mesh], [lineLayer])).entities
+    expect(back).toHaveLength(2)
+    const got = back.flatMap((e) => (e.props as { vertices: Vec3[]; faces: number[][] }).faces.map((f) => f.map((i) => (e.props as { vertices: Vec3[] }).vertices[i])))
+    expect(got).toEqual(faces.map((f) => f.map((i) => vertices[i])))
   })
 
   it('el espacio papel no se mezcla con el modelo: va a su hoja, con sus viewports y en mm desde la esquina', () => {

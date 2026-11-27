@@ -4,7 +4,8 @@ import { test, expect, type Page } from '@playwright/test'
 /**
  * Guardar sólidos en DWG/DXF como sólidos ACIS y volver a abrirlos (con el DWG de ejemplo público
  * `__fixtures__/acadsharp/sample_AC1032.dwg`, que trae un cubo de 5 de (15.2767…, -223.3501…, 0) a (20.2767…, -218.3501…, 5)):
- * el cubo con un agujero (calculado por el núcleo) vuelve con su volumen, como sólido y no como caras sueltas.
+ * el cubo con un agujero (calculado por el núcleo) vuelve con su volumen, como sólido y no como caras sueltas, y las mallas
+ * del dibujo vuelven las mismas (una malla, no una por cara).
  */
 const DWG = readFileSync(new URL('../../src/core/io/__fixtures__/acadsharp/sample_AC1032.dwg', import.meta.url))
 const LO = [15.27672546982376, -223.35012266071593, 0]
@@ -52,6 +53,7 @@ test.describe('guardar sólidos en DWG/DXF', () => {
   for (const format of ['DWG', 'DXF'] as const)
     test(`${format}: el cubo con un agujero vuelve como sólido, con su volumen`, async ({ page }) => {
       await open(page, 'muestra.dwg', DWG)
+      const before = await counts(page)
       await cmd(page, 'CYLINDER', `#${C[0]},${C[1]},-1`, '1', '7')
       await cmd(page, 'SUBTRACT', `#${LO[0] + 0.5},${LO[1] + 0.5},5`, '', `#${C[0] + 1},${C[1]},-0.5`, '')
       await expect(page.locator('.cmd-output')).toContainText('Subtracted 1 from 1.')
@@ -59,13 +61,14 @@ test.describe('guardar sólidos en DWG/DXF', () => {
       await expect(page.locator('.cmd-output')).toContainText('3 solid(s) written as ACIS solids.')
       // Otra sesión: abrir lo guardado.
       await open(page, `guardado.${format.toLowerCase()}`, file)
-      expect((await counts(page)).breps).toBe(3)
+      expect(await counts(page)).toEqual({ breps: 3, meshes: before.meshes })
       await cmd(page, 'MASSPROP', `#${LO[0] + 0.5},${LO[1] + 0.5},5`, '')
       await expect(page.locator('.cmd-output')).toContainText(/Volume:\s+109\.29/, { timeout: 30_000 })
     })
 
-  test('SOLIDEXPORT 0: los sólidos van como sus caras, como antes', async ({ page }) => {
+  test('SOLIDEXPORT 0: los sólidos van como mallas de sus caras, como antes (una por sólido)', async ({ page }) => {
     await open(page, 'muestra.dwg', DWG)
+    const before = await counts(page)
     await cmd(page, 'SOLIDEXPORT', '0')
     const file = await exportAs(page, 'DWG')
     await page.goto('/')
@@ -74,8 +77,8 @@ test.describe('guardar sólidos en DWG/DXF', () => {
     await cmd(page, 'OPEN')
     await (await chooser).setFiles({ name: 'caras.dwg', mimeType: 'application/octet-stream', buffer: file })
     await expect(page.locator('.cmd-output')).toContainText('Opened "caras.dwg"', { timeout: 30_000 })
-    // Ningún sólido: sus caras, como mallas.
+    // Ningún sólido: cada uno, una malla de sus caras.
     expect(await st<number>(page, `return s.doc.entities.filter((e) => e.type === 'SOLID3D').length`)).toBe(0)
-    expect((await counts(page)).meshes).toBeGreaterThan(0)
+    expect((await counts(page)).meshes).toBe(before.meshes + before.breps)
   })
 })

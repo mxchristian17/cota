@@ -54,10 +54,11 @@ test.describe('IMPORT de modelos 3D al dibujo abierto (B04)', () => {
     await (await fc).setFiles({ name: 'LM8UU.step', mimeType: 'application/octet-stream', buffer: Buffer.from(boxStep(24, 15, 15, [100, 0, 0], 'LM8UU')) })
     await expect(prompt(page)).toHaveText('Import "LM8UU.step" as [Objects/Block] <Objects>:', { timeout: 30_000 })
     await cmd(page, '')
-    await expect(out(page)).toContainText('Imported 1 mesh(es) from STEP.')
-    expect(await st(page, 'return s.doc.entities.map((e) => e.type)')).toEqual(['LINE', 'MESH3D'])
+    // Con el núcleo exacto, el STEP trae su pieza como sólido exacto (una pieza sola: suelta, sin bloque).
+    await expect(out(page)).toContainText('Imported 1 exact solid(s) from STEP.')
+    expect(await st(page, 'return s.doc.entities.map((e) => e.type)')).toEqual(['LINE', 'SOLID3D'])
     // Mismo lector que OPEN: el cuerpo queda donde está en el archivo.
-    const box = await st<number[]>(page, `const v = s.doc.entities[1].props.vertices; return [0, 1, 2].flatMap((k) => [Math.min(...v.map((p) => p[k])), Math.max(...v.map((p) => p[k]))])`)
+    const box = await st<number[]>(page, `const [lo, hi] = s.doc.entities[1].props.box; return [0, 1, 2].flatMap((k) => [lo[k], hi[k]])`)
     expect(box.map((x) => Math.round(x * 1000) / 1000)).toEqual([100, 124, 0, 15, 0, 15])
 
     // STL como bloque con nombre; INSERT lo repite.
@@ -73,9 +74,9 @@ test.describe('IMPORT de modelos 3D al dibujo abierto (B04)', () => {
     ])
     // Un paso de deshacer por comando: el INSERT y después el IMPORT entero (con su definición).
     await cmd(page, 'U')
-    expect(await st(page, `return s.doc.entities.map((e) => e.type)`)).toEqual(['LINE', 'MESH3D', 'INSERT'])
+    expect(await st(page, `return s.doc.entities.map((e) => e.type)`)).toEqual(['LINE', 'SOLID3D', 'INSERT'])
     await cmd(page, 'U')
-    expect(await st(page, `return [s.doc.entities.map((e) => e.type), s.doc.blocks.length]`)).toEqual([['LINE', 'MESH3D'], 0])
+    expect(await st(page, `return [s.doc.entities.map((e) => e.type), s.doc.blocks.length]`)).toEqual([['LINE', 'SOLID3D'], 0])
   })
 
   test('un archivo que no es un modelo válido avisa y la línea de comandos sigue libre', async ({ page }) => {
@@ -94,7 +95,7 @@ test.describe('Copiar y pegar bloques entre dibujos (B27)', () => {
     await ready(page)
     const assembly = await assemblyFile(page)
     await choose(page, 'OPEN', 'NEMA17.step', boxStep(42, 42, 40, [-21, -21, 0], 'NEMA17'))
-    await expect(out(page)).toContainText('Opened "NEMA17.step" from the device (1 mesh(es)).', { timeout: 30_000 })
+    await expect(out(page)).toContainText('Opened "NEMA17.step" from the device (1 exact solid(s)).', { timeout: 30_000 })
     await cmd(page, 'BLOCK', 'ALL', '', 'NEMA17', '0,0,0')
     await expect(out(page)).toContainText('Block "NEMA17" defined (1 object(s)).')
     await cmd(page, 'COPYBASE', 'ALL', '', '0,0,0')
@@ -154,7 +155,7 @@ test.describe('Copiar en una pestaña del navegador y pegar en otra (B05)', () =
     // Pestaña B: abre el componente y lo copia.
     await b.bringToFront()
     await choose(b, 'OPEN', 'LM8UU.step', boxStep(24, 15, 15, [0, 0, 0], 'LM8UU'))
-    await expect(out(b)).toContainText('Opened "LM8UU.step" from the device (1 mesh(es)).', { timeout: 30_000 })
+    await expect(out(b)).toContainText('Opened "LM8UU.step" from the device (1 exact solid(s)).', { timeout: 30_000 })
     await cmd(b, 'BLOCK', 'ALL', '', 'LM8UU', '0,0,0')
     await cmd(b, 'COPYBASE', 'ALL', '', '0,0,0')
     await expect(out(b)).toContainText('1 object(s) copied to the clipboard.')

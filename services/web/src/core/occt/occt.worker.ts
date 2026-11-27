@@ -4,7 +4,8 @@
  * desde `occt/<versión>/` recién con el primer pedido; cada pedido evalúa un árbol `SolidProps` (con los modelos de sus
  * sólidos importados) y devuelve la malla.
  */
-import { OcctKernel } from 'occt-wasm'
+import type { OcctKernel } from 'occt-wasm'
+import { kernelInitMs, loadKernel } from './loadKernel'
 import type { BrepSource, SolidProps } from '../document/types'
 import { brepOfSolid, evalSolid, OcctEvalError, type OcctMesh, type OcctStats } from './occtEval'
 import { brepToAcis, BrepToAcisError, type AcisModel } from './brepToAcis'
@@ -26,26 +27,11 @@ export type KernelReply =
   | { id: number; ok: true; acis: Uint8Array | string; kind: AcisModel['kind'] }
   | { id: number; ok: false; op: string; message: string; size?: number; fatal?: boolean }
 
-let kernel: Promise<OcctKernel> | null = null
-let initMs = 0
-
-function load(): Promise<OcctKernel> {
-  kernel ??= (async () => {
-    const t0 = performance.now()
-    const base = new URL(`${import.meta.env.BASE_URL}occt/${__OCCT_VERSION__}/`, self.location.href).href
-    const glue = (await import(/* @vite-ignore */ `${base}occt-wasm.js`)) as { default: (o: Record<string, unknown>) => Promise<unknown> }
-    const k = await OcctKernel.init({ createModule: glue.default, wasm: `${base}occt-wasm.wasm` })
-    initMs = performance.now() - t0
-    return k
-  })()
-  return kernel
-}
-
 self.onmessage = async (ev: MessageEvent<KernelRequest>) => {
   const { id, props, models, fine, acis } = ev.data
   let k: OcctKernel
   try {
-    k = await load()
+    k = await loadKernel()
   } catch (err) {
     // El navegador no puede compilar el módulo (le falta WASM SIMD, tail calls o excepciones) o no se pudo bajar.
     self.postMessage({ id, ok: false, op: 'INIT', message: err instanceof Error ? err.message : String(err), fatal: true } satisfies KernelReply)
@@ -61,7 +47,7 @@ self.onmessage = async (ev: MessageEvent<KernelRequest>) => {
     }
     const r = evalSolid(k, props, { models, fine })
     const m = r.mesh
-    self.postMessage({ id, ok: true, mesh: m, stats: { ...r.stats, initMs } } satisfies KernelReply, [m.positions.buffer, m.indices.buffer, m.triGroup.buffer])
+    self.postMessage({ id, ok: true, mesh: m, stats: { ...r.stats, initMs: kernelInitMs } } satisfies KernelReply, [m.positions.buffer, m.indices.buffer, m.triGroup.buffer])
   } catch (err) {
     const e = err instanceof OcctEvalError ? err : null
     const op = err instanceof BrepToAcisError ? 'ACIS' : (e?.op ?? props.op)

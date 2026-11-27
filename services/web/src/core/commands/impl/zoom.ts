@@ -424,7 +424,7 @@ export const zoomVarCommands: Command[] = [
   {
     name: 'SOLIDEXPORT',
     aliases: [],
-    description: 'Solids in a saved DWG/DXF: 1 = ACIS solids (3DSOLID), 0 = their faces (3DFACE)',
+    description: 'Solids in a saved DWG/DXF: 1 = ACIS solids (3DSOLID), 0 = meshes of their faces',
     async run(ctx) {
       const k = await askKeyword(ctx, `Enter new value for SOLIDEXPORT [0/1] <${sysvars.SOLIDEXPORT}>: `, ['0', '1'], String(sysvars.SOLIDEXPORT))
       if (k === '0' || k === '1') sysvars.SOLIDEXPORT = k === '1' ? 1 : 0

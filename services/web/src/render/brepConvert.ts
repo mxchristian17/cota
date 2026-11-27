@@ -1,4 +1,5 @@
 import type { BrepProps, SolidProps } from '../core/document/types'
+import { brepFormat } from '../core/document/brepStore'
 import { dropKernelRequests, kernelResult, onKernelResults, requestKernel } from './occtKernel'
 
 /**
@@ -10,8 +11,11 @@ import { dropKernelRequests, kernelResult, onKernelResults, requestKernel } from
 /** Modelos que ya se convierten (por `ref`: todas sus copias, en bloques o movidas, también). */
 const wanted = new Set<string>()
 
-/** ¿El modelo pasa por el núcleo exacto? */
-export const brepWanted = (ref: string): boolean => wanted.has(ref)
+/**
+ * ¿El modelo pasa por el núcleo exacto? Uno de OpenCascade (de un STEP) siempre: sólo lo lee el núcleo y no hay nada
+ * que traducir (un dibujo guardado no trae lo que se dibuja de esas piezas).
+ */
+export const brepWanted = (ref: string): boolean => wanted.has(ref) || brepFormat(ref) === 'brep'
 
 /** Marca modelos para convertir; devuelve los que no lo estaban. */
 export function wantBreps(refs: Iterable<string>): string[] {

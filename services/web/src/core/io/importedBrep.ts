@@ -22,7 +22,7 @@ export interface BrepDisplay {
 
 /** Un modelo leído del archivo: sus bytes (sin comprimir), su caja y lo que se dibuja. */
 export interface ImportedBrep {
-  fmt: Extract<BrepModel['fmt'], 'sab' | 'sat'>
+  fmt: BrepModel['fmt']
   bytes: Uint8Array
   box: [Vec3, Vec3]
   display: BrepDisplay

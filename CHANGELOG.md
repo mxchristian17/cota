@@ -4,6 +4,23 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.52.0] — 2026-11-27
+
+### Added
+- **STEP files open as exact solids with their assembly tree**: each part and subassembly becomes a block with its
+  name, each instance a block reference with its color, and every part is an exact solid you can fillet, subtract,
+  measure and project like the solids of a DWG. A part used many times is stored once. A file with a single part opens
+  the part on its own. `IMPORT` adds it on the current layer or as one block. Without the exact kernel, STEP opens as
+  meshes, as before.
+- **EXPORT STEP**: writes the 3D solids of the drawing with their exact shapes, each one with the name of the block it
+  is inserted from (or «Solid n») and its color, in the drawing units. Meshes are left out, and the command line says
+  how many.
+
+### Fixed
+- **A mesh saved as DWG or DXF came back as one mesh per face** (four meshes of a sample file reopened as 139): meshes
+  are now written as polyface meshes and come back as they were. Solids saved as their faces become one mesh each.
+- Exporting a drawing opened from a STEP no longer names the download `name.step.step`.
+
 ## [2.51.0] — 2026-11-27
 
 ### Added

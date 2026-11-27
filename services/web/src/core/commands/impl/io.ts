@@ -15,10 +15,15 @@ export const importCommand: Command = {
   async run(ctx) {
     // DXF y DWG se agregan solos; un modelo 3D vuelve leído y se pregunta cómo traerlo.
     const model = await ctx.app.importFile()
-    if (!model?.meshes.length) return
+    if (!model || (!model.meshes.length && !model.exact)) return
     const n = model.meshes.length
     const how = await askKeyword(ctx, `Import "${model.file}" as [Objects/Block] <Objects>: `, ['Objects', 'Block'], 'Objects')
     if (!how) return
+    // Un STEP con el núcleo exacto: sus piezas exactas, con su árbol de bloques (en la capa actual o todo en un bloque).
+    if (model.exact && how === 'Objects') {
+      model.exact.place()
+      return
+    }
     const layer = ctx.currentLayerId()
     if (how === 'Objects') {
       // Como el OBJ: cada cuerpo, una malla en la capa actual, en las coordenadas del archivo.
@@ -47,6 +52,11 @@ export const importCommand: Command = {
       if (redefine === 'Yes') name = typed
     }
     const redefining = !!ctx.doc.getBlock(name)
+    if (model.exact) {
+      model.exact.place(name)
+      ctx.print(`Use INSERT ${name} to place more.`)
+      return
+    }
     // En la capa 0: las mallas toman la capa (y el color) de cada inserción, como en el CAD clásico.
     const entities = model.meshes.map((m) => ({ id: ctx.doc.nextEntityId(), type: 'MESH3D', layer: '0', props: { vertices: m.vertices, faces: m.faces } }) as Entity)
     ctx.doc.setBlock({ name, entities })
@@ -61,16 +71,16 @@ export const importCommand: Command = {
 export const exportCommand: Command = {
   name: 'EXPORT',
   aliases: ['EXP'],
-  description: 'Export the drawing to OBJ (3D mesh), DXF or DWG (3D solids as ACIS solids, see SOLIDEXPORT)',
+  description: 'Export the drawing to OBJ (3D mesh), DXF or DWG (3D solids as ACIS solids, see SOLIDEXPORT) or STEP (exact 3D solids)',
   async run(ctx) {
-    const r = await ctx.getPoint('Format [OBJ/DXF/DWG] <OBJ>: ', { keywords: ['OBJ', 'DXF', 'DWG'], enterKeyword: 'OBJ' })
+    const r = await ctx.getPoint('Format [OBJ/DXF/DWG/STEP] <OBJ>: ', { keywords: ['OBJ', 'DXF', 'DWG', 'STEP'], enterKeyword: 'OBJ' })
     if (r.kind === 'cancel') return // Esc cancela; Enter elige el formato por defecto
     if (r.kind === 'point') {
-      ctx.print('Type OBJ, DXF or DWG.')
+      ctx.print('Type OBJ, DXF, DWG or STEP.')
       return
     }
     const kw = r.kind === 'keyword' ? r.keyword.toUpperCase() : 'OBJ'
-    const fmt = kw === 'DXF' ? 'DXF' : kw === 'DWG' ? 'DWG' : 'OBJ'
+    const fmt = kw === 'DXF' ? 'DXF' : kw === 'DWG' ? 'DWG' : kw === 'STEP' ? 'STEP' : 'OBJ'
     ctx.app.exportModel(fmt)
   },
 }

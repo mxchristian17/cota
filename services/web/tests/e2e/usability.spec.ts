@@ -458,7 +458,7 @@ test.describe('Abrir un DWG de referencia', () => {
     }
   })
 
-  test('EXPORT DXF lleva los sólidos como sólidos ACIS (con SOLIDEXPORT 0, como caras) y las líneas infinitas como tales', async ({ page }) => {
+  test('EXPORT DXF lleva los sólidos como sólidos ACIS (con SOLIDEXPORT 0, como mallas de caras) y las líneas infinitas como tales', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByTestId('command-input')).toBeVisible()
     await cmd(page, 'RECTANGLE', '0,0', '10,5', 'EXTRUDE', 'L', '', '4', 'XLINE', '0,0', '10,10', '')
@@ -472,8 +472,10 @@ test.describe('Abrir un DWG de referencia', () => {
     expect(text).not.toContain('3DFACE')
     expect(text).toContain('XLINE')
     await cmd(page, 'SOLIDEXPORT', '0')
+    // Como una malla de caras (POLYLINE 70 = 64), no un 3DFACE por cara.
     const faces = await exported()
-    expect(faces).toContain('3DFACE')
+    expect(faces).toMatch(/\nPOLYLINE\n8\n[^\n]+\n(?:\d+\n[^\n]+\n)*?70\n64\n/)
+    expect(faces).not.toContain('3DFACE')
     expect(faces).not.toContain('3DSOLID')
   })
 })

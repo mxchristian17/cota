@@ -84,7 +84,7 @@ export interface Sysvars {
   SOLIDIDLE: 0 | 1
   /**
    * SOLIDEXPORT: 1 = al guardar un DWG o un DXF los sólidos van como sólidos ACIS (3DSOLID, REGION, BODY): las piezas
-   * importadas sin cambios con su modelo original, los demás con el del núcleo exacto. 0 = como sus caras (3DFACE).
+   * importadas sin cambios con su modelo original, los demás con el del núcleo exacto. 0 = como mallas de sus caras.
    */
   SOLIDEXPORT: 0 | 1
   /** ZOOMWHEEL: 0 = rueda hacia adelante acerca (CAD clásico), 1 = al revés. */

@@ -48,7 +48,7 @@ const DISPLAY_FIELDS: Field[] = [
   { kind: 'number', key: 'SMOOTHANGLE', label: 'Smooth shading of solids below (degrees)', min: 0, max: 90 },
   { kind: 'select', key: 'SOLIDKERNEL', label: 'Solids kernel', options: [['OCCT', 'Exact (B-rep)'], ['MESH', 'Mesh']] },
   { kind: 'check', key: 'SOLIDIDLE', label: 'Compute exact solids while idle (imported solids left as meshes)' },
-  { kind: 'check', key: 'SOLIDEXPORT', label: 'Save solids in DWG/DXF as ACIS solids (off: as faces)' },
+  { kind: 'check', key: 'SOLIDEXPORT', label: 'Save solids in DWG/DXF as ACIS solids (off: as meshes)' },
   { kind: 'select', key: 'SOLIDIMPORT', label: 'Solids of an opened DWG/DXF', options: [[0, 'Ask'], [1, 'Convert all to exact solids'], [2, 'As meshes (convert when selected)']] },
 ]
 

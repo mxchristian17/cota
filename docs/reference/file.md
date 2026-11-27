@@ -47,6 +47,8 @@ your drawings and has an **Open from device** button; otherwise the file picker 
   no command line, the browser asks whether to discard the changes.
 
 - You can choose a DXF or DWG together with the pictures it uses: they are loaded with it.
+- A STEP opens with its assembly tree and exact solids: a block with its name for each part and subassembly, a block
+  reference for each instance. A file with a single part opens the part on its own.
 - `-OPEN` works from the command line: `Open drawing from [Device/List] <List>:`.
 - `.bak` and `.sv$` copies open as an unsaved drawing; `SAVE` writes it as a normal `.cota` file.
 - DWG and DXF files are read in the browser; nothing is uploaded. See [DWG and DXF coverage](../dwg-coverage.md).
@@ -101,7 +103,8 @@ as a new drawing).
 1. Choose the file. A DXF or DWG is added right away.
 2. For a 3D model: `Import "NAME.step" as [Objects/Block] <Objects>:`
    - **Objects** (<kbd>Enter</kbd>): each body becomes a mesh on the current layer, at the coordinates it has in the
-     file, as OPEN reads it (same units and orientation).
+     file, as OPEN reads it (same units and orientation). A STEP brings exact solids instead, with its assembly tree:
+     each part and subassembly is a block with its name, and its instances go on the current layer.
    - **Block**: `Block name <NAME>:` (the file name). The model becomes a block whose base point is the origin of the
      file, with one reference at 0,0,0; place more with [INSERT](insert.md#insert). If a block with that name exists,
      `Redefine it? [Yes/No] <No>:` (Yes updates all its references; No asks another name).
@@ -119,7 +122,9 @@ INSERT NEMA17 200,0,0 1 "" 0
 **Notes**
 
 - Choosing a `.cota` file opens it as a drawing instead.
-- STEP and IGES are read with OpenCascade, which loads the first time you open or import one of these files.
+- STEP and IGES are read with OpenCascade, which loads the first time you open or import one of these files. A STEP
+  comes as exact solids (they can be filleted, subtracted, measured and projected like any solid), scaled to the
+  drawing units; without the exact kernel (`SOLIDKERNEL`), as meshes.
 - An import is one step of `UNDO`.
 
 ## EXPORT
@@ -130,8 +135,10 @@ Exports the drawing to another format.
 
 **Steps**
 
-1. `Format [OBJ/DXF/DWG] <OBJ>:` OBJ is a 3D mesh of the solids; DXF and DWG carry the drawing, with 3D solids as ACIS
-   solids (see `SOLIDEXPORT`).
+1. `Format [OBJ/DXF/DWG/STEP] <OBJ>:` OBJ is a 3D mesh of the solids; DXF and DWG carry the drawing, with 3D solids as
+   ACIS solids (see `SOLIDEXPORT`) and meshes as polyface meshes; STEP carries the 3D solids with their exact shapes,
+   each one with the name of the block it is inserted from (or «Solid n») and its color, in the drawing units. Meshes
+   are left out of a STEP, and the command line says how many.
 
 ## PAGESETUP
 

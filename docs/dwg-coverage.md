@@ -9,7 +9,7 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 |---|---|---|---|
 | LINE, POINT, CIRCLE, ARC, ELLIPSE, SPLINE | Native | Native | |
 | LWPOLYLINE, POLYLINE (2D and 3D) | Native | Native | Bulges and widths kept |
-| POLYLINE (polyface and M×N mesh), 3DFACE, MESH | Mesh | 3DFACE | |
+| POLYLINE (polyface and M×N mesh), 3DFACE, MESH | Mesh | POLYLINE (polyface mesh): one mesh comes back as one mesh | |
 | TEXT, MTEXT | Native, with the font of their text style (TrueType fonts are shown with one of the same width), its width factor, and the formatting inside a multiline text (bold, italic, underline, font, height, color, paragraph indent) | Native (width factor; font and width as MTEXT formatting) | Text height is the height of the capitals, as in classic CAD; SHX fonts are drawn with Cota's single-stroke font; multiline text keeps its line spacing; stacked fractions as "1/2" |
 | ATTDEF | Native in blocks (tag, prompt, default value; invisible, constant and preset); its tag outside them | As text | |
 | ATTRIB | The values of the attributes of each insert (invisible ones included; constant ones come from the block) | As text, in the exported insert | An insert whose attributes are not where their definition puts them (moved by hand, another style, in a mirrored or non-uniformly scaled insert) is expanded, with its attributes as texts |
@@ -27,7 +27,7 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 | HELIX | Spline | Spline | From DXF; the DWG reader does not deliver it yet |
 | VIEWPORT and paper space | Layouts with their sheet, content and viewports | Not exported | |
 | 3DSOLID, REGION, BODY | Exact solids from their ACIS model (SAT and SAB), shown with the faces of the model until each one is converted: all at once on open, when selected or edited, or in the background while you are idle (`SOLIDIMPORT`, `SOLIDIDLE`) | 3DSOLID, REGION, BODY (ACIS: SAB in DWG, SAT in DXF) | Snaps, `MASSPROP` and drawing views use the exact edges and mass of the model even before converting. Until converted, NURBS faces are drawn over their best-fit plane |
-| SURFACE (extruded, lofted, revolved, swept, planar) | Meshes or edges | 3DFACE | |
+| SURFACE (extruded, lofted, revolved, swept, planar) | Meshes or edges | POLYLINE (polyface mesh) | |
 | IMAGE | The picture in its place (clip and fade included) once its file is loaded, on screen and in plots; until then, its frame and file name | IMAGE (DXF; the file path, not the pixels) | The drawing stores only the file path: open the image together with the drawing, drop it on Cota or load it with `IMAGE`; from the working folder it loads on its own |
 | PDF, DWF and DGN UNDERLAY | File name at the insertion point | Text | The content is an external file |
 | OLE2FRAME | Frame | Polyline | |
@@ -43,7 +43,7 @@ here). 329 of them open; the other 9 are DWG files from R11 or earlier.
 3D solids are exported as ACIS solids: an imported piece you have not changed keeps its original model (with its new
 placement if you moved, rotated, scaled or mirrored it), and edited pieces and Cota's own solids are written from the
 exact kernel (planes, cylinders, cones, spheres, tori and NURBS). The few that cannot be written exactly (offset
-surfaces, for example) go as meshes of their faces (3DFACE). `SOLIDEXPORT 0` writes every solid as its faces.
+surfaces, for example) go as a mesh of their faces (a polyface mesh). `SOLIDEXPORT 0` writes every solid as a mesh.
 
 Large 3D assemblies (a thousand solids, millions of triangles) open on a phone too: there the faces of the solids use
 about half the triangles (18 segments per full turn instead of 36), and texts smaller than 3 pixels are not drawn.

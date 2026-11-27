@@ -106,6 +106,11 @@ export interface ImportedModel {
   /** Formato, para los mensajes: OBJ, STL, STEP o IGES. */
   format: string
   meshes: import('../document/types').MeshProps[]
+  /**
+   * STEP leído con el núcleo exacto (sin `meshes`): su árbol y sus piezas exactas. `place` lo agrega en la capa actual
+   * o, con un nombre, todo en ese bloque (que se reemplaza si existe) insertado en el origen.
+   */
+  exact?: { summary: string; place(block?: string): void }
 }
 
 /** Hooks de nivel de aplicación (auth, persistencia, undo) que exponen diálogos/acciones. */
@@ -216,7 +221,7 @@ export interface AppHooks {
   /** IMAGE ▸ Reload: selector de los archivos de las imágenes del dibujo. */
   attachImages(): void
   /** Exporta el dibujo al formato indicado (descarga en el navegador). */
-  exportModel(format: 'OBJ' | 'DXF' | 'DWG'): void
+  exportModel(format: 'OBJ' | 'DXF' | 'DWG' | 'STEP'): void
   /** Abre el diálogo de configuración de UI (temas/colores). */
   openOptions(): void
   /** Abre el diálogo de object snaps (running osnaps). */
