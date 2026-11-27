@@ -61,6 +61,20 @@ describe('sólidos ACIS en archivos', () => {
     expect(back.volume).toBeCloseTo(k.getVolume(s), 6)
   })
 
+  it('DWG: cada sólido conserva su color (verdadero o de índice); sin color, por capa', async () => {
+    const model = brepToAcis(k.toBREP(k.makeBox(1, 2, 3)))
+    const colors = ['#b81c1c', '#ff0000', undefined]
+    const es = colors.map((c, i) => ({ ...solidEntity({ op: 'BOX' }), id: `s${i}`, ...(c ? { color: c } : {}) }) as Entity)
+    const marks = new Map(es.map((e, i) => [e, { kind: model.kind, sat: `cota-solid ${i}\n` }]))
+    const sab = new Map(es.map((_, i) => [String(i), writeSab(model.recs)]))
+    const back = readCad('dwg', await dxfTextToDwg(exportDxf(es, layers, 'l0', undefined, { acis: marks }), sab)).entities
+    expect(back.map((e) => [e.type, e.color])).toEqual([
+      ['SOLID3D', '#b81c1c'],
+      ['SOLID3D', '#ff0000'],
+      ['SOLID3D', undefined],
+    ])
+  })
+
   it('una pieza importada movida va con su modelo original y su nueva ubicación (DWG y DXF)', async () => {
     const sample = readFileSync(new URL('./__fixtures__/acadsharp/sample_AC1032.dwg', import.meta.url))
     const r = readCad('dwg', buf(sample))

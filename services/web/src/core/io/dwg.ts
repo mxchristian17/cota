@@ -1,5 +1,6 @@
 import type { DxfImportResult } from './dxf'
 import { unpackMeshes } from './meshTransfer'
+import { satFromDxf } from './acis'
 import { registerBreps } from '../document/brepStore'
 import type { BrepModel } from '../document/types'
 
@@ -125,14 +126,20 @@ export async function dxfTextToDwg(dxf: string, sab?: ReadonlyMap<string, Uint8A
     }
   // Sólidos ACIS: el DXF los trae con una marca (`cota-solid n`) en lugar del SAT; acá va su SAB, que el DWG 2018
   // guarda en su sección de datos del modelador.
-  if (sab?.size)
+  // acad-ts no lee el color de un 3DSOLID del DXF (lo deja por capa): va el del DXF, por la marca.
+  if (sab?.size) {
+    const colors = solidColors(dxf)
     for (const br of doc.blockRecords ?? [])
       for (const e of br.entities) {
         if (!(e instanceof ModelerGeometry)) continue
         const m = /^cota-solid (\S+)/.exec(e.getAcisText()?.trim() ?? '')
         const bytes = m && sab.get(m[1])
-        if (bytes) e.acisData = bytes
+        if (!bytes) continue
+        e.acisData = bytes
+        const c = colors.get(m[1])
+        if (c) e.color = c.rgb !== undefined ? Color.fromTrueColor(c.rgb) : c.aci === 0 ? Color.byBlock : new Color(c.aci)
       }
+  }
   doc.header!.version = ACadVersion.AC1032
   // acad-ts 3.6 escribe el color verdadero como R-G-B y el formato (y su propio lector) lo esperan B-G-R: se invierte
   // antes de escribir para que el DWG salga con los colores correctos.
@@ -152,6 +159,34 @@ export async function dxfTextToDwg(dxf: string, sab?: ReadonlyMap<string, Uint8A
   doc.createDefaults()
   const bytes = withLinearLookups(DwgObjectWriter, () => DwgWriter.writeToBuffer(doc))
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+}
+
+/**
+ * Color propio (62 y 420) de cada sólido ACIS de un DXF de Cota escrito para un DWG, por su marca `cota-solid n` (el
+ * SAT cifrado en los grupos 1/3). Sin color propio (por capa), no está.
+ */
+export function solidColors(dxf: string): Map<string, { aci: number; rgb?: number }> {
+  const out = new Map<string, { aci: number; rgb?: number }>()
+  const lines = dxf.split('\n')
+  let i = 0
+  while (i + 1 < lines.length) {
+    if (lines[i].trim() === '0' && /^(3DSOLID|REGION|BODY)$/.test(lines[i + 1].trim())) {
+      const codes: Array<[number, string]> = []
+      let aci: number | undefined
+      let rgb: number | undefined
+      for (i += 2; i + 1 < lines.length && lines[i].trim() !== '0'; i += 2) {
+        const k = Number(lines[i])
+        if (k === 62) aci = Number(lines[i + 1])
+        else if (k === 420) rgb = Number(lines[i + 1])
+        else if (k === 1 || k === 3) codes.push([k, lines[i + 1]])
+      }
+      const m = /^cota-solid (\S+)/.exec(satFromDxf(codes).trim())
+      if (m && aci !== undefined && aci !== 256) out.set(m[1], { aci, ...(rgb !== undefined ? { rgb } : {}) })
+      continue
+    }
+    i += 2
+  }
+  return out
 }
 
 /** Lista de las entidades de un bloque: `find` sigue desde donde encontró la anterior (se buscan en orden, por handle). */

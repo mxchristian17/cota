@@ -3,6 +3,7 @@ import type { BrepProps, EntityProps, InsertProps } from '../document/types'
 import type { Vec3 } from '../math'
 import { brepRef } from '../document/brepStore'
 import { arcBasis } from '../geom/arc'
+import { BYBLOCK } from '../linetype/linetypes'
 import { affineDet, type Affine } from '../geom/affine'
 import type { DxfBlockSpec, DxfEntitySpec, DxfImportResult } from './dxf'
 import type { BrepDisplay, ImportedBrep } from './importedBrep'
@@ -20,6 +21,11 @@ const REL_DEFLECTION = 0.001
 const ANGULAR_DEFLECTION = 0.2
 /** Caracteres que un nombre de bloque de DWG no admite. */
 const BAD_NAME = /[<>/\\":;?*|=,`]/g
+/**
+ * Un nombre que no dice nada: el que OpenCascade pone a una forma sin nombre (`SOLID`, `COMPOUND`…) o la referencia a
+ * una etiqueta (`=>[0:1:1:4]`).
+ */
+export const genericName = (name: string): boolean => /^(SOLID|SHELL|COMPOUND|FACE|SHAPE|ASSEMBLY)?$/i.test(name.trim()) || /^(=>)?\[[\d:]+\]$/.test(name.trim())
 /** Cota de los hashes de aristas (como en el núcleo). */
 const HASH_BOUND = 2 ** 31 - 1
 
@@ -152,15 +158,24 @@ export function readStepExact(k: OcctKernel, text: string, opts: StepReadOptions
       return out
     }
     const info = (t: LabelTag) => doc.getLabelInfo(t)
+    /** Piezas sin color propio: sus sólidos y los colores de sus instancias. */
+    const uncolored = new Map<LabelTag, { specs: DxfEntitySpec[]; colors: Set<string | undefined> }>()
     const colorOf = (t: LabelTag): string | undefined => {
       const i = info(t)
       return i.hasColor ? hex(i.color) : undefined
     }
-    /** Contenido de una definición (pieza o ensamble) en sus coordenadas. */
+    /**
+     * Contenido de una definición (pieza o ensamble) en sus coordenadas. Lo que no trae color propio va «por bloque»: un
+     * STEP suele dar el color en la instancia, y así se ve en la pieza (o en sus sólidos, ver más abajo).
+     */
     const contents = (def: LabelTag): DxfEntitySpec[] => {
       const i = info(def)
-      if (i.isAssembly) return doc.getChildren(def).flatMap((c) => instance(c, IDENTITY))
-      return i.shapeHandle ? pieceSpecs(i.shapeHandle, colorOf(def)) : []
+      if (i.isAssembly) return doc.getChildren(def).flatMap((c) => instance(c, IDENTITY, true))
+      if (!i.shapeHandle) return []
+      const own = colorOf(def)
+      const specs = pieceSpecs(i.shapeHandle, own ?? BYBLOCK)
+      if (!own) uncolored.set(def, { specs, colors: new Set() })
+      return specs
     }
     /** El bloque de una definición (se arma una vez; las instancias lo comparten). */
     const blockFor = (def: LabelTag, instanceName: string): string => {
@@ -168,21 +183,37 @@ export function readStepExact(k: OcctKernel, text: string, opts: StepReadOptions
       if (have) return have
       const i = info(def)
       // El nombre del producto; uno genérico (el que pone OpenCascade a una forma sin nombre), el de la instancia.
-      const own = /^(SOLID|SHELL|COMPOUND|FACE|SHAPE|ASSEMBLY)?$/i.test(i.name.trim()) ? instanceName.replace(/:\d+$/, '') : i.name
+      const own = !genericName(i.name) ? i.name : !genericName(instanceName) ? instanceName.replace(/:\d+$/, '') : ''
       const name = uniqueName(own, i.isAssembly ? 'Assembly' : 'Part')
       blockOf.set(def, name)
       blocks.push({ name, entities: contents(def) })
       return name
     }
-    /** Una instancia (componente) dentro de su padre, con la ubicación acumulada de los niveles que no son bloques. */
-    const instance = (comp: LabelTag, outer: Affine): DxfEntitySpec[] => {
-      const def = doc.getReferredLabel(comp)
+    /**
+     * Una instancia (componente) dentro de su padre, con la ubicación acumulada de los niveles que no son bloques. Sin
+     * color, dentro de un bloque va «por bloque» (toma el de la instancia de afuera); en el modelo, por capa.
+     */
+    const instance = (comp: LabelTag, outer: Affine, inBlock = false): DxfEntitySpec[] => {
+      let def = doc.getReferredLabel(comp)
       if (def == null) return []
       const m = compose(outer, doc.getLocation(comp) as Affine)
       const place = insertOfMatrix(m)
       if (!place) return [] // una ubicación que no es una semejanza: no la trae STEP
-      const name = blockFor(def, info(comp).name)
-      const color = colorOf(comp)
+      let name = info(comp).name
+      let color = colorOf(comp)
+      // Un ensamble con una sola pieza en su lugar (así queda un compuesto de un sólido): es esa pieza, con el nombre y
+      // el color de afuera.
+      for (let d = info(def); d.isAssembly; d = info(def)) {
+        const kids = doc.getChildren(def)
+        const inner = kids.length === 1 && isIdentity(doc.getLocation(kids[0]) as Affine) ? doc.getReferredLabel(kids[0]) : null
+        if (inner == null) break
+        if (!genericName(d.name)) name = d.name
+        color ??= colorOf(def) ?? colorOf(kids[0])
+        def = inner
+      }
+      name = blockFor(def, name)
+      uncolored.get(def)?.colors.add(color)
+      color ??= inBlock ? BYBLOCK : undefined
       return [{ type: 'INSERT', layerName: layer, props: { name, ...place } as EntityProps, ...(color ? { color } : {}) }]
     }
     const entities: DxfEntitySpec[] = []
@@ -203,6 +234,12 @@ export function readStepExact(k: OcctKernel, text: string, opts: StepReadOptions
         if (!place) continue
         entities.push({ type: 'INSERT', layerName: layer, props: { name: blockFor(r, i.name), ...place } as EntityProps })
       }
+    }
+    // Una pieza sin color propio cuyas instancias tienen todas el mismo: ese color va en sus sólidos (así lo conservan
+    // al explotarla); con colores distintos, quedan «por bloque».
+    for (const { specs, colors } of uncolored.values()) {
+      const [only] = colors
+      if (colors.size === 1 && only) for (const e of specs) e.color = only
     }
     // Sólidos en el dibujo: los de cada bloque, tantas veces como se inserta.
     const inBlock = new Map<string, number>()

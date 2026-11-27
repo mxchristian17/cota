@@ -45,12 +45,14 @@ function placed(r: StepReadResult) {
     for (const e of list) {
       if (e.type === 'INSERT') {
         const ins = e.props as InsertProps
-        walk(r.blocks!.find((b) => b.name === ins.name)!.entities, mul(m, insertMatrix(ins)), ins.name, e.color ?? color)
+        // Como al dibujar: «por bloque» toma el color de la inserción de afuera; sin color, por capa.
+        const own = e.color === 'BYBLOCK' ? color : e.color
+        walk(r.blocks!.find((b) => b.name === ins.name)!.entities, mul(m, insertMatrix(ins)), ins.name, own)
       } else if (e.type === 'SOLID3D') {
         const leaf = e.props as BrepProps
         const s = k.transform(k.fromBREPBinary(r.breps![leaf.ref].bytes), leaf.m ? mul(m, leaf.m as Affine) : m)
         const b = k.getBoundingBox(s)
-        out.push({ box: [b.xmin, b.ymin, b.zmin, b.xmax, b.ymax, b.zmax], volume: k.getVolume(s), color: e.color ?? color, block })
+        out.push({ box: [b.xmin, b.ymin, b.zmin, b.xmax, b.ymax, b.zmax], volume: k.getVolume(s), color: e.color === 'BYBLOCK' ? color : e.color, block })
       }
     }
   }
@@ -114,8 +116,10 @@ describe('STEP exacto', () => {
       g.box.forEach((v, j) => expect(v, `sólido ${i} caja ${j}`).toBeCloseTo(want[i].box[j], 6))
       expect(g.volume).toBeCloseTo(want[i].volume, 6)
     })
-    // El color de la caja del soporte llega a su sólido (o a su inserción).
+    // El color de la caja del soporte (dado en la instancia) llega a su sólido: los sólidos sin color propio van «por
+    // bloque» y toman el de su inserción; las demás piezas, sin color, quedan por capa.
     expect(got.filter((g) => g.color === '#ff0000')).toHaveLength(1)
+    expect(got.filter((g) => g.color === undefined)).toHaveLength(3)
   })
 
   it('una sola pieza: suelta, sin bloque, con su caja', () => {
@@ -170,5 +174,27 @@ describe('STEP exacto', () => {
     expect(out.step).toMatch(/SI_UNIT\(\.MILLI\.,\.METRE\.\)|SI_UNIT\(\$,\.METRE\.\)/)
     const r = readStepExact(k, out.step, { scale: 1 / 1000 })
     expect(placed(r)[0].box).toEqual([0, 0, 0, 1, 2, 3].map((v) => expect.closeTo(v, 9)))
+  })
+
+  it('una pieza que llega como un ensamble de un solo sólido (un compuesto) es la pieza, con su nombre y su color', () => {
+    const doc = k.createXCAFDocument()
+    const root = doc.addShape(k.makeCompound([]), { name: 'Cuadro' })
+    const sub = doc.getReferredLabel(doc.addChild(root, k.makeCompound([]), { name: 'Delantero' }))!
+    // Lo que devuelve una booleana: un compuesto con un sólido.
+    const tubo = k.makeCompound([k.cut(k.makeCylinder(10, 100), k.makeCylinder(9, 100))])
+    doc.addChild(sub, tubo, { name: 'Tubo', color: [0.5, 0, 0] })
+    doc.addChild(sub, tubo, { name: 'Tubo', color: [0.5, 0, 0], location: { tx: 50 } })
+    const step = doc.exportSTEP()
+    doc.close()
+    const r = readStepExact(k, step)
+    expect(r.blocks!.map((b) => [b.name, b.entities.map((e) => e.type)])).toEqual([
+      ['Tubo', ['SOLID3D']],
+      ['Delantero', ['INSERT', 'INSERT']],
+    ])
+    expect(r.blocks!.flatMap((b) => b.entities).every((e) => e.type !== 'INSERT' || e.color === '#800000')).toBe(true)
+    // Las dos instancias con el mismo color: va en el sólido (explotado, lo conserva).
+    expect(r.blocks![0].entities[0].color).toBe('#800000')
+    expect(placed(r).map((g) => g.color)).toEqual(['#800000', '#800000'])
+    expect(r.stats).toEqual({ models: 1, solids: 2, inserts: 3 })
   })
 })

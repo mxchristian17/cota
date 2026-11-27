@@ -4,6 +4,18 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.52.1] — 2026-11-27
+
+### Fixed
+- **Solids saved as DWG lost their color** (they came back by layer): each 3DSOLID, REGION and BODY now keeps its own
+  color, true color or index.
+- **Parts of a STEP opened without their colors** when the file gives the color on each instance, as most CAD programs
+  write it. When every instance of a part has the same color, its solids now carry it (and keep it when exploded);
+  otherwise they take the color of each block reference.
+- **A STEP part stored as an assembly of a single solid** (as many CAD programs write the result of a boolean) opened
+  as two nested blocks, one of them with an internal name such as `=>[0:1:1:4]`: it is now one block, the part, with its
+  name and color.
+
 ## [2.52.0] — 2026-11-27
 
 ### Added
