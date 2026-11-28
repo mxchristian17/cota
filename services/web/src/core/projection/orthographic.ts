@@ -75,6 +75,8 @@ interface Tri {
   g: number
   /** Malla (índice corrido entre todos los grupos) de la que sale. */
   m: number
+  /** Superficie de origen dentro de su malla (`Mesh.surf`), si la trae. */
+  s?: number
 }
 
 /** Une los grupos de mallas en una lista global de vértices (deduplicados) + triángulos por índice. */
@@ -96,7 +98,7 @@ function buildTriangles(groups: Mesh[][]): { verts: Vec3[]; tris: Tri[]; size: n
   groups.forEach((meshes, g) => {
     for (const m of meshes) {
       const id = mi++
-      for (const f of m.faces) {
+      for (const [fi, f] of m.faces.entries()) {
         // Triangula el polígono (fan) y agrega cada triángulo.
         for (let k = 1; k + 1 < f.length; k++) {
           const a = add(m.vertices[f[0]])
@@ -104,7 +106,7 @@ function buildTriangles(groups: Mesh[][]): { verts: Vec3[]; tris: Tri[]; size: n
           const c = add(m.vertices[f[k + 1]])
           if (a === b || b === c || a === c) continue
           const n = normalize(cross(sub(verts[b], verts[a]), sub(verts[c], verts[a])))
-          tris.push({ i: [a, b, c], n, g, m: id })
+          tris.push({ i: [a, b, c], n, g, m: id, ...(m.surf ? { s: m.surf[fi] } : {}) })
         }
       }
     }
@@ -128,7 +130,11 @@ function buildTriangles(groups: Mesh[][]): { verts: Vec3[]; tris: Tri[]; size: n
 /** Dos facetas vecinas con menos de 25° entre normales continúan la misma superficie suave (como la topología). */
 const SMOOTH_DOT = Math.cos((25 * Math.PI) / 180)
 
-function viewEdges(meshes: Mesh[], out: Vec3, tangential = false): Array<[Vec3, Vec3]> {
+/**
+ * Las siluetas llevan la superficie de origen de sus facetas (tercer elemento): una superficie lisa no tapa su propio
+ * contorno (ver `projectHiddenGroups`).
+ */
+function viewEdges(meshes: Mesh[], out: Vec3, tangential = false): Array<[Vec3, Vec3, number?]> {
   // Cada sólido tiene sus propias aristas: se resuelven por separado (y con su topología cacheada, si la trae).
   if (meshes.length > 1) return meshes.flatMap((m) => viewEdges([m], out, tangential))
   const pos: number[] = []
@@ -152,7 +158,7 @@ function viewEdges(meshes: Mesh[], out: Vec3, tangential = false): Array<[Vec3, 
   const topo = meshes[0].topo ?? buildTopology(pos, hasSurf ? surf : brep, undefined, false, imported ? { orient: true, open: true } : open ? { open: true } : {})
   const smooth = (a: Vec3, b: Vec3) => dot(a, b) > SMOOTH_DOT
   const curved = (f: number) => topo.shapes?.[f]?.kind !== 'plane'
-  const res: Array<[Vec3, Vec3]> = []
+  const res: Array<[Vec3, Vec3, number?]> = []
   for (const e of topo.edges) {
     const n = e.pts.length
     for (let i = 0; i + 1 < n + (e.closed ? 1 : 0); i++) {
@@ -174,7 +180,7 @@ function viewEdges(meshes: Mesh[], out: Vec3, tangential = false): Array<[Vec3, 
     // aristas redondeadas). Dos facetas de canto (la pared de un agujero visto a lo largo de su eje) no cuentan:
     // sus diagonales saldrían como cuerdas del círculo.
     const [da, db] = [dot(topo.normals[ta], out), dot(topo.normals[tb], out)]
-    if (da > 1e-6 !== db > 1e-6) res.push([topo.verts[a], topo.verts[b]])
+    if (da > 1e-6 !== db > 1e-6) res.push(hasSurf && surf[ta] === surf[tb] ? [topo.verts[a], topo.verts[b], surf[ta]] : [topo.verts[a], topo.verts[b]])
   }
   // Sin el origen de cada cara, las tangentes se estiman por la forma de las facetas (en una malla teselada por caras del
   // B-rep la estimación inventaba tangentes en los cilindros de teselación irregular: ya salen arriba, entre caras).
@@ -307,7 +313,20 @@ export function projectHiddenGroups(groups: Mesh[][], basis: ProjBasis, opts: { 
   // vecina, y una cara casi paralela a la vista (de canto) las tapaba por profundidad (medio borde del cabezal de un
   // radiador desaparecía en la vista superior).
   const touch = meshes.map((m) => ((m.imported && !m.topo && !m.surf) || m.separateFaces ? 1e-3 : 3e-4) * meshDiag(m))
-  const occluded = (pu: number, pv: number, pd: number, p?: Vec3, mi = -1): boolean => {
+  // Una silueta (borde de lo que se ve de una superficie lisa: un cilindro, un cono, una esfera) no la tapa su propia
+  // superficie: con una teselación irregular (una cara con agujeros o ingleteada) la arista que sale de silueta no cae
+  // justo en el borde y las facetas de adelante de la misma superficie la tapaban (medio contorno de un tubo punteado).
+  // (Sólo las facetas pegadas a la silueta, a menos de su propio tamaño: una superficie que no es convexa puede tapar
+  // de verdad una parte lejana de su contorno.)
+  const sizes = new Float64Array(tris.length).fill(-1)
+  const triSize = (k: number): number => {
+    if (sizes[k] < 0) {
+      const [a, b, c] = tris[k].i.map((i) => verts[i])
+      sizes[k] = Math.max(Math.hypot(...sub(b, a)), Math.hypot(...sub(c, b)), Math.hypot(...sub(a, c)))
+    }
+    return sizes[k]
+  }
+  const occluded = (pu: number, pv: number, pd: number, p?: Vec3, mi = -1, ownSurf?: number): boolean => {
     const [gx, gy] = cellOf(pu, pv)
     for (const k of grid[gy * G + gx]) {
       if (maxD[k] <= pd + bias) continue // ningún punto del triángulo está delante
@@ -318,6 +337,7 @@ export function projectHiddenGroups(groups: Mesh[][], basis: ProjBasis, opts: { 
       const td = bc[0] * D[ia] + bc[1] * D[ib] + bc[2] * D[ic]
       if (td <= pd + bias) continue
       if (p && t.m === mi && touch[mi] > 0 && triDist(p, verts[ia], verts[ib], verts[ic]) <= touch[mi]) continue
+      if (ownSurf !== undefined && p && t.m === mi && t.s === ownSurf && triDist(p, verts[ia], verts[ib], verts[ic]) <= triSize(k)) continue
       return true // triángulo más cerca del observador → tapa
     }
     return false
@@ -329,9 +349,9 @@ export function projectHiddenGroups(groups: Mesh[][], basis: ProjBasis, opts: { 
     // Aristas de cada malla del grupo, con el índice de la malla (ver `touch`).
     const edges = groups[g].flatMap((m) => {
       const id = mi++
-      return viewEdges([m], basis.out, opts.tangential).map(([P, Q]) => [P, Q, id] as const)
+      return viewEdges([m], basis.out, opts.tangential).map(([P, Q, sf]) => [P, Q, id, sf] as const)
     })
-    for (const [P, Q, id] of edges) {
+    for (const [P, Q, id, sf] of edges) {
       const [ua, va, da] = [dot(P, basis.right), dot(P, basis.up), dot(P, basis.out)]
       const [ub, vb, db] = [dot(Q, basis.right), dot(Q, basis.up), dot(Q, basis.out)]
       const len = Math.hypot(ub - ua, vb - va)
@@ -345,7 +365,7 @@ export function projectHiddenGroups(groups: Mesh[][], basis: ProjBasis, opts: { 
       const pAt = (t: number): Vec3 => [P[0] + (Q[0] - P[0]) * t, P[1] + (Q[1] - P[1]) * t, P[2] + (Q[2] - P[2]) * t]
       for (let s = 0; s < n; s++) {
         const tm = (s + 0.5) / n // punto medio del subintervalo
-        const hidden = occluded(uAt(tm), vAt(tm), dAt(tm), touch[id] > 0 ? pAt(tm) : undefined, id)
+        const hidden = occluded(uAt(tm), vAt(tm), dAt(tm), touch[id] > 0 ? pAt(tm) : undefined, id, sf)
         if (s === 0) {
           runStart = 0
           runHidden = hidden
@@ -511,14 +531,18 @@ function fitCircle(pts: P2[]): { c: P2; r: number; err: number } | null {
  * el círculo y los que agrega la CSG (uniones en T, cortes de visibilidad) caen sobre las cuerdas, por
  * dentro. Se ajusta el centro con los exteriores y el radio es la distancia máxima.
  */
-function refineCircle(pts: P2[], c0: P2): { c: P2; r: number } {
+function refineCircle(pts: P2[], c0: P2, r0: number): { c: P2; r: number } {
   const ds = pts.map((p) => d2(p, c0)).sort((a, b) => a - b)
   const med = ds[Math.floor(ds.length / 2)]
   const outer = pts.filter((p) => d2(p, c0) >= med)
   const f = outer.length >= 3 ? fitCircle(outer) : null
   const c = f ? f.c : c0
   const dd = pts.map((p) => d2(p, c)).sort((a, b) => a - b)
-  return { c, r: dd[Math.min(dd.length - 1, Math.floor(dd.length * 0.9))] }
+  const r = dd[Math.min(dd.length - 1, Math.floor(dd.length * 0.9))]
+  // Las cuerdas de la CSG corren el centro a lo sumo la flecha de un tramo (~1 % del radio). Si se va más lejos, el
+  // ajuste está mal condicionado (pedazos casi rectos) y el arco, dibujado con sus ángulos alrededor de ese centro,
+  // caía lejos de la pieza: queda el círculo en el que se encontró.
+  return d2(c, c0) > 0.05 * r0 || Math.abs(r - r0) > 0.05 * r0 ? { c: c0, r: r0 } : { c, r }
 }
 
 /** Partes de una cadena de puntos: arcos (≥ 4 tramos que giran parejo) y líneas rectas. */
@@ -567,7 +591,7 @@ function splitChain(pts: P2[], closed: boolean, tol: number, hidden: boolean): P
     }
     if (best && sweep(i, best.j) < (15 * Math.PI) / 180) best = null
     if (best) {
-      const { c, r } = refineCircle(pts.slice(i, best.j + 1), best.f.c)
+      const { c, r } = refineCircle(pts.slice(i, best.j + 1), best.f.c, best.f.r)
       const full = closed && i === 0 && best.j === n - 1 && d2(pts[0], pts[n - 1]) <= tol
       const src = pts.slice(i, best.j + 1)
       if (full) {
@@ -671,7 +695,11 @@ function mergeCocircular(items: ProjItem[], tol: number): ProjItem[] {
       // Pedazo absorbido: sus ángulos medidos desde el centro del grupo.
       const ang = (a: number) => norm2pi(Math.atan2(it.c[1] + it.r * Math.sin(a) - g!.c[1], it.c[0] + it.r * Math.cos(a) - g!.c[0]))
       const [b0, b1] = [ang(it.a0), ang(it.a1)]
-      g.spans.push([b0, b0 + norm2pi(b1 - b0)])
+      // El tramo es el que contiene el medio del pedazo: uno que curva al revés (su centro, del otro lado) iba de b0 a
+      // b1 por la vuelta larga y el grupo terminaba en un círculo entero.
+      const bm = ang(it.a0 + norm2pi(it.a1 - it.a0) / 2)
+      if (norm2pi(bm - b0) <= norm2pi(b1 - b0)) g.spans.push([b0, b0 + norm2pi(b1 - b0)])
+      else g.spans.push([b1, b1 + norm2pi(b0 - b1)])
       continue
     }
     if (it.kind === 'circle') g.spans.push([0, 2 * Math.PI])
@@ -698,7 +726,7 @@ function mergeCocircular(items: ProjItem[], tol: number): ProjItem[] {
   }
   for (const g of groups) {
     // Centro y radio con todos los pedazos (los ángulos de los intervalos no cambian por esto).
-    const ref = refineCircle(g.pts, g.c)
+    const ref = refineCircle(g.pts, g.c, g.r)
     g.c = ref.c
     g.r = ref.r
     // Unión de intervalos angulares (con la vuelta).

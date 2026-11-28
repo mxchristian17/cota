@@ -4,6 +4,17 @@ All notable changes to Cota are documented here. The project follows [Semantic V
 
 ## [Unreleased]
 
+## [2.52.2] — 2026-11-27
+
+### Fixed
+- **Curved faces of exact solids looked wrinkled when shaded** (cones, B-spline lofts and tubes with holes or miters
+  showed dark streaks along the tessellation): they are now shaded with the exact normals of the surface.
+- **Drawing views with visible lines only lost half the outline of a tube** with holes or mitered ends: the silhouette
+  of a smooth surface is no longer hidden by its own facets next to it.
+- **Drawing views drew stray arcs and whole circles** away from the part (in the top view of a welded frame, arcs
+  35 mm outside the stays and a circle around a bridge joint): pieces of a curve that are almost straight, or that bend
+  the other way, no longer move or close the arc they belong to.
+
 ## [2.52.1] — 2026-11-27
 
 ### Fixed

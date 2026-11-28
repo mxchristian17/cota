@@ -31,6 +31,20 @@ function placedPositions(d: BrepDisplay, m: number[] | undefined): Float64Array 
   return out
 }
 
+/**
+ * Malla del núcleo con sus normales exactas (por vértice de cada cara): sin promediar triángulos, que en una superficie
+ * B-spline o cónica de triángulos largos y finos daba un sombreado arrugado.
+ */
+function exactRender(P: Float32Array, N: Float32Array, idx: Uint32Array, origin: Vec3): MeshRender {
+  const pos = new Float32Array(P.length)
+  for (let i = 0; i < P.length; i += 3) {
+    pos[i] = P[i] - origin[0]
+    pos[i + 1] = P[i + 1] - origin[1]
+    pos[i + 2] = P[i + 2] - origin[2]
+  }
+  return { pos, nor: N, idx }
+}
+
 /** Triángulos dados vuelta (una pieza reflejada: así siguen mirando hacia afuera). */
 function flipped(tri: Uint32Array): Uint32Array {
   const out = new Uint32Array(tri.length)
@@ -102,7 +116,9 @@ export class BrepRenders {
     if (!r) {
       const flip = !!p.m && affineDet(p.m) < 0
       const mesh = kernel
-        ? meshRenderFlat(kernel.positions, kernel.indices, CREASE_DEG, origin)
+        ? kernel.normals
+          ? exactRender(kernel.positions, kernel.normals, kernel.indices, origin)
+          : meshRenderFlat(kernel.positions, kernel.indices, CREASE_DEG, origin)
         : meshRenderFlat(placedPositions(d!, p.m), flip ? flipped(d!.tri) : d!.tri, CREASE_DEG, origin)
       r = { ...mesh, edges: d ? brepEdgeSegments(d, p.m, origin) : new Float32Array(0) }
     }

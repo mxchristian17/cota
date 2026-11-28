@@ -162,3 +162,27 @@ describe('núcleo exacto (OCCT): hojas', () => {
     expect(new Set(r.mesh.triGroup).size).toBe(6)
   })
 })
+
+describe('normales exactas de la malla del núcleo', () => {
+  it('una por vértice, unitarias y hacia afuera (también en el interior de un tubo)', () => {
+    const tubo: SolidProps = {
+      op: 'SUBTRACT',
+      operands: [
+        { op: 'CYLINDER', base: [0, 0, 0], radius: 10, height: 50, segments: 48 },
+        { op: 'CYLINDER', base: [0, 0, -1], radius: 9, height: 52, segments: 48 },
+      ],
+    }
+    const { positions: P, indices: I, normals: N } = run(tubo).mesh
+    expect(N).toBeDefined()
+    expect(N!.length).toBe(P.length)
+    for (let i = 0; i < N!.length; i += 3) expect(Math.hypot(N![i], N![i + 1], N![i + 2])).toBeCloseTo(1, 4)
+    for (let t = 0; t < I.length; t += 3) {
+      const [a, b, c] = [I[t], I[t + 1], I[t + 2]].map((v) => [P[v * 3], P[v * 3 + 1], P[v * 3 + 2]])
+      const u = b.map((v, i) => v - a[i])
+      const w = c.map((v, i) => v - a[i])
+      const f = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]]
+      const n = [N![I[t] * 3], N![I[t] * 3 + 1], N![I[t] * 3 + 2]]
+      expect(f[0] * n[0] + f[1] * n[1] + f[2] * n[2]).toBeGreaterThanOrEqual(0)
+    }
+  })
+})

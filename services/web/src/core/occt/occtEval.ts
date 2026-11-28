@@ -39,6 +39,12 @@ export interface OcctEdge {
 export interface OcctMesh {
   positions: Float32Array
   indices: Uint32Array
+  /**
+   * Normal exacta de la superficie en cada vértice (la de OpenCascade, hacia afuera). Los vértices son de cada cara, así
+   * que entre caras la arista queda viva y adentro de una cara curva (una B-spline, un cono) el sombreado es liso sin
+   * promediar triángulos largos y finos, que daba un sombreado arrugado.
+   */
+  normals?: Float32Array
   /** Aristas exactas (ver `OcctEdge`). */
   edges?: OcctEdge[]
   /** Grupo de superficie de cada triángulo: caras con la misma superficie (p. ej. dos mitades de un plano) comparten grupo. */
@@ -834,7 +840,7 @@ function tessellate(k: K, shape: ShapeHandle, opts: EvalOptions, knownDiag?: num
     // que cada cara teselada es su propia superficie (sin juntar las de una misma superficie).
     const triGroup = new Uint32Array(m.triangleCount)
     for (let i = 0; i < groups.length / 3; i++) triGroup.fill(i, groups[i * 3] / 3, (groups[i * 3] + groups[i * 3 + 1]) / 3)
-    return { positions: m.positions, indices: m.indices, triGroup, spheres: [] }
+    return { positions: m.positions, indices: m.indices, normals: m.normals, triGroup, spheres: [] }
   }
   const tol = diag * 1e-6
   const q = (x: number): string => String(Math.round(x / tol))
@@ -852,5 +858,5 @@ function tessellate(k: K, shape: ShapeHandle, opts: EvalOptions, knownDiag?: num
     // `faceGroups` cuenta índices (3 por triángulo), no triángulos.
     triGroup.fill(g, groups[i * 3] / 3, (groups[i * 3] + groups[i * 3 + 1]) / 3)
   })
-  return { positions: m.positions, indices: m.indices, triGroup, spheres }
+  return { positions: m.positions, indices: m.indices, normals: m.normals, triGroup, spheres }
 }

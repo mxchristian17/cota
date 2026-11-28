@@ -712,9 +712,10 @@ function exactGeometry(props: SolidProps, key: string): THREE.BufferGeometry | n
  * forma exacta. Las normales las pone el sombreado según SMOOTHANGLE, como en la malla.
  */
 function kernelGeometry(r: Extract<KernelResult, { ok: true }>): THREE.BufferGeometry {
-  const { positions: P, indices: I, triGroup, spheres } = r.mesh
+  const { positions: P, indices: I, triGroup, spheres, normals: N } = r.mesh
   const nt = Math.floor(I.length / 3)
   const pos = new Float32Array(nt * 9)
+  const nor = N ? new Float32Array(nt * 9) : null
   const surf = new Float32Array(nt * 3)
   const base = nextSurf
   let groups = 0
@@ -724,6 +725,11 @@ function kernelGeometry(r: Extract<KernelResult, { ok: true }>): THREE.BufferGeo
       pos[t * 9 + c * 3] = P[v]
       pos[t * 9 + c * 3 + 1] = P[v + 1]
       pos[t * 9 + c * 3 + 2] = P[v + 2]
+      if (nor) {
+        nor[t * 9 + c * 3] = N![v]
+        nor[t * 9 + c * 3 + 1] = N![v + 1]
+        nor[t * 9 + c * 3 + 2] = N![v + 2]
+      }
       surf[t * 3 + c] = base + triGroup[t]
     }
     groups = Math.max(groups, triGroup[t] + 1)
@@ -734,6 +740,11 @@ function kernelGeometry(r: Extract<KernelResult, { ok: true }>): THREE.BufferGeo
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
   g.setAttribute('surf', new THREE.BufferAttribute(surf, 1))
   g.userData.exact = true
+  // Con las normales exactas de la superficie no se promedian triángulos (ver `withSmoothing`).
+  if (nor) {
+    g.setAttribute('normal', new THREE.BufferAttribute(nor, 3))
+    g.userData.exactNormals = nor
+  }
   return g
 }
 
@@ -910,7 +921,10 @@ function syncKernel(): void {
 function withSmoothing(geom: THREE.BufferGeometry): THREE.BufferGeometry {
   const deg = sysvars.SMOOTHANGLE
   if (geom.userData.smoothAngle !== deg && !geom.getIndex()) {
-    smoothShading(geom, deg)
+    // Una malla del núcleo trae la normal exacta de cada vértice: lisa salvo con SMOOTHANGLE 0 (facetada).
+    const exact = geom.userData.exactNormals as Float32Array | undefined
+    if (exact && deg > 0) geom.setAttribute('normal', new THREE.BufferAttribute(exact, 3))
+    else smoothShading(geom, deg)
     geom.userData.smoothAngle = deg
   }
   return geom

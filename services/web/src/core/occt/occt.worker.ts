@@ -47,7 +47,7 @@ self.onmessage = async (ev: MessageEvent<KernelRequest>) => {
     }
     const r = evalSolid(k, props, { models, fine })
     const m = r.mesh
-    self.postMessage({ id, ok: true, mesh: m, stats: { ...r.stats, initMs: kernelInitMs } } satisfies KernelReply, [m.positions.buffer, m.indices.buffer, m.triGroup.buffer])
+    self.postMessage({ id, ok: true, mesh: m, stats: { ...r.stats, initMs: kernelInitMs } } satisfies KernelReply, [m.positions.buffer, m.indices.buffer, m.triGroup.buffer, ...(m.normals ? [m.normals.buffer] : [])])
   } catch (err) {
     const e = err instanceof OcctEvalError ? err : null
     const op = err instanceof BrepToAcisError ? 'ACIS' : (e?.op ?? props.op)

@@ -60,4 +60,20 @@ describe('dibujo de las piezas importadas solas', () => {
     expect(brepDisplay(ref)).toBeDefined()
     expect(brepMeshGeometry(leaf)!.groups).toHaveLength(6)
   })
+
+  it('con la malla del núcleo y sus normales exactas: las usa tal cual (sin promediar triángulos)', () => {
+    const r = new BrepRenders()
+    r.frame()
+    const kernel = {
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+      normals: new Float32Array([0, 0, 1, 0.6, 0, 0.8, 0, 0.6, 0.8]),
+      triGroup: new Uint32Array([0]),
+      spheres: [],
+    }
+    const m = r.get({ op: 'BREP', ref: 'sin-modelo', box: [[0, 0, 0], [1, 1, 0]] } as BrepProps, [1, 0, 0], kernel)!
+    expect(Array.from(m.nor)).toEqual(Array.from(kernel.normals))
+    expect(Array.from(m.pos)).toEqual([-1, 0, 0, 0, 0, 0, -1, 1, 0])
+    expect(Array.from(m.idx)).toEqual([0, 1, 2])
+  })
 })
