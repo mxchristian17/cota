@@ -182,3 +182,38 @@ slider that runs on two Ø12 guide shafts.
 `CYLINDER` cutters repeated with `ARRAY P`, joined with `UNION` and removed with `SUBTRACT`. Hub, studs, caliper, pads
 and bracket are revolved profiles too (`REVOLVE … ST <start angle> <angle>` for the partial ones), and the bolts are
 `POLYGON 6` + `EXTRUDE` joined to their shanks.
+
+## Road bike frame, size 56 — exact solids from a STEP and two drawing sheets
+
+| File | What it is |
+| --- | --- |
+| `cuadro-ruta-56.step` | The frame as a STEP assembly (AP214): 22 parts with their names and colors, grouped as front triangle, rear triangle, brazed-on parts and seat collar |
+| `cuadro-ruta-56.mjs` | The Node script that builds the frame with the exact kernel (OpenCascade, `occt-wasm`) and writes the STEP |
+| `cuadro-ruta-56-geometria.json` | Points of the frame geometry (tube axes, bottom bracket, rear axle), used to place the dimensions |
+| `cuadro-ruta-56.cota` | The drawing: the frame as exact solids and the sheets `CR56-01 Geometria` and `CR56-02 Detalles` |
+| `cuadro-ruta-56.pdf` | `PUBLISH` of both sheets (A3) |
+| `cuadro-ruta-56-lamina-1.png`, `cuadro-ruta-56-lamina-2.png` | The two sheets |
+| `cuadro-ruta-56-3d.png`, `cuadro-ruta-56-nudo.png` | The frame and the seat cluster, shaded with edges |
+
+**The frame (mm):** 4130 steel, TIG welded, rim brake, 130 mm quick release, BSA 68 bottom bracket, 1-1/8" straight
+steerer. Seat angle 73.5°, head angle 73°, seat tube 560 c–t, stack 565, reach 385, head tube 150, chainstays 405,
+bottom bracket drop 70. Top tube Ø31.8 × 0.7, down tube Ø34.9 × 0.8, seat tube Ø28.6 × 0.7 with a 1.6 × 16 slot,
+head tube Ø36 × 1.1 with Ø33.95 × 12 bores for the cups, oval 24 × 14 chainstays tapering to Ø16, seatstays tapering
+from Ø16 to Ø12.7. 5 mm vertical dropouts, with an M10 × 1 derailleur hanger on the drive side; brake bridge with its
+Ø6 hole, chainstay bridge, bottle bosses, cable stops and an aluminum seat collar. Mass 1.95 kg, with no
+interference between parts (checked with the kernel).
+
+**How it was made:**
+
+1. **Solids** (`node examples/cuadro-ruta-56.mjs`): each tube is a hollow cylinder, cone or loft; its ends are coped
+   against the tubes they meet (a boolean subtraction of the other tube's outside), and the script writes the STEP
+   with its assembly tree, names and colors.
+2. **Open:** `OPEN` the STEP. Every part comes in as an exact solid inside a block with its name.
+3. **Sheet CR56-01, 1:5:** `VIEWBASE` of the entire model (style *Visible lines*, scale `1:5`) with the top view
+   projected below. Axes on a red `EJES` layer with the `CENTER` linetype. `DIMLINEAR`, `DIMALIGNED` and
+   `DIMANGULAR` on the views measure the part, not the paper (the view scale goes into `DIMLFAC`). `DIMDEC 1`,
+   `DIMDSEP ,`, `DIMAZIN 2` and `-DIMSTYLE S` save the style `IRAM 4513 AR`. Tables and notes with `TEXT`.
+4. **Sheet CR56-02, 1:1:** `EXPLODE ALL`, then one `VIEWBASE` per part (dropout, bottom bracket shell and both
+   bridges) picking the part. `AUTODIM` with a crossing window (`Baseline`, `All` or `Overall`) dimensions each view;
+   the diameters are a `DIMLINEAR` across each circle with its text typed as `%%c40` (shown as Ø40).
+5. **PDF:** `PUBLISH CR56-01 Geometria,CR56-02 Detalles`.
